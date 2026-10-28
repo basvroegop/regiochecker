@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Regiochecker</title>
+  <link rel="stylesheet" href="/stijl.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23c8102e'/%3E%3Ctext x='16' y='23' font-family='Georgia' font-size='20' font-weight='bold' fill='white' text-anchor='middle'%3ER%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="kop">
+    <div class="kop-binnen">
+      <h1>Regiochecker</h1>
+      <p class="ondertitel">Gemeentelijke bronnen → weekoverzicht per regioverslaggever</p>
+      <div id="statusbalk" class="statusbalk"></div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="ontvangers" aria-selected="true">Ontvangers</button>
+      <button role="tab" data-tab="bronnen">Regio's en bronnen</button>
+      <button role="tab" data-tab="gevonden">Gevonden</button>
+      <button role="tab" data-tab="termen">Termen kamerstukken</button>
+      <button role="tab" data-tab="instellingen">Instellingen</button>
+      <button role="tab" data-tab="logboek">Logboek</button>
+      <a class="tablink" href="/kamerstukken.html">Kamerstukken zoeken ↗</a>
+    </nav>
+  </header>
+
+  <main>
+    <div id="meldingen" aria-live="polite"></div>
+
+    <section id="tab-ontvangers" class="tab">
+      <h2>Wie krijgt welke regio?</h2>
+      <p class="uitleg">Vink per e-mailadres de regio's aan. Op elk verstuurmoment (standaard één keer per week) krijgt iedere actieve ontvanger één mail met alles wat sinds de vorige mail aan dat adres nieuw is: per gemeente eerst een samenvatting van wat er speelt, dan de volledige lijst. Wijzigingen worden meteen bewaard.</p>
+      <div class="tabelkader">
+        <table id="ontvangers" class="matrix">
+          <thead></thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+      </div>
+    </section>
+
+    <section id="tab-bronnen" class="tab" hidden>
+      <div class="kopregel">
+        <h2>Regio's en bronnen</h2>
+        <button id="nu-controleren" class="knop">Nu controleren</button>
+      </div>
+      <p class="uitleg">Per gemeente drie soorten bronnen. Wat niet online te vinden is, staat hier met een toelichting; in de mail staat het onderaan de regio.</p>
+      <div id="regios" class="regio-raster"></div>
+    </section>
+
+    <section id="tab-gevonden" class="tab" hidden>
+      <div class="kopregel">
+        <h2>Gevonden items</h2>
+        <div class="filters">
+          <select id="filter-regio"><option value="">Alle regio's</option></select>
+          <select id="filter-dagen">
+            <option value="1">Afgelopen 24 uur</option>
+            <option value="7" selected>Afgelopen week</option>
+            <option value="30">Afgelopen 30 dagen</option>
+          </select>
+        </div>
+      </div>
+      <p class="uitleg">Alles wat sinds de nulmeting nieuw is binnengekomen, op het moment dat de Regiochecker het voor het eerst zag.</p>
+      <div id="items"></div>
+    </section>
+
+    <section id="tab-termen" class="tab" hidden>
+      <div class="kopregel">
+        <h2>Termen voor kamerstukken</h2>
+        <a class="knop licht" href="/kamerstukken.html">Zoeken en meldingen ↗</a>
+      </div>
+      <p class="uitleg">Komt een term van een regio voor in een nieuw stuk van de Tweede Kamer, dan staat dat stuk in de weekmail van die regio, onder het kopje Kamerstukken, met de zin waarin de term staat. Eén term per regel: plaatsnamen, wegen (N381), gebieden of projecten. Hoofdletters en accenten tellen niet; alleen hele woorden tellen. Het getal erachter is het aantal stukken van de afgelopen 30 dagen met die term: veel ruis betekent een te algemene term.</p>
+      <p id="kamer-status" class="klein"></p>
+      <div id="termen" class="regio-raster"></div>
+    </section>
+
+    <section id="tab-instellingen" class="tab" hidden>
+      <h2>Instellingen</h2>
+      <form id="form-schema" class="kaart">
+        <h3>Verstuurmoment</h3>
+        <p class="uitleg">De mail bevat altijd alles sinds de vorige mail aan die ontvanger, tot het moment van versturen. Stond de dienst uit op het verstuurmoment, dan gaat de mail zodra hij weer draait.</p>
+        <label>Tijd <input type="time" name="mailTijd" class="smal" required></label>
+        <fieldset class="dagen"><legend>Dagen</legend></fieldset>
+        <label class="vink"><input type="checkbox" name="mailBijNiets"> Ook mailen als er niets nieuws is</label>
+        <label>Bronnen controleren elke <input type="number" name="controleIntervalMinuten" min="15" max="1440" step="5" class="smal"> minuten</label>
+        <button class="knop">Bewaren</button>
+      </form>
+
+      <form id="form-smtp" class="kaart">
+        <h3>Uitgaande mail (SMTP)</h3>
+        <div class="twee">
+          <label>Server <input name="host" placeholder="smtp.example.nl"></label>
+          <label>Poort <input name="port" type="number" class="smal"></label>
+        </div>
+        <label class="vink"><input type="checkbox" name="secure"> Direct TLS (poort 465); uit = STARTTLS</label>
+        <div class="twee">
+          <label>Gebruikersnaam <input name="user" autocomplete="off"></label>
+          <label>Wachtwoord <input name="pass" type="password" autocomplete="new-password" placeholder=""></label>
+        </div>
+        <label>Afzender <input name="from" placeholder="Regiochecker &lt;regiochecker@example.nl&gt;"></label>
+        <div class="knoppen">
+          <button class="knop">Bewaren</button>
+          <button type="button" id="wis-wachtwoord" class="knop licht">Wachtwoord wissen</button>
+        </div>
+        <hr>
+        <div class="twee">
+          <label>Testmail naar <input id="testmail-aan" type="email" placeholder="jij@example.nl"></label>
+          <button type="button" id="testmail" class="knop licht">Testmail sturen</button>
+        </div>
+      </form>
+
+      <form id="form-samenvatting" class="kaart">
+        <h3>Samenvatting</h3>
+        <p class="uitleg">Wie schrijft per gemeente de samenvatting van wat er speelt? Het taalmodel krijgt van elk nieuw bericht de titel en de inhoud (artikel, brief, raadsstuk of Woo-besluit). Is de gekozen aanbieder niet ingesteld of niet bereikbaar, dan gaat de mail gewoon, maar zonder samenvatting.</p>
+        <fieldset class="keuze">
+          <legend>Samenvatting maken met</legend>
+          <label class="vink"><input type="radio" name="via" value="claude"> Claude (Anthropic)</label>
+          <label class="vink"><input type="radio" name="via" value="ollama"> Eigen Ollama</label>
+          <label class="vink"><input type="radio" name="via" value="uit"> Uit</label>
+        </fieldset>
+
+        <fieldset class="aanbieder" data-via="claude">
+          <legend>Claude</legend>
+          <label>API-sleutel <input name="apiKey" type="password" autocomplete="off" placeholder=""></label>
+          <label>Model <input name="claudeModel"></label>
+          <button type="button" id="wis-sleutel" class="knop licht">Sleutel wissen</button>
+        </fieldset>
+
+        <fieldset class="aanbieder" data-via="ollama">
+          <legend>Ollama</legend>
+          <p id="ollama-route" class="uitleg"></p>
+          <label>URL <input name="ollamaUrl" placeholder="http://naam-van-machine:11434" autocomplete="off"></label>
+          <div class="knoppen">
+            <button type="button" id="ollama-test" class="knop licht">Verbinding testen</button>
+            <span id="ollama-status" class="klein"></span>
+          </div>
+          <label>Model
+            <input name="ollamaModel" list="ollama-modellen" placeholder="bijvoorbeeld qwen3:14b">
+            <datalist id="ollama-modellen"></datalist>
+          </label>
+          <label>Grootste contextvenster <input name="maxContext" type="number" min="4096" max="262144" step="1024" class="smal"> tokens</label>
+          <p class="uitleg">De vraag per gemeente bevat alle berichten van de week. Het contextvenster groeit mee tot dit maximum; past het niet, dan worden de artikelteksten ingekort. Een groter venster kost meer geheugen op de Ollama-machine.</p>
+        </fieldset>
+
+        <button class="knop">Bewaren</button>
+      </form>
+
+      <div class="kaart">
+        <h3>Handmatig</h3>
+        <p class="uitleg">Stuur nu de mailronde naar alle actieve ontvangers, met alles wat sinds hun vorige mail nieuw is. Het volgende geplande moment gaat gewoon door en bevat dan alleen wat er sindsdien bij kwam.</p>
+        <button id="mailronde" class="knop licht">Mailronde nu versturen</button>
+      </div>
+    </section>
+
+    <section id="tab-logboek" class="tab" hidden>
+      <h2>Logboek</h2>
+      <div id="logboek"></div>
+    </section>
+  </main>
+
+  <dialog id="voorbeeld" class="voorbeeld">
+    <div class="voorbeeld-kop">
+      <div>
+        <strong id="voorbeeld-titel">Voorbeeld</strong>
+        <div id="voorbeeld-onderwerp" class="klein"></div>
+      </div>
+      <div class="knoppen">
+        <select id="voorbeeld-dagen">
+          <option value="0" selected>Wat de volgende mail bevat</option>
+          <option value="7">Afgelopen week</option>
+          <option value="14">Afgelopen twee weken</option>
+        </select>
+        <button id="voorbeeld-samenvatting" class="knop licht" title="Vraagt per regio een samenvatting aan Claude of Ollama; bij Claude kost dat een aanroep, bij Ollama kan het even duren">Met samenvatting</button>
+        <button id="voorbeeld-verstuur" class="knop licht" title="Verstuurt alles wat sinds de vorige mail aan deze ontvanger nieuw is">Nu versturen</button>
+        <button id="voorbeeld-sluit" class="knop">Sluiten</button>
+      </div>
+    </div>
+    <iframe id="voorbeeld-frame" sandbox="allow-popups allow-popups-to-escape-sandbox" title="Voorbeeld van de mail"></iframe>
+  </dialog>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "name": "regiochecker",
+  "version": "1.0.0",
+  "description": "Controleert gemeentelijke bronnen en mailt regioverslaggevers hun speerpunten",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node src/dienst.mjs",
+    "test": "node --test test/*.test.mjs",
+    "verzamel": "node src/verzamel-eenmalig.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "nodemailer": "^10.1.7",
+    "undici": "^7.30.1"
+  }
+}

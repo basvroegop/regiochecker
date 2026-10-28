@@ -1,0 +1,247 @@
+{
+ "count": 337,
+ "previous": false,
+ "next": true,
+ "results": [
+  {
+   "type": "publication",
+   "record": {
+    "uuid": "f9a6224a-6fcd-4b2b-9cc5-f96d0fdd2c3b",
+    "publicatie": null,
+    "officieleTitel": "Muziekcentrum deelbesluit 1",
+    "verkorteTitel": "",
+    "publisher": {
+     "uuid": "6520cce6-18f5-4404-9e95-a8dc8d783263",
+     "naam": "gemeente Groningen"
+    },
+    "omschrijving": "",
+    "creatiedatum": null,
+    "registratiedatum": "2026-10-19T15:44:20.311062+02:00",
+    "gepubliceerdOp": "2026-10-19T16:12:29.247779+02:00",
+    "laatstGewijzigdDatum": "2026-10-19T16:12:29.618525+02:00",
+    "informatieCategorieen": [
+     {
+      "uuid": "b84c3b0d-a471-48f5-915f-7fbd8b94188f",
+      "naam": "Woo-verzoek of -besluit"
+     }
+    ]
+   }
+  },
+  {
+   "type": "publication",
+   "record": {
+    "uuid": "d38b9cea-efa1-4713-b799-926157f0a930",
+    "publicatie": null,
+    "officieleTitel": "Kiosk Grote Markt",
+    "verkorteTitel": "",
+    "publisher": {
+     "uuid": "6520cce6-18f5-4404-9e95-a8dc8d783263",
+     "naam": "gemeente Groningen"
+    },
+    "omschrijving": "",
+    "creatiedatum": null,
+    "registratiedatum": "2026-10-19T10:37:56.098677+02:00",
+    "gepubliceerdOp": "2026-10-19T10:49:52.174587+02:00",
+    "laatstGewijzigdDatum": "2026-10-19T14:25:20.117001+02:00",
+    "informatieCategorieen": [
+     {
+      "uuid": "b84c3b0d-a471-48f5-915f-7fbd8b94188f",
+      "naam": "Woo-verzoek of -besluit"
+     }
+    ]
+   }
+  },
+  {
+   "type": "publication",
+   "record": {
+    "uuid": "d7ab092b-6e76-4c50-8af3-d6d9025094ca",
+    "publicatie": null,
+    "officieleTitel": "Handhavingsverzoeken en besluiten",
+    "verkorteTitel": "",
+    "publisher": {
+     "uuid": "6520cce6-18f5-4404-9e95-a8dc8d783263",
+     "naam": "gemeente Groningen"
+    },
+    "omschrijving": "",
+    "creatiedatum": null,
+    "registratiedatum": "2026-10-19T08:51:00.486721+02:00",
+    "gepubliceerdOp": "2026-10-19T08:51:00.489865+02:00",
+    "laatstGewijzigdDatum": "2026-10-19T08:51:34.259612+02:00",
+    "informatieCategorieen": [
+     {
+      "uuid": "b84c3b0d-a471-48f5-915f-7fbd8b94188f",
+      "naam": "Woo-verzoek of -besluit"
+     }
+    ]
+   }
+  },
+  {
+   "type": "publication",
+   "record": {
+    "uuid": "641ef974-488e-486f-bfcc-52e13a8862aa",
+    "publicatie": null,
+    "officieleTitel": "Welstandstoets dakapellen Meerstad",
+    "verkorteTitel": "",
+    "publisher": {
+     "uuid": "6520cce6-18f5-4404-9e95-a8dc8d783263",
+     "naam": "gemeente Groningen"
+    },
+    "omschrijving": "",
+    "creatiedatum": null,
+    "registratiedatum": "2026-10-14T12:37:52.724169+02:00",
+    "gepubliceerdOp": "2026-10-14T12:37:52.728715+02:00",
+    "laatstGewijzigdDatum": "2026-10-14T12:38:18.74125+02:00",
+    "informatieCategorieen": [
+     {
+      "uuid": "b84c3b0d-a471-48f5-915f-7fbd8b94188f",
+      "naam": "Woo-verzoek of -besluit"
+     }
+    ]
+   }
+  },
+  {
+   "type": "publication",
+   "record": {
+    "uuid": "9a778961-44ba-4d53-9895-e8d3884fc095",
+    "publicatie": null,
+    "officieleTitel": "Dijkstraat 20 en 22",
+    "verkorteTitel": "",
+    "publisher": {
+     "uuid": "6520cce6-18f5-4404-9e95-a8dc8d783263",
+     "naam": "gemeente Groningen"
+    },
+    "omschrijving": "",
+    "creatiedatum": null,
+    "registratiedatum": "2026-10-13T10:27:07.938135+02:00",
+    "gepubliceerdOp": "2026-10-13T10:27:07.941179+02:00",
+    "laatstGewijzigdDatum": "2026-10-13T10:27:07.946827+02:00",
+    "informatieCategorieen": [
+     {
+      "uuid": "b84c3b0d-a471-48f5-915f-7fbd8b94188f",
+      "naam": "Woo-verzoek of -besluit"
+     }
+    ]
+   }
+  },
+  {
+   "type": "publication",
+   "record": {
+    "uuid": "bebdfa52-5ef7-4863-8099-f20470cfcb8b",
+    "publicatie": null,
+    "officieleTitel": "Bouwvergunning aan de Verlengde Hereweg 1/1 te Groningen",
+    "verkorteTitel": "",
+    "publisher": {
+     "uuid": "6520cce6-18f5-4404-9e95-a8dc8d783263",
+     "naam": "gemeente Groningen"
+    },
+    "omschrijving": "",
+    "creatiedatum": null,
+    "registratiedatum": "2026-10-12T13:45:25.199879+02:00",
+    "gepubliceerdOp": "2026-10-12T13:45:25.203205+02:00",
+    "laatstGewijzigdDatum": "2026-10-12T13:47:05.604075+02:00",
+    "informatieCategorieen": [
+     {
+      "uuid": "b84c3b0d-a471-48f5-915f-7fbd8b94188f",
+      "naam": "Woo-verzoek of -besluit"
+     }
+    ]
+   }
+  },
+  {
+   "type": "publication",
+   "record": {
+    "uuid": "f02b174b-61bd-433f-873f-9ee7e94c8f18",
+    "publicatie": null,
+    "officieleTitel": "Planschade of nadeelcompensatie bij het project Jullenshof",
+    "verkorteTitel": "",
+    "publisher": {
+     "uuid": "6520cce6-18f5-4404-9e95-a8dc8d783263",
+     "naam": "gemeente Groningen"
+    },
+    "omschrijving": "",
+    "creatiedatum": null,
+    "registratiedatum": "2026-10-12T13:30:00.900247+02:00",
+    "gepubliceerdOp": "2026-10-12T13:30:00.904+02:00",
+    "laatstGewijzigdDatum": "2026-10-12T13:30:00.90891+02:00",
+    "informatieCategorieen": [
+     {
+      "uuid": "b84c3b0d-a471-48f5-915f-7fbd8b94188f",
+      "naam": "Woo-verzoek of -besluit"
+     }
+    ]
+   }
+  },
+  {
+   "type": "publication",
+   "record": {
+    "uuid": "65ab6f62-b847-40f0-9ffe-4d14603df266",
+    "publicatie": null,
+    "officieleTitel": "Afvalinzameling Meerstad",
+    "verkorteTitel": "",
+    "publisher": {
+     "uuid": "6520cce6-18f5-4404-9e95-a8dc8d783263",
+     "naam": "gemeente Groningen"
+    },
+    "omschrijving": "",
+    "creatiedatum": null,
+    "registratiedatum": "2026-10-07T09:31:25.254529+02:00",
+    "gepubliceerdOp": "2026-10-07T09:31:25.299611+02:00",
+    "laatstGewijzigdDatum": "2026-10-07T09:31:25.340891+02:00",
+    "informatieCategorieen": [
+     {
+      "uuid": "b84c3b0d-a471-48f5-915f-7fbd8b94188f",
+      "naam": "Woo-verzoek of -besluit"
+     }
+    ]
+   }
+  },
+  {
+   "type": "publication",
+   "record": {
+    "uuid": "a35e0d32-e5b1-483a-8eee-90bbc5f4a8a8",
+    "publicatie": null,
+    "officieleTitel": "Kamerverhuur",
+    "verkorteTitel": "",
+    "publisher": {
+     "uuid": "6520cce6-18f5-4404-9e95-a8dc8d783263",
+     "naam": "gemeente Groningen"
+    },
+    "omschrijving": "",
+    "creatiedatum": null,
+    "registratiedatum": "2026-10-06T16:39:22.675308+02:00",
+    "gepubliceerdOp": "2026-10-06T16:39:22.678193+02:00",
+    "laatstGewijzigdDatum": "2026-10-06T16:39:22.682022+02:00",
+    "informatieCategorieen": [
+     {
+      "uuid": "b84c3b0d-a471-48f5-915f-7fbd8b94188f",
+      "naam": "Woo-verzoek of -besluit"
+     }
+    ]
+   }
+  },
+  {
+   "type": "publication",
+   "record": {
+    "uuid": "5d14e6c5-73a7-4caf-a5f8-54a63c800560",
+    "publicatie": null,
+    "officieleTitel": "Hunzetoren omgevingsvergunning",
+    "verkorteTitel": "",
+    "publisher": {
+     "uuid": "6520cce6-18f5-4404-9e95-a8dc8d783263",
+     "naam": "gemeente Groningen"
+    },
+    "omschrijving": "",
+    "creatiedatum": null,
+    "registratiedatum": "2026-10-05T10:28:49.778103+02:00",
+    "gepubliceerdOp": "2026-10-05T10:28:49.781148+02:00",
+    "laatstGewijzigdDatum": "2026-10-09T12:50:16.626943+02:00",
+    "informatieCategorieen": [
+     {
+      "uuid": "b84c3b0d-a471-48f5-915f-7fbd8b94188f",
+      "naam": "Woo-verzoek of -besluit"
+     }
+    ]
+   }
+  }
+ ]
+}

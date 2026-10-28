@@ -1,0 +1,919 @@
+{
+ "pagination": {
+  "@attributes": {
+   "list_start": 4057,
+   "list_end": 4065,
+   "total_results": 4065
+  }
+ },
+ "item": [
+  {
+   "attributes": {
+    "attribute": [
+     {
+      "label": "nummer",
+      "value": "2026-241",
+      "@attributes": {
+       "id": 5,
+       "datatype": "varchar",
+       "order": 1,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "onderwerp",
+      "value": "Brief college - Dekking rentelasten investeringen Gebiedsprogramma Centrum",
+      "@attributes": {
+       "id": 1,
+       "datatype": "varchar",
+       "order": 2,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "hoofddocument",
+      "value": {
+       "title": "260928 Brief college - Dekking rentelasten investeringen Gebiedsprogramma Centrum",
+       "filetype": "pdf",
+       "url": "https://api.notubiz.nl/document/17480751/1",
+       "types": {
+        "type": [
+         {
+          "name": "Brief",
+          "@attributes": {
+           "id": 46
+          }
+         }
+        ]
+       },
+       "@attributes": {
+        "id": 17480751,
+        "version": 1,
+        "last_modified": "2026-10-09 14:54:06",
+        "publication_date": null,
+        "body": null,
+        "permission_group": "public"
+       }
+      },
+      "@attributes": {
+       "id": 2,
+       "datatype": "document",
+       "order": 6,
+       "multiple": 0,
+       "visible": "detail"
+      }
+     },
+     {
+      "label": "datum brief",
+      "value": "2026-09-28 00:00:00",
+      "@attributes": {
+       "id": 15,
+       "datatype": "datetime",
+       "order": 7,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "advies",
+      "value": "Voor kennisgeving aannemen",
+      "@attributes": {
+       "id": 34,
+       "datatype": "varchar",
+       "order": 9,
+       "multiple": 0,
+       "visible": "both"
+      }
+     }
+    ]
+   },
+   "@attributes": {
+    "id": 1207896,
+    "creation_date": null,
+    "last_modified": "2026-10-09 14:54:06",
+    "confidential": 0,
+    "body": null,
+    "permission_group": "public",
+    "organisation_id": 1764,
+    "module_id": 1
+   }
+  },
+  {
+   "attributes": {
+    "attribute": [
+     {
+      "label": "nummer",
+      "value": "2026-242",
+      "@attributes": {
+       "id": 5,
+       "datatype": "varchar",
+       "order": 1,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "onderwerp",
+      "value": "Bericht Nationale Ombudsman - Brandbrief en publicatie over discriminatie van Sinti, Roma en reizigers",
+      "@attributes": {
+       "id": 1,
+       "datatype": "varchar",
+       "order": 2,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "hoofddocument",
+      "value": {
+       "title": "260928 Bericht Nationale Ombudsman - Brandbrief en publicatie over discriminatie van Sinti, Roma en reizigers",
+       "filetype": "pdf",
+       "url": "https://api.notubiz.nl/document/17480874/1",
+       "types": {
+        "type": [
+         {
+          "name": "Brief",
+          "@attributes": {
+           "id": 46
+          }
+         }
+        ]
+       },
+       "@attributes": {
+        "id": 17480874,
+        "version": 1,
+        "last_modified": "2026-10-09 14:54:26",
+        "publication_date": null,
+        "body": null,
+        "permission_group": "public"
+       }
+      },
+      "@attributes": {
+       "id": 2,
+       "datatype": "document",
+       "order": 6,
+       "multiple": 0,
+       "visible": "detail"
+      }
+     },
+     {
+      "label": "datum brief",
+      "value": "2026-09-28 00:00:00",
+      "@attributes": {
+       "id": 15,
+       "datatype": "datetime",
+       "order": 7,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "advies",
+      "value": "Voor kennisgeving aannemen",
+      "@attributes": {
+       "id": 34,
+       "datatype": "varchar",
+       "order": 9,
+       "multiple": 0,
+       "visible": "both"
+      }
+     }
+    ]
+   },
+   "attachments": {
+    "document": [
+     {
+      "filetype": "pdf",
+      "title": "260928 Brandbrief Nationale Ombudsman aan gemeenten over discriminatie Sinti Roma en reizigers",
+      "url": "https://api.notubiz.nl/document/17480875/3",
+      "types": {
+       "type": [
+        {
+         "name": "Brief",
+         "@attributes": {
+          "id": 46
+         }
+        }
+       ]
+      },
+      "@attributes": {
+       "id": 17480875,
+       "last_modified": "2026-10-09 14:54:40",
+       "version": 3,
+       "publication_date": null,
+       "case_code": null,
+       "body": null,
+       "permission_group": "public"
+      }
+     },
+     {
+      "filetype": "pdf",
+      "title": "260928 Publicatie Nationale Ombudsman - 20260118 'Volk zoals jij' -  Verhalen van woonwagenbewoners",
+      "url": "https://api.notubiz.nl/document/17480876/1",
+      "types": {
+       "type": [
+        {
+         "name": "Document",
+         "@attributes": {
+          "id": 1
+         }
+        }
+       ]
+      },
+      "@attributes": {
+       "id": 17480876,
+       "last_modified": "2026-10-09 14:54:40",
+       "version": 1,
+       "publication_date": null,
+       "case_code": null,
+       "body": null,
+       "permission_group": "public"
+      }
+     }
+    ]
+   },
+   "@attributes": {
+    "id": 1207912,
+    "creation_date": null,
+    "last_modified": "2026-10-09 14:54:40",
+    "confidential": 0,
+    "body": null,
+    "permission_group": "public",
+    "organisation_id": 1764,
+    "module_id": 1
+   }
+  },
+  {
+   "attributes": {
+    "attribute": [
+     {
+      "label": "nummer",
+      "value": "2026-243",
+      "@attributes": {
+       "id": 5,
+       "datatype": "varchar",
+       "order": 1,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "onderwerp",
+      "value": "Brief college - Ontheffingen vuurwerkverbod en voorbereiding jaarwisseling 2026 2027",
+      "@attributes": {
+       "id": 1,
+       "datatype": "varchar",
+       "order": 2,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "hoofddocument",
+      "value": {
+       "title": "260930 Brief college - Ontheffingen vuurwerkverbod en voorbereiding jaarwisseling 2026-2027",
+       "filetype": "pdf",
+       "url": "https://api.notubiz.nl/document/17482796/1",
+       "types": {
+        "type": [
+         {
+          "name": "Brief",
+          "@attributes": {
+           "id": 46
+          }
+         }
+        ]
+       },
+       "@attributes": {
+        "id": 17482796,
+        "version": 1,
+        "last_modified": "2026-10-09 14:55:00",
+        "publication_date": null,
+        "body": null,
+        "permission_group": "public"
+       }
+      },
+      "@attributes": {
+       "id": 2,
+       "datatype": "document",
+       "order": 6,
+       "multiple": 0,
+       "visible": "detail"
+      }
+     },
+     {
+      "label": "datum brief",
+      "value": "2026-09-30 00:00:00",
+      "@attributes": {
+       "id": 15,
+       "datatype": "datetime",
+       "order": 7,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "advies",
+      "value": "Voor kennisgeving aannemen",
+      "@attributes": {
+       "id": 34,
+       "datatype": "varchar",
+       "order": 9,
+       "multiple": 0,
+       "visible": "both"
+      }
+     }
+    ]
+   },
+   "@attributes": {
+    "id": 1208148,
+    "creation_date": null,
+    "last_modified": "2026-10-09 14:55:00",
+    "confidential": 0,
+    "body": null,
+    "permission_group": "public",
+    "organisation_id": 1764,
+    "module_id": 1
+   }
+  },
+  {
+   "attributes": {
+    "attribute": [
+     {
+      "label": "nummer",
+      "value": "2026-244",
+      "@attributes": {
+       "id": 5,
+       "datatype": "varchar",
+       "order": 1,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "onderwerp",
+      "value": "Brief college - Vertraging beantwoording schriftelijke vragen VVD ‘Wijziging Beleidsregels Energiebesparing’",
+      "@attributes": {
+       "id": 1,
+       "datatype": "varchar",
+       "order": 2,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "hoofddocument",
+      "value": {
+       "title": "260928 Brief college - Vertraging beantwoording schriftelijke vragen VVD -  ‘Wijziging Beleidsregels Energiebesparing’",
+       "filetype": "pdf",
+       "url": "https://api.notubiz.nl/document/17482881/1",
+       "types": {
+        "type": [
+         {
+          "name": "Brief",
+          "@attributes": {
+           "id": 46
+          }
+         }
+        ]
+       },
+       "@attributes": {
+        "id": 17482881,
+        "version": 1,
+        "last_modified": "2026-10-09 14:55:20",
+        "publication_date": null,
+        "body": null,
+        "permission_group": "public"
+       }
+      },
+      "@attributes": {
+       "id": 2,
+       "datatype": "document",
+       "order": 6,
+       "multiple": 0,
+       "visible": "detail"
+      }
+     },
+     {
+      "label": "datum brief",
+      "value": "2026-09-28 00:00:00",
+      "@attributes": {
+       "id": 15,
+       "datatype": "datetime",
+       "order": 7,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "advies",
+      "value": "Voor kennisgeving aannemen",
+      "@attributes": {
+       "id": 34,
+       "datatype": "varchar",
+       "order": 9,
+       "multiple": 0,
+       "visible": "both"
+      }
+     }
+    ]
+   },
+   "@attributes": {
+    "id": 1208159,
+    "creation_date": null,
+    "last_modified": "2026-10-09 14:55:20",
+    "confidential": 0,
+    "body": null,
+    "permission_group": "public",
+    "organisation_id": 1764,
+    "module_id": 1
+   }
+  },
+  {
+   "attributes": {
+    "attribute": [
+     {
+      "label": "nummer",
+      "value": "2026-245",
+      "@attributes": {
+       "id": 5,
+       "datatype": "varchar",
+       "order": 1,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "onderwerp",
+      "value": "Brief inwoner - Verkeerssituatie Wolkammersstreek",
+      "@attributes": {
+       "id": 1,
+       "datatype": "varchar",
+       "order": 2,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "hoofddocument",
+      "value": {
+       "title": "260922 Brief inwoner - Verkeerssituatie Wolkammersstreek",
+       "filetype": "pdf",
+       "url": "https://api.notubiz.nl/document/17483136/1",
+       "types": {
+        "type": [
+         {
+          "name": "Brief",
+          "@attributes": {
+           "id": 46
+          }
+         }
+        ]
+       },
+       "@attributes": {
+        "id": 17483136,
+        "version": 1,
+        "last_modified": "2026-10-09 14:55:38",
+        "publication_date": null,
+        "body": null,
+        "permission_group": "public"
+       }
+      },
+      "@attributes": {
+       "id": 2,
+       "datatype": "document",
+       "order": 6,
+       "multiple": 0,
+       "visible": "detail"
+      }
+     },
+     {
+      "label": "datum brief",
+      "value": "2026-09-22 00:00:00",
+      "@attributes": {
+       "id": 15,
+       "datatype": "datetime",
+       "order": 7,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "advies",
+      "value": "Ter afhandeling in handen van college",
+      "@attributes": {
+       "id": 34,
+       "datatype": "varchar",
+       "order": 9,
+       "multiple": 0,
+       "visible": "both"
+      }
+     }
+    ]
+   },
+   "attachments": {
+    "document": [
+     {
+      "filetype": "pdf",
+      "title": "260922 Bijlage bij brief Verkeerssituatie Wolkammerstreek",
+      "url": "https://api.notubiz.nl/document/17483196/1",
+      "types": {
+       "type": [
+        {
+         "name": "Bijlage",
+         "@attributes": {
+          "id": 14
+         }
+        }
+       ]
+      },
+      "@attributes": {
+       "id": 17483196,
+       "last_modified": "2026-10-09 14:55:38",
+       "version": 1,
+       "publication_date": null,
+       "case_code": null,
+       "body": null,
+       "permission_group": "public"
+      }
+     }
+    ]
+   },
+   "@attributes": {
+    "id": 1208188,
+    "creation_date": null,
+    "last_modified": "2026-10-09 14:55:38",
+    "confidential": 0,
+    "body": null,
+    "permission_group": "public",
+    "organisation_id": 1764,
+    "module_id": 1
+   }
+  },
+  {
+   "attributes": {
+    "attribute": [
+     {
+      "label": "nummer",
+      "value": "2026-246",
+      "@attributes": {
+       "id": 5,
+       "datatype": "varchar",
+       "order": 1,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "onderwerp",
+      "value": "Bericht FUMO - Begroting 2027 FUMO",
+      "@attributes": {
+       "id": 1,
+       "datatype": "varchar",
+       "order": 2,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "hoofddocument",
+      "value": {
+       "title": "260929 Bericht FUMO - Begroting 2027 FUMO",
+       "filetype": "pdf",
+       "url": "https://api.notubiz.nl/document/17483271/1",
+       "types": {
+        "type": [
+         {
+          "name": "Document",
+          "@attributes": {
+           "id": 1
+          }
+         }
+        ]
+       },
+       "@attributes": {
+        "id": 17483271,
+        "version": 1,
+        "last_modified": "2026-10-09 14:55:58",
+        "publication_date": null,
+        "body": null,
+        "permission_group": "public"
+       }
+      },
+      "@attributes": {
+       "id": 2,
+       "datatype": "document",
+       "order": 6,
+       "multiple": 0,
+       "visible": "detail"
+      }
+     },
+     {
+      "label": "datum brief",
+      "value": "2026-09-29 00:00:00",
+      "@attributes": {
+       "id": 15,
+       "datatype": "datetime",
+       "order": 7,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "advies",
+      "value": "Voor kennisgeving aannemen",
+      "@attributes": {
+       "id": 34,
+       "datatype": "varchar",
+       "order": 9,
+       "multiple": 0,
+       "visible": "both"
+      }
+     }
+    ]
+   },
+   "attachments": {
+    "document": [
+     {
+      "filetype": "pdf",
+      "title": "260929 Bijlage - Begroting FUMO 2027",
+      "url": "https://api.notubiz.nl/document/17483272/1",
+      "types": {
+       "type": [
+        {
+         "name": "Bijlage",
+         "@attributes": {
+          "id": 14
+         }
+        }
+       ]
+      },
+      "@attributes": {
+       "id": 17483272,
+       "last_modified": "2026-10-09 14:55:58",
+       "version": 1,
+       "publication_date": null,
+       "case_code": null,
+       "body": null,
+       "permission_group": "public"
+      }
+     }
+    ]
+   },
+   "@attributes": {
+    "id": 1208222,
+    "creation_date": null,
+    "last_modified": "2026-10-09 14:55:58",
+    "confidential": 0,
+    "body": null,
+    "permission_group": "public",
+    "organisation_id": 1764,
+    "module_id": 1
+   }
+  },
+  {
+   "attributes": {
+    "attribute": [
+     {
+      "label": "nummer",
+      "value": "2026-247",
+      "@attributes": {
+       "id": 5,
+       "datatype": "varchar",
+       "order": 1,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "onderwerp",
+      "value": "Bericht Provinsje Fryslân - Brief BO Leefomgeving",
+      "@attributes": {
+       "id": 1,
+       "datatype": "varchar",
+       "order": 2,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "hoofddocument",
+      "value": {
+       "title": "260930 Bericht Provinsje Fryslân - Brief BO Leefomgeving",
+       "filetype": "pdf",
+       "url": "https://api.notubiz.nl/document/17483299/1",
+       "types": {
+        "type": [
+         {
+          "name": "Brief",
+          "@attributes": {
+           "id": 46
+          }
+         }
+        ]
+       },
+       "@attributes": {
+        "id": 17483299,
+        "version": 1,
+        "last_modified": "2026-10-09 14:56:16",
+        "publication_date": null,
+        "body": null,
+        "permission_group": "public"
+       }
+      },
+      "@attributes": {
+       "id": 2,
+       "datatype": "document",
+       "order": 6,
+       "multiple": 0,
+       "visible": "detail"
+      }
+     },
+     {
+      "label": "datum brief",
+      "value": "2026-09-30 00:00:00",
+      "@attributes": {
+       "id": 15,
+       "datatype": "datetime",
+       "order": 7,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "advies",
+      "value": "Voor kennisgeving aannemen",
+      "@attributes": {
+       "id": 34,
+       "datatype": "varchar",
+       "order": 9,
+       "multiple": 0,
+       "visible": "both"
+      }
+     }
+    ]
+   },
+   "attachments": {
+    "document": [
+     {
+      "filetype": "pdf",
+      "title": "260930 Bijlage - Definitieve brief terugkoppeling BO-Leefomgeving Noord Nederland (260921)",
+      "url": "https://api.notubiz.nl/document/17483300/1",
+      "types": {
+       "type": [
+        {
+         "name": "Bijlage",
+         "@attributes": {
+          "id": 14
+         }
+        }
+       ]
+      },
+      "@attributes": {
+       "id": 17483300,
+       "last_modified": "2026-10-09 14:56:23",
+       "version": 1,
+       "publication_date": null,
+       "case_code": null,
+       "body": null,
+       "permission_group": "public"
+      }
+     }
+    ]
+   },
+   "@attributes": {
+    "id": 1208232,
+    "creation_date": null,
+    "last_modified": "2026-10-09 14:56:23",
+    "confidential": 0,
+    "body": null,
+    "permission_group": "public",
+    "organisation_id": 1764,
+    "module_id": 1
+   }
+  },
+  {
+   "attributes": {
+    "attribute": [
+     {
+      "label": "nummer",
+      "value": "2026-248",
+      "@attributes": {
+       "id": 5,
+       "datatype": "varchar",
+       "order": 1,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "onderwerp",
+      "value": "Brief Bedrijvenpark Drachten - Evaluatie van de Gemeenschappelijke Regeling",
+      "@attributes": {
+       "id": 1,
+       "datatype": "varchar",
+       "order": 2,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "hoofddocument",
+      "value": {
+       "title": "260928 Brief Bedrijvenpark Drachten - Evaluatie van de Gemeenschappelijke Regeling",
+       "filetype": "pdf",
+       "url": "https://api.notubiz.nl/document/17497968/1",
+       "types": {
+        "type": [
+         {
+          "name": "Brief",
+          "@attributes": {
+           "id": 46
+          }
+         }
+        ]
+       },
+       "@attributes": {
+        "id": 17497968,
+        "version": 1,
+        "last_modified": "2026-10-09 14:56:40",
+        "publication_date": null,
+        "body": null,
+        "permission_group": "public"
+       }
+      },
+      "@attributes": {
+       "id": 2,
+       "datatype": "document",
+       "order": 6,
+       "multiple": 0,
+       "visible": "detail"
+      }
+     },
+     {
+      "label": "datum brief",
+      "value": "2026-09-28 00:00:00",
+      "@attributes": {
+       "id": 15,
+       "datatype": "datetime",
+       "order": 7,
+       "multiple": 0,
+       "visible": "both"
+      }
+     },
+     {
+      "label": "advies",
+      "value": "Ter advisering in handen stellen van het Presidium",
+      "@attributes": {
+       "id": 34,
+       "datatype": "varchar",
+       "order": 9,
+       "multiple": 0,
+       "visible": "both"
+      }
+     }
+    ]
+   },
+   "attachments": {
+    "document": [
+     {
+      "filetype": "pdf",
+      "title": "260928 Bijlage - Definitief evaluatierapport Gemeenschappelijke Regeling Bedrijvenpark Drachten Azeven",
+      "url": "https://api.notubiz.nl/document/17497969/1",
+      "types": {
+       "type": [
+        {
+         "name": "Bijlage",
+         "@attributes": {
+          "id": 14
+         }
+        }
+       ]
+      },
+      "@attributes": {
+       "id": 17497969,
+       "last_modified": "2026-10-09 14:56:40",
+       "version": 1,
+       "publication_date": null,
+       "case_code": null,
+       "body": null,
+       "permission_group": "public"
+      }
+     }
+    ]
+   },
+   "@attributes": {
+    "id": 1209578,
+    "creation_date": null,
+    "last_modified": "2026-10-09 14:56:40",
+    "confidential": 0,
+    "body": null,
+    "permission_group": "public",
+    "organisation_id": 1764,
+    "module_id": 1
+   }
+  }
+ ]
+}

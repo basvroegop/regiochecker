@@ -1,0 +1,101 @@
+# regiochecker: gemeentelijke bronnen → wekelijkse speerpuntenmail per
+# regioverslaggever. Pad op VPS: /opt/regiochecker/
+#
+# Zelfde patroon als /opt/suikerbroodindex en /opt/prijspeiler: Traefik pakt de
+# container op via de labels, traefik-cloudflare-companion maakt het DNS-record
+# regiochecker.vroeg.app -> vps.vroeg.app aan, en het certificaat komt via de
+# cloudflare-resolver. Die companion scant alleen bij het opstarten, dus een
+# nieuwe hostnaam vraagt `docker restart traefik-companion`.
+
+services:
+  regiochecker:
+    build: .
+    image: regiochecker:latest
+    container_name: regiochecker
+    restart: unless-stopped
+    ports:
+      # Alleen op loopback, zodat het uitsluitend via Traefik naar buiten gaat.
+      - "127.0.0.1:3056:3000"
+    volumes:
+      # Ontvangers, instellingen (ook SMTP-wachtwoord en Claude-sleutel), alle
+      # gevonden items en het logboek. Back-up = deze map kopiëren. Moet van
+      # uid 1000 zijn: de container draait als gebruiker node.
+      - ./data:/app/data
+    env_file:
+      # Optioneel, voor ANTHROPIC_API_KEY; zie .env.example.
+      - path: .env
+        required: false
+    environment:
+      - REGIOCHECKER_SITE_URL=https://regiochecker.vroeg.app
+      # Na inloggen via Authelia zet Traefik de gebruiker in Remote-User (de
+      # forward-auth-middleware overschrijft wat de browser zelf meestuurt). Zonder
+      # die koptekst weigert de API alles; zo kan een verzoek dat de inlog omzeilt
+      # (van binnen het Docker-netwerk) niets.
+      - REGIOCHECKER_AUTH_KOP=remote-user
+      # Ollama draait op een machine in het tailnet. Deze server zit daar zelf
+      # niet in; de Tailscale-container hieronder wel. Alleen het Ollama-verkeer
+      # gaat door zijn proxy.
+      - REGIOCHECKER_TAILNET_PROXY=http://regiochecker-tailscale:1055
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.regiochecker.rule=Host(`regiochecker.vroeg.app`)"
+      - "traefik.http.routers.regiochecker.entrypoints=websecure"
+      - "traefik.http.routers.regiochecker.tls=true"
+      - "traefik.http.routers.regiochecker.tls.certresolver=cloudflare"
+      - "traefik.http.routers.regiochecker.service=regiochecker"
+      - "traefik.http.services.regiochecker.loadbalancer.server.port=3000"
+      # Inloggen via de gedeelde Authelia (/opt/authelia). De middleware staat in
+      # de labels van die container; de cookie voor vroeg.app en de toegangsregel
+      # voor deze site in /opt/authelia/config/configuration.yml.
+      #
+      # Eerst de Authorization-kop weghalen. Authelia accepteert op forward-auth
+      # ook basic auth; een browser die nog de oude basic-auth-gegevens van deze
+      # site onthoudt, stuurt die mee en krijgt dan een wachtwoord-pop-up in plaats
+      # van het inlogscherm. De app zelf gebruikt die kop niet.
+      - "traefik.http.middlewares.regiochecker-zonder-basic.headers.customrequestheaders.Authorization="
+      - "traefik.http.routers.regiochecker.middlewares=regiochecker-zonder-basic,authelia@docker"
+    networks:
+      - traefik
+      - intern
+
+  # Tailscale als sidecar, in userspace-modus: geen extra rechten, geen wijziging
+  # aan de server zelf. Biedt alleen een HTTP-proxy naar het tailnet, op een eigen
+  # netwerk waar alleen de regiochecker bij kan. Op het gedeelde traefik-netwerk
+  # zou elke andere container via deze proxy het tailnet in kunnen.
+  #
+  # Koppelen: zet TS_AUTHKEY=tskey-auth-… in tailscale.env (zie README), of draai
+  # ./tailscale-inloggen.sh voor een inloglink. De link uit `docker compose logs`
+  # werkt niet: de container geeft een interactieve login maar 60 seconden en
+  # herstart dan met een nieuwe link. De machinestatus staat daarna in
+  # ./tailscale, dus koppelen is eenmalig.
+  tailscale:
+    image: tailscale/tailscale:stable
+    container_name: regiochecker-tailscale
+    hostname: regiochecker
+    restart: unless-stopped
+    env_file:
+      - path: tailscale.env
+        required: false
+    environment:
+      - TS_HOSTNAME=regiochecker
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=true
+      # Met bewaarde status niet opnieuw inloggen bij een herstart.
+      - TS_AUTH_ONCE=true
+      # Staat Ollama op een lokaal netwerk dat een andere machine als subnet
+      # router in het tailnet aanbiedt, dan ziet de proxy dat netwerk alleen
+      # met accept-routes.
+      - TS_EXTRA_ARGS=--accept-routes
+      - TS_OUTBOUND_HTTP_PROXY_LISTEN=0.0.0.0:1055
+    volumes:
+      - ./tailscale:/var/lib/tailscale
+    networks:
+      - intern
+
+networks:
+  traefik:
+    name: traefik
+    external: true
+  intern:
+    name: regiochecker-intern
