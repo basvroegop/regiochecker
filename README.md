@@ -221,11 +221,13 @@ De eerste keer gaan alleen de nieuwste paar afleveringen in de wachtrij (bij het
 toevoegen te kiezen, of "alle beschikbare"); de rest van de catalogus telt als
 gezien. Daarna, één aflevering tegelijk (één gedeelde GPU): downloaden en omzetten
 naar een mono-mp3 (64 kbit/s, zo'n 29 MB per uur), transcriberen met
-stemherkenning, en namen zoeken in delen van het transcript. De volgorde van de
-bronnen stel je in bij Beheer › Audio; een bron wordt helemaal afgemaakt voordat
-de volgende aan de beurt is, binnen een bron gaat een transcript altijd vóór het
-zoeken naar namen, en het nieuwste eerst. Namen zoeken wacht als de GPU bezig is
-(Plaud, Storyteller). Tijdelijke storingen blijven herkansen met een oplopende
+stemherkenning, namen zoeken in delen van het transcript, en de AI-samenvatting.
+Die drie gebeuren per aflevering direct na elkaar: een begonnen aflevering wordt
+eerst helemaal afgemaakt, daarna komt de volgende, in de volgorde van de bronnen
+(in te stellen bij Beheer › Audio) en het nieuwste eerst. Namen zoeken en
+samenvatten wachten als de GPU bezig is (Plaud, Storyteller); de verwerking
+begint dan niet intussen aan een volgende aflevering. Afleveringen die al klaar
+waren en alleen nog een samenvatting missen, komen als laatste. Tijdelijke storingen blijven herkansen met een oplopende
 wachttijd; een echte fout drie keer, daarna "mislukt" met een knop **Opnieuw**.
 **Pauzeer alles** legt de verwerking stil; een bron pauzeren stopt alleen het
 zoeken naar nieuwe afleveringen.
@@ -235,7 +237,7 @@ Samenvatting (Claude of Ollama) een samenvatting van de hele opname in hooguit
 100 woorden (`vatKortSamen` in `src/vergadering.mjs`). Die staat in het
 leespaneel onder de speler, boven het transcript, met het kopje
 "AI-samenvatting". De worker heeft zelf geen route om samen te vatten. Daarom
-gebeurt dit in de Regiochecker, als laatste stap in dezelfde wachtrij: nooit
+gebeurt dit in de Regiochecker, als derde stap per aflevering: nooit
 tegelijk met een eigen transcriptie, bij Ollama alleen als de GPU van de worker
 vrij is, en het model gaat daarna meteen uit het geheugen (`keep_alive: 0`). Een
 transcript dat niet in het contextvenster past, wordt eerst per deel tot

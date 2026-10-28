@@ -292,23 +292,24 @@ test('verwerking: van podcastfeed tot transcript, namen, stemmen en telefoonnumm
     assert.deepEqual(beschikbaar, [a.id]);
     assert.deepEqual(adb.db.prepare('SELECT nummer, segment, categorie FROM telefoon_vermeldingen').all().map((x) => ({ ...x })), [{ nummer: '0612345678', segment: 1, categorie: 'Mobiel nummer' }]);
 
-    // Stap 2: eerst het tweede transcript (transcripten gaan voor namen).
-    await verwerking.verwerkEen();
-    assert.equal(adb.aflevering(tweede.id).status, 'getranscribeerd');
-    assert.equal(adb.aflevering(nieuwste.id).status, 'getranscribeerd');
-
-    // Namen wachten als de GPU bezet is.
+    // Stap 2: eerst deze aflevering afmaken. Namen wachten als de GPU bezet is,
+    // en intussen begint de verwerking niet aan de volgende.
     worker.staat.gpuBezig = true;
     await verwerking.verwerkEen();
     a = adb.aflevering(nieuwste.id);
     assert.deepEqual([a.status, a.stap], ['getranscribeerd', 'Namen wachten op de gedeelde GPU']);
     assert.ok(a.opnieuwOp > Date.now() / 1000);
+    assert.equal(await verwerking.verwerkEen(), false, 'niet intussen de volgende transcriberen');
+    assert.equal(adb.aflevering(tweede.id).status, 'wacht');
     worker.staat.gpuBezig = false;
     adb.werkBij(a.id, { opnieuwOp: 0 });
 
     await verwerking.verwerkEen();
     a = adb.aflevering(nieuwste.id);
     assert.equal(a.status, 'klaar');
+    assert.equal(adb.aflevering(tweede.id).status, 'wacht', 'pas daarna de volgende');
+    await verwerking.verwerkEen();
+    assert.equal(adb.aflevering(tweede.id).status, 'getranscribeerd');
     // Alleen wat letterlijk in de tekst staat; de naam van een spreker niet.
     assert.deepEqual(a.entiteiten.map((e) => [e.name, e.type, e.count]), [['Drachten', 'location', 2], ['programmabegroting 2027', 'other', 1], ['wethouder Kramer', 'person', 1]]);
     assert.deepEqual(a.entiteiten[0].occurrences.map((o) => [o.segment, o.start]), [[1, 15], [3, 45]]);
@@ -436,6 +437,11 @@ test('lange opnames in delen naar de worker, met tussenstand', metAlles, async (
     assert.deepEqual(a.segmenten.map((s) => [s.speaker, s.start]), [['Voorzitter Bos', 2], ['Anke Postma', 15], ['Spreker 1', 39], ['Spreker 2', 45], ['Spreker 3', 46]]);
     assert.ok(a.duur > 1.5 && a.duur < 2.5, 'de lengte van de hele opname');
 
+    // Eerst deze aflevering afmaken (namen), dan de volgende.
+    assert.equal(await verwerking.verwerkEen(), true);
+    assert.equal(adb.aflevering(a.id).status, 'klaar');
+    assert.equal(uploads(), 2);
+
     // Na een storing: verder bij het deel dat nog ontbreekt.
     const tweede = adb.lijst({ bron: 'p' }).find((x) => x.titel === 'Aflevering 2');
     adb.werkBij(tweede.id, { transcriptDelen: [{ start: 0, text: 'Al klaar.', segments: [{ start: 0, end: 1, text: ' Al klaar.' }], language: 'nl' }] });
@@ -520,6 +526,19 @@ test('AI-samenvatting: de hele opname in hooguit 100 woorden, als laatste stap',
     const jan = herkenGebruiker(opslag, { login: 'jan', email: 'jan@example.nl' });
     const r = await roep({ opslag, kdb: null, fdb, adb }, jan, 'GET', `/api/stuk?id=a:${KORT}`);
     assert.deepEqual([r.data.samenvatting.tekst, r.data.samenvatting.model], [kort.samenvatting.tekst, 'qwen3:14b']);
+
+    // Een nieuwe aflevering: namen en samenvatting direct na elkaar, vóór achterstand.
+    const NIEUW = 'c'.repeat(32);
+    adb.voegToe(bron, { id: NIEUW, extern: 'ntb:1/nieuw', vorm: 'vergadering', url: 'https://x/nieuw', titel: 'Commissie 27 oktober', gepubliceerdOp: Date.now() / 1000 - 3600 });
+    adb.werkBij(NIEUW, { transcript: 'Wij maken ons zorgen over de huisartsenpost in Drachten.', segmenten: [{ start: 1, end: 9, text: 'Wij maken ons zorgen over de huisartsenpost in Drachten.' }], status: 'getranscribeerd' });
+    adb.werkBij(LANG, { samenvatting: null });
+    await verwerking.verwerkEen();
+    assert.deepEqual([adb.aflevering(NIEUW).status, adb.aflevering(NIEUW).stap], ['getranscribeerd', 'Namen klaar · samenvatting volgt']);
+    await verwerking.verwerkEen();
+    assert.equal(adb.aflevering(NIEUW).status, 'klaar');
+    assert.ok(adb.aflevering(NIEUW).samenvatting.tekst);
+    assert.equal(adb.aflevering(LANG).samenvatting, null, 'achterstand pas daarna');
+    adb.werkBij(LANG, { samenvatting: { tekst: 'Al gedaan.' } });
 
     // Lukt het niet, dan blijft de aflevering klaar; na drie keer niet meer proberen.
     kapot = true;

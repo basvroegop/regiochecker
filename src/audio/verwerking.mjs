@@ -226,24 +226,36 @@ export class Verwerking {
 
   // ---------- de wachtrij ----------
 
-  volgende(nu = Date.now() / 1000) {
+  // Per aflevering drie fasen: transcript, namen, AI-samenvatting. Een
+  // aflevering die al begonnen is, wordt eerst helemaal afgemaakt; daarna de
+  // volgende, in de volgorde van de bronnen en het nieuwste eerst. Afleveringen
+  // die al klaar waren en alleen nog een samenvatting missen (een overgenomen
+  // archief, of een samenvatting die mislukte), komen als laatste.
+  static fase(r) {
+    return r.zonder_transcript || r.sprekers_gevraagd ? 0 : r.zonder_entiteiten ? 1 : 2;
+  }
+
+  static lopend(r) {
+    return r.status !== 'klaar' && (!r.zonder_transcript || Boolean(r.met_delen));
+  }
+
+  kandidaten(nu = Date.now() / 1000) {
     const volgorde = new Map(this.bronVolgorde().map((b, i) => [b.id, i]));
-    const rijen = this.adb.wachtrij(nu).filter((r) => volgorde.has(r.bron));
-    const transcriptWerk = new Set(rijen.filter((r) => r.zonder_transcript || r.sprekers_gevraagd).map((r) => r.bron));
-    // Drie fasen per aflevering: transcript, namen, AI-samenvatting. Binnen een
-    // bron eerst alle transcripten, dan de rest.
     const samenvatten = samenvattingAanbieder(this.opslag).klaar;
-    const fase = (r) => (r.zonder_transcript || r.sprekers_gevraagd ? 0 : r.zonder_entiteiten ? 1 : 2);
-    const kandidaten = rijen.filter((r) => ['wacht', 'getranscribeerd', 'klaar'].includes(r.status) && r.klaarVoor
-      && (fase(r) === 0
-        || (fase(r) === 1 && !transcriptWerk.has(r.bron))
-        // Na een herstart midden in de samenvatting staat hij op "getranscribeerd".
-        || (fase(r) === 2 && !transcriptWerk.has(r.bron) && ((samenvatten && r.zonder_samenvatting) || r.status === 'getranscribeerd'))));
-    kandidaten.sort((a, b) => volgorde.get(a.bron) - volgorde.get(b.bron)
-      || fase(a) - fase(b)
-      || Number(b.met_stemmen) - Number(a.met_stemmen)
+    const { fase, lopend } = Verwerking;
+    const rijen = this.adb.wachtrij(nu).filter((r) => volgorde.has(r.bron) && ['wacht', 'getranscribeerd', 'klaar'].includes(r.status)
+      // Een samenvatting alleen als er een taalmodel is; staat hij nog op
+      // "getranscribeerd" (herstart, of het taalmodel ging uit), dan rondt de stap hem af.
+      && (fase(r) < 2 || (samenvatten && r.zonder_samenvatting) || r.status !== 'klaar'));
+    const groep = (r) => (lopend(r) ? 0 : fase(r) === 0 ? 1 : 2);
+    rijen.sort((a, b) => groep(a) - groep(b)
+      || volgorde.get(a.bron) - volgorde.get(b.bron)
       || b.moment - a.moment);
-    return kandidaten;
+    return { rijen, groep };
+  }
+
+  volgende(nu = Date.now() / 1000) {
+    return this.kandidaten(nu).rijen.filter((r) => r.klaarVoor);
   }
 
   // Eén stap: de volgende aflevering een fase verder. Geeft true als er werk was.
@@ -251,8 +263,13 @@ export class Verwerking {
     if (this.adb.gepauzeerd()) return false;
     const w = this.w();
     if (!w || !w.heeftToken) return false;
-    const volgende = this.volgende()[0];
+    const nu = Date.now() / 1000;
+    const { rijen, groep } = this.kandidaten(nu);
+    const volgende = rijen.find((r) => r.klaarVoor);
     if (!volgende) return false;
+    // Wacht de lopende aflevering even (op de gedeelde GPU, of een herkansing
+    // over een paar minuten), dan niet intussen aan een volgende beginnen.
+    if (groep(volgende) > 0 && rijen.some((r) => groep(r) === 0 && !r.klaarVoor && r.opnieuw_op - nu < 300)) return false;
     const af = this.adb.aflevering(volgende.id);
     this.bezigMet = af.id;
     try {
@@ -378,8 +395,9 @@ export class Verwerking {
       klaar.push(await this.vraagNamen(w, stukken[i]));
       werk({ entiteitDelen: klaar });
     }
-    werk({ entiteiten: plaatsNamen(klaar.flat(), af.segmenten), status: 'klaar', stap: 'Klaar', fout: null, pogingen: 0 });
-    // De samenvatting volgt als aparte stap in de wachtrij.
+    // Daarna meteen de samenvatting, als die er komt; pas dan is de aflevering klaar.
+    const samenvatting = samenvattingAanbieder(this.opslag).klaar;
+    werk({ entiteiten: plaatsNamen(klaar.flat(), af.segmenten), status: samenvatting ? 'getranscribeerd' : 'klaar', stap: samenvatting ? 'Namen klaar · samenvatting volgt' : 'Klaar', fout: null, pogingen: 0 });
     this.wek();
   }
 
@@ -395,7 +413,7 @@ export class Verwerking {
       return;
     }
     if (aanbieder.via === 'ollama' && await w.gpuBezig()) {
-      werk({ status: 'klaar', stap: 'Klaar · samenvatting wacht op de gedeelde GPU', opnieuwOp: Date.now() / 1000 + 30 });
+      werk({ status: af.status === 'klaar' ? 'klaar' : 'getranscribeerd', stap: 'Samenvatting wacht op de gedeelde GPU', opnieuwOp: Date.now() / 1000 + 30 });
       return;
     }
     const vorige = af.samenvatting || {};

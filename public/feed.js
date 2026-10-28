@@ -7,7 +7,7 @@ import { $, $$, esc, vraag, icoon, toast, bezig, dagKop, uurMinuut, moment, tijd
 import { app, zetBewaardTeller, laadIk } from './app.js';
 import { archiefFilters, archiefBalkHtml, koppelArchiefBalk, laadBronnen } from './archief.js';
 
-const STATUSNAAM = { wacht: 'in de wachtrij', downloaden: 'wordt gedownload', transcriberen: 'wordt getranscribeerd', getranscribeerd: 'namen volgen', analyseren: 'wordt geanalyseerd', mislukt: 'mislukt' };
+const STATUSNAAM = { wacht: 'in de wachtrij', downloaden: 'wordt gedownload', transcriberen: 'wordt getranscribeerd', getranscribeerd: 'wordt geanalyseerd', analyseren: 'wordt geanalyseerd', mislukt: 'mislukt' };
 
 const GROEPEN = ['alles', 'nieuws', 'ingekomen', 'woo', 'kamerstuk', 'audio'];
 const GROEPNAAM = { alles: 'Alles', nieuws: 'Gemeentenieuws', ingekomen: 'Ingekomen', woo: 'Woo', kamerstuk: 'Kamerstukken', audio: 'Audio & video' };
