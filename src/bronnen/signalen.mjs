@@ -8,9 +8,7 @@
 //   ransomware          nieuwe slachtoffers (ransomlook.io, en met een
 //                       sleutel ransomware.live Pro); de beschrijving noemt
 //                       vaak de vestigingsplaats
-// Niet overgenomen: files (NDW) en NS-storingen (te vluchtig voor een
-// nieuwsfeed; NS vraagt bovendien een sleutel), en de 112-inzendingen via
-// Telegram (geen bron om op te halen, maar een bot).
+// Files (NDW) en NS-storingen staan in src/bronnen/verkeer.mjs.
 
 import { createHash } from 'node:crypto';
 import { haalTekst, haalJson } from '../ophalen.mjs';

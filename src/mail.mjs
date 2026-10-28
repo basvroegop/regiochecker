@@ -215,7 +215,7 @@ function landelijkVoor(k, regio, sinds, tot) {
   for (const item of Object.values(k.opslag.items)) {
     if (item.regio || item.basislijn || item.eersteGezien <= sinds || item.eersteGezien > tot) continue;
     const bron = k.bronnen.get(item.bron);
-    if (bron?.bereik !== 'landelijk') continue;
+    if (bron?.bereik !== 'landelijk' || bron.inMail === false) continue;
     const r = routeerItem(k, item, bron).find((x) => x.regio === regio.id);
     if (r) uit.push({ item, bron, gevonden: r.gevonden });
   }

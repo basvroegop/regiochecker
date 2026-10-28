@@ -10,7 +10,7 @@ const statusHtml = (s) => `<span class="status ${esc(s.staat)}"><i></i>${esc(s.t
 
 function rondeTekst(b) {
   const s = b.status;
-  if (s.staat === 'ontbreekt') return 'Niet online';
+  if (s.staat === 'ontbreekt') return s.fout || 'Niet online';
   if (s.staat === 'fout') return `${s.fout ? `${s.fout.slice(0, 80)} · ` : ''}${s.tijd ? uurMinuut(s.tijd) : ''}`;
   if (s.waarschuwing) return s.waarschuwing;
   if (!s.tijd) return '';

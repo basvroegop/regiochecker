@@ -31,6 +31,8 @@ export const ENKELVOUD = {
   weerwaarschuwing: 'Weerwaarschuwing',
   uitspraak: 'Uitspraak Raad van State',
   ransomware: 'Ransomware',
+  file: 'File',
+  treinstoring: 'Treinstoring',
 };
 
 export const GROEPEN = {
@@ -42,13 +44,15 @@ export const GROEPEN = {
   knmi: 'KNMI',
   rvs: 'Raad van State',
   ransomware: 'Ransomware',
+  verkeer: 'Verkeer',
 };
 
 export const AUDIOSOORTEN = ['raadsvergadering', 'youtube', 'podcast'];
 
-// Aardbevingen, weerwaarschuwingen, uitspraken en ransomware: landelijke
-// signalen uit de checker (src/bronnen/signalen.mjs), elk met een eigen tabblad.
-export const SIGNAALGROEP = { aardbeving: 'knmi', weerwaarschuwing: 'knmi', uitspraak: 'rvs', ransomware: 'ransomware' };
+// Aardbevingen, weerwaarschuwingen, uitspraken, ransomware, files en
+// treinstoringen: landelijke signalen uit de checker (src/bronnen/signalen.mjs
+// en src/bronnen/verkeer.mjs), met eigen tabbladen.
+export const SIGNAALGROEP = { aardbeving: 'knmi', weerwaarschuwing: 'knmi', uitspraak: 'rvs', ransomware: 'ransomware', file: 'verkeer', treinstoring: 'verkeer' };
 export const groepVan = (soort) => (AUDIOSOORTEN.includes(soort) ? 'audio' : SIGNAALGROEP[soort] || soort);
 
 export const REGIOS = [

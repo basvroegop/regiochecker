@@ -11,7 +11,8 @@
 //    site wordt omgebouwd en ineens alle links veranderen. Voor Woo geldt die
 //    grens niet, om de reden hierboven.
 
-import { teVerzamelen, alleBronnen } from './register.mjs';
+import { teVerzamelen, alleBronnen, alleRegios } from './register.mjs';
+import { gemeente, afstandKm } from './geo.mjs';
 import { haalBron } from './bronnen/index.mjs';
 import { dagenGeleden } from './datum.mjs';
 import { vulInhoud } from './inhoud.mjs';
@@ -43,6 +44,8 @@ export function verwerk(opslag, bron, gevonden, nu = new Date()) {
         url: g.url || bestaand.url,
         datum: g.datum ?? bestaand.datum,
         laatstGezien: tijd,
+        // Een file groeit, een storing krijgt een nieuwe prognose.
+        ...(bron.bijwerken ? { tekst: g.tekst ?? bestaand.tekst, ...(g.plek ? { plek: g.plek } : {}), ...(g.punten ? { punten: g.punten } : {}) } : {}),
       });
       continue;
     }
@@ -63,6 +66,7 @@ export function verwerk(opslag, bron, gevonden, nu = new Date()) {
       document: g.document ?? null,
       // Waar het gebeurde, voor de routering naar regio's (src/geo.mjs).
       ...(g.plek ? { plek: g.plek } : {}),
+      ...(g.punten ? { punten: g.punten } : {}),
       ...(g.provincies ? { provincies: g.provincies } : {}),
       ...(g.slachtoffer ? { slachtoffer: g.slachtoffer } : {}),
       eersteGezien: tijd,
@@ -115,11 +119,22 @@ function ruimOp(opslag, nu) {
   }
 }
 
+// Bij files en treinstoringen (`alleenInRegio`) alleen wat in of bij een van
+// de regio's ligt: het hele land telt er honderden per dag.
+export function inEenRegio(opslag, bron, stuk) {
+  const punten = [stuk.plek, ...(stuk.punten || [])].filter((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lon));
+  return alleRegios(opslag).some((r) => {
+    const g = gemeente(r.naam);
+    return g && punten.some((p) => afstandKm(p, g) <= (bron.straalKm ?? 0));
+  });
+}
+
 async function verzamelBron(opslag, bron) {
   const begin = Date.now();
   const vorige = opslag.status.bronnen[bron.id] || {};
   try {
-    const gevonden = await haalBron(bron);
+    const opgehaald = await haalBron(bron);
+    const gevonden = bron.alleenInRegio ? opgehaald.filter((g) => inEenRegio(opslag, bron, g)) : opgehaald;
     const { nieuw, eersteKeer } = verwerk(opslag, bron, gevonden);
     opslag.status.bronnen[bron.id] = {
       ok: true,
@@ -150,6 +165,23 @@ async function verzamelBron(opslag, bron) {
 }
 
 let lopend = null;
+
+// Bronnen met een eigen, korter interval (`intervalMinuten`: files en
+// treinstoringen) tussen de gewone rondes door. Geeft het aantal nieuwe stukken.
+export async function verzamelSnel(opslag, nu = Date.now()) {
+  if (lopend) return 0;
+  const bronnen = teVerzamelen(opslag).filter((b) => b.intervalMinuten
+    && nu - Date.parse(opslag.status.bronnen[b.id]?.laatsteRonde || 0) >= b.intervalMinuten * 60000);
+  if (!bronnen.length) return 0;
+  let nieuw = 0;
+  for (const bron of bronnen) {
+    const r = await verzamelBron(opslag, bron);
+    nieuw += r.nieuw || 0;
+    if (r.nieuweFout) opslag.log({ soort: 'bronfout', tekst: `${r.bron}: ${r.fout}` });
+  }
+  opslag.bewaar('items', 'status');
+  return nieuw;
+}
 
 // Twee rondes tegelijk (de klok en iemand die op "Nu controleren" drukt) zouden
 // elkaars items dubbel tellen; de tweede wacht gewoon op de eerste.

@@ -183,11 +183,11 @@ audio wordt het transcript doorzocht en staat bij elke treffer de tijd.
 
 ## Signalen
 
-Vier landelijke bronnen uit de checker (`/opt/checker`) zijn overgenomen
-(`src/bronnen/signalen.mjs`), elk onder een eigen tabblad in de feed: **KNMI**
-(aardbevingen en weerwaarschuwingen), **Raad van State** en **Ransomware**. Ze
-hebben een plek, en gaan daarmee rechtstreeks naar de goede regio, naast de
-gewone sleutelwoorden:
+De landelijke bronnen uit de checker (`/opt/checker`) zijn overgenomen
+(`src/bronnen/signalen.mjs` en `src/bronnen/verkeer.mjs`), onder eigen
+tabbladen in de feed: **KNMI** (aardbevingen en weerwaarschuwingen), **Raad van
+State**, **Ransomware** en **Verkeer** (files en NS). Ze hebben een plek, en gaan
+daarmee rechtstreeks naar de goede regio, naast de gewone sleutelwoorden:
 
 | Bron | Waar het vandaan komt | Naar een regio als |
 |---|---|---|
@@ -195,6 +195,17 @@ gewone sleutelwoorden:
 | KNMI · Weerwaarschuwingen | RSS per provincie, alleen code oranje en rood | de gemeente in die provincie ligt |
 | Raad van State · Uitspraken | de 100 nieuwste uitspraken van de Afdeling bestuursrechtspraak | de gemeente of een plaats erin in de titel of samenvatting staat |
 | Ransomware · Nederlandse slachtoffers | ransomlook.io (de 100 nieuwste wereldwijd, alleen met een `.nl`-website of Nederland in de beschrijving); met `RANSOMWARE_LIVE_API_KEY` ook ransomware.live Pro | het bedrijf in de gemeente gevestigd is (zie hieronder) |
+| NDW · Files | open DATEX II-feed `opendata.ndw.nu/actueel_beeld.xml.gz` (geen sleutel), files vanaf 10 minuten vertraging | een stuk van het traject in de gemeente ligt |
+| NS · Storingen en werkzaamheden | NS Reisinformatie API v3, met `NS_API_KEY` (gratis via apiportal.ns.nl); zonder sleutel staat de bron uit ("Sleutel nodig" bij Beheer › Bronnen) | een station op het traject in de gemeente ligt |
+
+**Verkeer** is vluchtig. Files en NS komen elke vijf minuten binnen
+(`intervalMinuten`), los van de gewone ronde, en alleen wat in een regio ligt
+wordt bewaard (`alleenInRegio`; het land telt honderden files per dag). Een
+file die groeit, houdt hetzelfde stuk met een bijgewerkte kop ("File op de A7
+bij Heerenveen: 4,9 km, 13 minuten vertraging"); het wegnummer en de plaats
+komen van de PDOK Locatieserver, want de NDW-feed noemt ze niet. NS-werkzaamheden
+krijgen elke dag een nieuw id, en worden daarom op hun traject samengevoegd.
+Verkeer gaat niet mee in de weekmail, wel naar meldingen en Teams-kanalen.
 
 Aardbevingen, weerwaarschuwingen en ransomware blijven twee jaar bewaard
 (`bewaarDagen` bij de bron), ook als de bron ze niet meer toont: die toont alleen
@@ -232,9 +243,9 @@ Plaatsnamen die ook gewone woorden of achternamen zijn ("Een", "Best", "Vries")
 tellen nooit. Kamerstukken en andere landelijke bronnen gaan niet op
 plaatsnaam, alleen op sleutelwoord: "Groningen" staat in te veel kamerstukken.
 
-Niet overgenomen: files (NDW) en NS-storingen (te vluchtig voor een nieuwsfeed;
-NS vraagt bovendien een sleutel), en de 112-inzendingen via de Telegram-bot
-(geen bron om op te halen). De aardbevingen in de checker liepen via de KNMI
+De NS-storingen en de DVHN-bot (112-inzendingen via Telegram) hebben in de
+checker nooit gedraaid: daar stonden geen NS-sleutel en geen bottoken. De
+aardbevingen in de checker liepen via de KNMI
 Open Data API met een gedeelde anonieme sleutel die op 1 juli 2026 verliep; de
 FDSN-dienst heeft geen sleutel nodig.
 

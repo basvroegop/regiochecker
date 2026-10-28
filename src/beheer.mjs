@@ -5,7 +5,7 @@
 import { SOORTEN, ENKELVOUD, AUDIOSOORTEN } from './regios.mjs';
 import {
   alleRegios, alleBronnen, bronnenVanRegio, landelijkeBronnen, TWEEDE_KAMER,
-  geldtVoor, actieveTermen, maakId,
+  geldtVoor, actieveTermen, maakId, sleutelOntbreekt,
 } from './register.mjs';
 import { haalBron } from './bronnen/index.mjs';
 import { schoneTermen, vindTermen, vindInSegmenten } from './termen.mjs';
@@ -52,6 +52,7 @@ const geleden = (dagen) => new Date(Date.now() - dagen * DAG_MS).toISOString();
 
 export function bronStatus(opslag, bron) {
   if (bron.type === 'ontbreekt') return { staat: 'ontbreekt', tekst: 'Niet gevonden' };
+  if (sleutelOntbreekt(bron)) return { staat: 'ontbreekt', tekst: 'Sleutel nodig', fout: `Zet ${bron.sleutel} in .env om deze bron te gebruiken.` };
   const s = bron.id === TWEEDE_KAMER.id ? opslag.status.kamer : opslag.status.bronnen[bron.id];
   if (!s) return { staat: 'wacht', tekst: 'Nog niet gecontroleerd' };
   const tijd = s.laatsteRonde || s.tijd || null;

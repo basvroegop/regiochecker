@@ -24,7 +24,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Opslag } from './opslag.mjs';
-import { verzamelAlles } from './verzamel.mjs';
+import { verzamelAlles, verzamelSnel } from './verzamel.mjs';
 import { stelMailSamen, mailGebruiker, mailronde, teMailen, allemaalMetWeekmail, herkansMislukte } from './mail.mjs';
 import { verwerkMeldingen } from './meldingen.mjs';
 import { verwerkKanalen } from './kanalen.mjs';
@@ -128,7 +128,9 @@ async function tik() {
       const resultaten = await mailronde(opslag, new Date(), undefined, weekmails);
       console.log(`Weekmails: ${resultaten.filter((r) => r.verstuurd).length} verstuurd, ${resultaten.filter((r) => r.fout).length} mislukt`);
     }
-    if (verzameld) await meldingen();
+    // Files en treinstoringen elke vijf minuten.
+    const snelNieuw = await verzamelSnel(opslag);
+    if (verzameld || snelNieuw) await meldingen();
     await herkansMislukte(opslag, new Date());
   } catch (fout) {
     console.error('Fout in de planner:', fout);

@@ -115,9 +115,12 @@ function routeerOpPlek(k, item, bron) {
     const g = gemeente(r.naam);
     if (!g) continue;
     const gevonden = [];
-    if (bron.geo && Number.isFinite(item.plek?.lat) && Number.isFinite(item.plek?.lon)) {
-      const km = afstandKm(item.plek, g);
-      const naam = item.plek.naam || 'deze plek';
+    // De plek, of een van de punten: het traject van een file, de stations van
+    // een treinstoring. Het dichtstbijzijnde punt telt.
+    const punten = [item.plek, ...(item.punten || [])].filter((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lon));
+    if (bron.geo && punten.length) {
+      const [km, p] = punten.map((x) => [afstandKm(x, g), x]).reduce((a, b) => (b[0] < a[0] ? b : a));
+      const naam = p.naam || 'deze plek';
       if (km <= (bron.straalKm ?? 0)) {
         gevonden.push({ term: naam, aantal: 1, fragment: { tekst: km ? `${naam}, ${km.toFixed(1).replace('.', ',')} km buiten de gemeente ${g.naam}` : `${naam}, in de gemeente ${g.naam}`, treffer: naam } });
       }

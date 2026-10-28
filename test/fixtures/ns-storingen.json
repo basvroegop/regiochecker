@@ -1,0 +1,82 @@
+[
+  {
+    "id": "7001234",
+    "type": "DISRUPTION",
+    "title": "Heerenveen - Leeuwarden",
+    "isActive": true,
+    "local": false,
+    "registrationTime": "2026-10-28T16:40:00+0100",
+    "releaseTime": "2026-10-28T16:42:00+0100",
+    "start": "2026-10-28T16:35:00+0100",
+    "end": "2026-10-28T19:00:00+0100",
+    "impact": { "value": 4 },
+    "expectedDuration": { "description": "Verwacht tot 19:00", "endTime": "2026-10-28T19:00:00+0100" },
+    "publicationSections": [
+      {
+        "section": {
+          "stations": [
+            { "name": "Heerenveen", "stationCode": "HR", "uicCode": "8400318", "countryCode": "NL", "coordinate": { "lat": 52.9611, "lng": 5.9142 } },
+            { "name": "Akkrum", "stationCode": "AKM", "uicCode": "8400049", "countryCode": "NL", "coordinate": { "lat": 53.0461, "lng": 5.8378 } },
+            { "name": "Grou-Jirnsum", "stationCode": "GW", "uicCode": "8400281", "countryCode": "NL", "coordinate": { "lat": 53.0897, "lng": 5.8255 } },
+            { "name": "Leeuwarden", "stationCode": "LW", "uicCode": "8400404", "countryCode": "NL", "coordinate": { "lat": 53.1961, "lng": 5.7928 } }
+          ],
+          "direction": "BOTH"
+        },
+        "consequence": { "section": { "stations": [], "direction": "BOTH" }, "description": "Geen treinen", "level": "NO_OR_MUCH_LESS_TRAINS" },
+        "sectionType": "ONGOING"
+      }
+    ],
+    "timespans": [
+      {
+        "start": "2026-10-28T16:35:00+0100",
+        "end": "2026-10-28T19:00:00+0100",
+        "situation": { "label": "Tussen Heerenveen en Leeuwarden rijden geen treinen" },
+        "cause": { "label": "een aanrijding met een persoon" },
+        "additionalTravelTime": { "label": "Reken op een uur extra reistijd", "shortLabel": "+60 min", "maximumDurationInMinutes": 60 },
+        "advices": ["Tussen Heerenveen en Leeuwarden rijden stopbussen."]
+      }
+    ],
+    "alternativeTransportTimespans": []
+  },
+  {
+    "id": "7005555",
+    "type": "MAINTENANCE",
+    "title": "Groningen - Zuidhorn",
+    "isActive": false,
+    "local": false,
+    "start": "2026-11-07T01:00:00+0100",
+    "end": "2026-11-08T23:59:00+0100",
+    "impact": { "value": 3 },
+    "publicationSections": [
+      {
+        "section": {
+          "stations": [
+            { "name": "Groningen", "stationCode": "GN", "coordinate": { "lat": 53.2106, "lng": 6.5647 } },
+            { "name": "Zuidhorn", "stationCode": "ZH", "coordinate": { "lat": 53.247, "lng": 6.404 } }
+          ],
+          "direction": "BOTH"
+        },
+        "sectionType": "ONGOING"
+      }
+    ],
+    "timespans": [
+      {
+        "start": "2026-11-07T01:00:00+0100",
+        "end": "2026-11-08T23:59:00+0100",
+        "situation": { "label": "Tussen Groningen en Zuidhorn rijden geen treinen" },
+        "cause": { "label": "werkzaamheden" },
+        "advices": ["Er rijden bussen."]
+      }
+    ],
+    "alternativeTransportTimespans": []
+  },
+  {
+    "id": "C-99",
+    "type": "CALAMITY",
+    "title": "Stroomstoring in de regio Amsterdam",
+    "description": "Door een stroomstoring rijden er minder treinen rond Amsterdam.",
+    "isActive": true,
+    "url": "https://www.ns.nl/reisinformatie/calamiteiten"
+  },
+  { "id": "x", "type": "ONBEKEND", "title": "Iets anders" }
+]

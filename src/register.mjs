@@ -51,6 +51,20 @@ export const SIGNAALBRONNEN = [
     // vestiging: na elke ronde de vestigingsplaats opzoeken (src/locatie.mjs).
     plaatsen: true, vestiging: true, inhoud: false, leegKan: true, bewaarDagen: 730, ingebouwd: true,
   },
+  // Verkeer (src/bronnen/verkeer.mjs): elke vijf minuten (`intervalMinuten`),
+  // alleen wat in een regio ligt (`alleenInRegio`), een stuk wordt bijgewerkt
+  // zolang het er is (`bijwerken`), en niet in de weekmail (`inMail`): een file
+  // van maandag is vrijdag geen nieuws meer.
+  {
+    id: 'ndw-files', naam: 'NDW · Files', label: 'Open DATEX II-feed · vanaf 10 minuten vertraging, met een stuk van het traject in de gemeente',
+    soort: 'file', bereik: 'landelijk', type: 'ndw-files', url: 'https://opendata.ndw.nu/actueel_beeld.xml.gz',
+    minVertragingMin: 10, geo: true, straalKm: 0, alleenInRegio: true, inhoud: false, leegKan: true, bijwerken: true, intervalMinuten: 5, inMail: false, bewaarDagen: 30, ingebouwd: true,
+  },
+  {
+    id: 'ns-storingen', naam: 'NS · Storingen en werkzaamheden', label: 'NS Reisinformatie API · met een station in de gemeente · sleutel NS_API_KEY',
+    soort: 'treinstoring', bereik: 'landelijk', type: 'ns-storingen', url: 'https://gateway.apiportal.ns.nl/reisinformatie-api/api/v3/disruptions',
+    sleutel: 'NS_API_KEY', geo: true, straalKm: 0, alleenInRegio: true, inhoud: false, leegKan: true, bijwerken: true, intervalMinuten: 5, inMail: false, bewaarDagen: 90, ingebouwd: true,
+  },
 ];
 
 export const isAudioBron = (b) => AUDIOSOORTEN.includes(b?.soort);
@@ -84,7 +98,9 @@ export const landelijkeBronnen = (opslag) => alleBronnen(opslag).filter((b) => b
 
 // De bronnen die de verzamelronde afgaat: alles met een lezer in
 // src/bronnen/. De Tweede Kamer en audio hebben een eigen ronde.
-export const teVerzamelen = (opslag) => alleBronnen(opslag).filter((b) => TYPES[b.type]);
+// Een bron met `sleutel` (de naam van een omgevingsvariabele) alleen als die er is.
+export const sleutelOntbreekt = (bron) => Boolean(bron.sleutel && !process.env[bron.sleutel]);
+export const teVerzamelen = (opslag) => alleBronnen(opslag).filter((b) => TYPES[b.type] && !sleutelOntbreekt(b));
 
 export const geldtVoor = (regio, bronId) => !(regio.landelijkUit || []).includes(bronId);
 

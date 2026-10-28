@@ -6,6 +6,7 @@ import * as swf from './sudwestfryslan.mjs';
 import { haalGppWoo } from './gppwoo.mjs';
 import { haalBwBesluiten } from './groningen.mjs';
 import { haalAardbevingen, haalWaarschuwingen, haalUitspraken, haalRansomware } from './signalen.mjs';
+import { haalFiles, haalStoringen } from './verkeer.mjs';
 
 // type in src/regios.mjs → functie die een lijst items teruggeeft.
 export const TYPES = {
@@ -23,6 +24,8 @@ export const TYPES = {
   'knmi-waarschuwingen': haalWaarschuwingen,
   'raad-van-state': haalUitspraken,
   ransomware: haalRansomware,
+  'ndw-files': haalFiles,
+  'ns-storingen': haalStoringen,
 };
 
 export async function haalBron(bron) {

@@ -55,8 +55,8 @@ export async function haalTekst(url, opties) {
   return (await verzoek(url, opties)).text();
 }
 
-export async function haalJson(url) {
-  return (await verzoek(url, { headers: { Accept: 'application/json' } })).json();
+export async function haalJson(url, opties = {}) {
+  return (await verzoek(url, { ...opties, headers: { Accept: 'application/json', ...opties.headers } })).json();
 }
 
 const MAX_BYTES = 30 * 1024 * 1024;
