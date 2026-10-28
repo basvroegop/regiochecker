@@ -27,6 +27,7 @@ import { Opslag } from './opslag.mjs';
 import { verzamelAlles } from './verzamel.mjs';
 import { stelMailSamen, mailGebruiker, mailronde, teMailen, allemaalMetWeekmail, herkansMislukte } from './mail.mjs';
 import { verwerkMeldingen } from './meldingen.mjs';
+import { verwerkKanalen } from './kanalen.mjs';
 import { herken } from './gebruikers.mjs';
 import { openKamerDb } from './kamer/db.mjs';
 import { kamerRonde } from './kamer/ronde.mjs';
@@ -63,6 +64,7 @@ try {
   console.error('Gelezen/bewaard en audio niet beschikbaar:', fout.message);
 }
 
+// Na elke ronde: de meldingen per mail, en wat er naar de Teams-kanalen moet.
 async function meldingen() {
   try {
     const r = await verwerkMeldingen(ctx);
@@ -70,6 +72,13 @@ async function meldingen() {
     if (verstuurd) console.log(`Meldingen: ${verstuurd} verstuurd`);
   } catch (fout) {
     console.error('Meldingen mislukt:', fout);
+  }
+  try {
+    const r = await verwerkKanalen(ctx);
+    const stukken = r.reduce((n, c) => n + (c.verstuurd || 0), 0);
+    if (stukken) console.log(`Teams: ${stukken} stukken naar ${r.filter((c) => c.verstuurd).length} kanalen`);
+  } catch (fout) {
+    console.error('Teams mislukt:', fout);
   }
 }
 

@@ -17,6 +17,7 @@ import { gooiAudioWeg } from './audio/ophalen.mjs';
 import { isAudio } from './audio/verwerking.mjs';
 import { nieuweGebruiker, werkGebruikerBij, voorClient, InvoerFout } from './gebruikers.mjs';
 import { volgendeWeekmail } from './planning.mjs';
+import { controleerKanaal, nieuwKanaal, kanaalVoorClient, kanaalKeuzes, stuurNaarTeams, testKaart } from './kanalen.mjs';
 
 const DAG_MS = 86400000;
 const RUIS = 25;
@@ -557,6 +558,48 @@ export async function beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, s
   }
 
   const regioIds = k.regios.map((r) => r.id);
+
+  // ---------- Teams-kanalen (src/kanalen.mjs) ----------
+  const bronIds = () => alleBronnen(opslag).map((b) => b.id);
+  if (route === 'GET /kanalen') {
+    return stuur({ kanalen: opslag.kanalen.map(kanaalVoorClient), keuzes: kanaalKeuzes(k), siteUrl: Boolean(process.env.REGIOCHECKER_SITE_URL) });
+  }
+  if (route === 'POST /kanalen') {
+    const kanaal = nieuwKanaal(controleerKanaal(await leesJson(req), null, { regioIds, bronIds: bronIds() }));
+    opslag.kanalen.push(kanaal);
+    opslag.bewaar('kanalen');
+    return stuur(kanaalVoorClient(kanaal), 201);
+  }
+  if (deel[2] === 'kanalen' && deel[3]) {
+    const kanaal = opslag.kanalen.find((c) => c.id === deel[3]);
+    if (!kanaal) throw new Fout(404, 'Kanaal niet gevonden');
+    if (req.method === 'PUT' && deel.length === 4) {
+      const was = kanaal.actief !== false;
+      Object.assign(kanaal, controleerKanaal(await leesJson(req), kanaal, { regioIds, bronIds: bronIds() }));
+      // Weer aan na een tijd uit: vanaf nu, niet alles wat intussen binnenkwam.
+      if (!was && kanaal.actief) {
+        Object.assign(kanaal, { laatsteVerzending: new Date(Math.max(Date.now(), Date.parse(kanaal.laatsteVerzending || 0))).toISOString(), verzonden: [] });
+      }
+      opslag.bewaar('kanalen');
+      return stuur(kanaalVoorClient(kanaal));
+    }
+    if (req.method === 'DELETE' && deel.length === 4) {
+      opslag.kanalen = opslag.kanalen.filter((c) => c.id !== kanaal.id);
+      opslag.bewaar('kanalen');
+      return stuur({ ok: true });
+    }
+    if (req.method === 'POST' && deel[4] === 'test') {
+      try {
+        await stuurNaarTeams(kanaal.url, testKaart(kanaal, kanaalKeuzes(k)));
+      } catch (fout) {
+        throw new Fout(502, fout.message);
+      }
+      kanaal.laatsteFout = null;
+      opslag.bewaar('kanalen');
+      return stuur({ ok: true });
+    }
+  }
+
   if (route === 'GET /gebruikers') {
     const nu = new Date();
     return stuur(opslag.gebruikers.map((g) => ({ ...voorClient(g), volgendeWeekmail: volgendeWeekmail(nu, g)?.toISOString() || null })));

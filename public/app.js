@@ -1,13 +1,13 @@
 // De webUI van de Regiochecker: één pagina met een kleine router op de hash.
 //   #/feed, #/bewaard, #/zoeken?q=…, #/meldingen      voor iedereen
 //   #/beheer/regios[/id], #/beheer/bronnen, #/beheer/gebruikers,
-//   #/beheer/logboek, #/beheer/instellingen            alleen voor admins
+//   #/beheer/teams, #/beheer/logboek, #/beheer/instellingen   alleen voor admins
 // Geen framework: elke weergave tekent in <main> en koppelt zijn eigen knoppen.
 
 import { $, esc, vraag, icoon, toast, koppelVoorbeeld, uurMinuut } from './gedeeld.js';
 import { toonFeed } from './feed.js';
 import { toonMeldingen } from './meldingen.js';
-import { toonRegios, toonBronnen, toonAudio, toonGebruikers, toonLogboek, toonInstellingen } from './beheer.js';
+import { toonRegios, toonBronnen, toonAudio, toonGebruikers, toonTeams, toonLogboek, toonInstellingen } from './beheer.js';
 import { toonArchief } from './archief.js';
 
 export const app = {
@@ -54,6 +54,7 @@ function tekenKop(r) {
         ${menuLink('#/beheer/bronnen', 'Bronnen', sub === 'bronnen')}
         ${menuLink('#/beheer/audio', 'Audio', sub === 'audio')}
         ${menuLink('#/beheer/gebruikers', 'Gebruikers', sub === 'gebruikers')}
+        ${menuLink('#/beheer/teams', 'Teams', sub === 'teams')}
         ${menuLink('#/beheer/logboek', 'Logboek', sub === 'logboek')}
         ${menuLink('#/beheer/instellingen', 'Instellingen', sub === 'instellingen')}
       </nav>
@@ -144,6 +145,7 @@ async function toon() {
     else if (eerste === 'beheer' && tweede === 'bronnen') await toonBronnen(hoofd, r.params);
     else if (eerste === 'beheer' && tweede === 'audio') await toonAudio(hoofd);
     else if (eerste === 'beheer' && tweede === 'gebruikers') await toonGebruikers(hoofd);
+    else if (eerste === 'beheer' && tweede === 'teams') await toonTeams(hoofd);
     else if (eerste === 'beheer' && tweede === 'logboek') await toonLogboek(hoofd);
     else if (eerste === 'beheer' && tweede === 'instellingen') await toonInstellingen(hoofd);
     else if (eerste === 'beheer') location.replace('#/beheer/regios');

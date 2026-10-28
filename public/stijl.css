@@ -409,6 +409,26 @@ span.beurt-tijd { cursor: default; }
 .uitnodigen { display: grid; grid-template-columns: 1fr 1fr 1fr 130px 100px auto; gap: 10px; align-items: end; padding: 16px; margin-bottom: 20px; background: var(--color-surface); border: 2px solid var(--color-text); }
 .rijacties { display: flex; gap: 4px; justify-content: flex-end; }
 
+/* ---------- Teams-kanalen ---------- */
+.kanaalrij { grid-template-columns: 240px minmax(0, 1fr) minmax(0, 1fr) 70px 190px 110px; gap: 16px; align-items: center; padding: 14px 0; }
+.kanaalrij .regiochip { padding: 3px 8px; border: 2px solid var(--color-text); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.kanaalfout { color: var(--color-accent-700); font-weight: 600; }
+.kanaaluitleg { max-width: 760px; margin-top: 24px; }
+.kanaaluitleg p { margin: 0 0 10px; }
+dialog.formulier.breed { width: min(720px, 94vw); max-height: 90vh; overflow-y: auto; }
+dialog.formulier fieldset { border: 0; padding: 0; margin: 0; }
+dialog.formulier legend { padding: 0; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
+.vinkraster { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 14px; }
+.vink { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.vink input { position: absolute; opacity: 0; width: 0; height: 0; }
+.vink input:disabled + .vakje { opacity: .45; }
+.bronsoort { padding: 8px 0; border-top: 1px solid var(--color-neutral-300); }
+.bronsoort .vink { font-weight: 600; }
+.bronsoort details { margin: 4px 0 0 24px; }
+.bronsoort details .vink { font-weight: 400; }
+.bronsoort summary { cursor: pointer; margin-bottom: 6px; }
+.kanaalhint { margin: 8px 0 0; }
+
 /* ---------- 1g: meldingen ---------- */
 .meldingenpagina { max-width: 880px; margin: 0 auto; padding: 40px 0 56px; display: flex; flex-direction: column; gap: 40px; }
 .meldingenpagina h1 { margin: 0; }

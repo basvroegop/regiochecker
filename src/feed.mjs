@@ -259,13 +259,15 @@ function beginVanDag(ms) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-// Alle regels voor deze gebruiker vanaf `grens`, zonder filters.
-function verzamel(k, gebruiker, grens) {
-  const volg = new Set(gebruiker.regios.filter((id) => k.regioMap.has(id)));
+// Wat er voor deze regio's binnenkwam na `sinds` (en tot `tot`): stukken van
+// hun eigen bronnen, landelijke stukken met een sleutelwoord of plek van de
+// regio, kamerstukken met een sleutelwoord, en afleveringen met een transcript.
+function regioRegels(k, volg, { sinds, tot = null, vanaf = sinds.slice(0, 10) }) {
+  const grens = sinds;
   const lijst = new Map();
 
   for (const item of Object.values(k.opslag.items)) {
-    if (item.basislijn || item.eersteGezien <= grens) continue;
+    if (item.basislijn || item.eersteGezien <= grens || (tot && item.eersteGezien > tot)) continue;
     const bron = k.bronnen.get(item.bron);
     if (!bron) continue;
     if (bron.bereik === 'landelijk') {
@@ -280,13 +282,13 @@ function verzamel(k, gebruiker, grens) {
   for (const id of volg) {
     const regio = k.regioMap.get(id);
     if (!geldtVoor(regio, TWEEDE_KAMER.id)) continue;
-    for (const t of kamerTreffers(k, actieveTermen(regio), { sinds: grens, minDatum: grens.slice(0, 10) })) {
+    for (const t of kamerTreffers(k, actieveTermen(regio), { sinds: grens, tot, minDatum: vanaf })) {
       voegToe(lijst, kamerRegel(t.stuk, [id], { term: t.term, regio: id }));
     }
   }
 
   if (k.adb) {
-    for (const a of k.adb.metTranscriptSinds(grens)) {
+    for (const a of k.adb.metTranscriptSinds(grens, tot || undefined)) {
       const bron = k.bronnen.get(a.bron);
       if (!bron) continue;
       if (bron.bereik === 'landelijk') {
@@ -299,7 +301,12 @@ function verzamel(k, gebruiker, grens) {
       }
     }
   }
+  return lijst;
+}
 
+// Alle regels voor deze gebruiker vanaf `grens`, zonder filters.
+function verzamel(k, gebruiker, grens) {
+  const lijst = regioRegels(k, new Set(gebruiker.regios.filter((id) => k.regioMap.has(id))), { sinds: grens });
   for (const melding of k.opslag.meldingen.filter((m) => m.gebruiker === gebruiker.id && m.actief !== false)) {
     for (const regel of meldingTreffers(k, gebruiker, melding, { sinds: grens })) {
       const { gevonden, url, stuk, ...rest } = regel;
@@ -307,6 +314,23 @@ function verzamel(k, gebruiker, grens) {
     }
   }
   return [...lijst.values()].filter((r) => r.tijd > grens);
+}
+
+// Voor een Teams-kanaal (src/kanalen.mjs): wat er tussen `sinds` en `tot`
+// binnenkwam voor de regio's van het kanaal (geen regio's: alle), van de
+// gekozen soorten (de tabbladen van de feed) en losse bronnen (niets gekozen:
+// alles). Een kamerstuk telt zoals bij een melding alleen als het niet al
+// weken oud was toen het binnenkwam. Oudste eerst.
+export function kanaalRegels(ctx, kanaal, { sinds, tot }) {
+  const k = ctx.regios ? ctx : maakKader(ctx);
+  const volg = new Set((kanaal.regios?.length ? kanaal.regios : k.regios.map((r) => r.id)).filter((id) => k.regioMap.has(id)));
+  const soorten = new Set(kanaal.soorten || []);
+  const bronnen = new Set(kanaal.bronnen || []);
+  const alles = !soorten.size && !bronnen.size;
+  return [...regioRegels(k, volg, { sinds, tot, vanaf: minDatum(sinds) }).values()]
+    .map((r) => voorClient(k, r, null, volg))
+    .filter((r) => alles || soorten.has(r.groep) || bronnen.has(r.bron))
+    .sort((a, b) => a.tijd.localeCompare(b.tijd));
 }
 
 function voorClient(k, regel, status, volg) {

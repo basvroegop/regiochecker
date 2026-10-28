@@ -1,5 +1,5 @@
 // Beheer: Regio's (1d), Bronnen met "Bron toevoegen" (1e en 2c), Gebruikers
-// (1f), Logboek en Instellingen.
+// (1f), Teams-kanalen, Logboek en Instellingen.
 
 import { $, $$, esc, vraag, toast, bezig, voerUit, toonVoorbeeld, moment, uurMinuut, geledenTekst, weekmailTekst, DAGEN_KORT } from './gedeeld.js';
 import { app, laadIk, tekenBeheerStatus } from './app.js';
@@ -600,6 +600,143 @@ export async function toonGebruikers(hoofd) {
     });
   });
   app.opruimen = sluitPopovers;
+}
+
+// ---------- Teams-kanalen ----------
+
+function kanaalBronnen(c, keuzes) {
+  const soorten = keuzes.soorten.filter((s) => c.soorten.includes(s.id)).map((s) => s.naam);
+  const los = keuzes.soorten.flatMap((s) => s.bronnen).filter((b) => c.bronnen.includes(b.id)).map((b) => b.naam);
+  return [...soorten, ...los];
+}
+
+function kanaalRij(c, keuzes) {
+  const regios = c.regios.map((id) => keuzes.regios.find((r) => r.id === id)?.naam || id);
+  const bronnen = kanaalBronnen(c, keuzes);
+  const chips = (lijst, alle) => (lijst.length ? lijst.map((x) => `<span class="regiochip">${esc(x)}</span>`).join('') : `<span class="regiochip">${alle}</span>`);
+  const laatst = c.laatsteFout
+    ? `<span class="kanaalfout" title="${esc(c.laatsteFout)}">${esc(c.laatsteFout.slice(0, 90))}</span>`
+    : c.laatsteSucces ? `${esc(geledenTekst(c.laatsteSucces))} · ${c.laatsteAantal} stuk${c.laatsteAantal === 1 ? '' : 'ken'}` : 'Nog niets verstuurd';
+  return `<div class="tabelrij kanaalrij" data-id="${esc(c.id)}">
+    <span class="naamcel"><strong>${esc(c.naam)}</strong><small>${esc(c.adres)}</small></span>
+    <div class="regiochips-cel">${chips(regios, 'Alle regio\'s')}</div>
+    <div class="regiochips-cel">${chips(bronnen, 'Alle bronnen')}</div>
+    <button class="schakelaar" role="switch" aria-checked="${c.actief !== false}" data-actie="aan" title="Kanaal aan of uit"><span class="baan"><i></i></span><span class="tekst">${c.actief !== false ? 'Aan' : 'Uit'}</span></button>
+    <span class="klein zacht">${laatst}</span>
+    <span class="rijacties"><button class="linkknop" data-actie="test" title="Een proefbericht naar dit kanaal">Proef</button><button class="linkknop" data-actie="bewerk">Wijzig</button><button class="verwijder" data-actie="verwijder" aria-label="${esc(c.naam)} verwijderen">×</button></span>
+  </div>`;
+}
+
+function kanaalDialoog(c, keuzes, opslaan) {
+  let dialoog = $('#kanaal-dialoog');
+  if (!dialoog) {
+    dialoog = document.createElement('dialog');
+    dialoog.id = 'kanaal-dialoog';
+    dialoog.className = 'formulier breed';
+    document.body.append(dialoog);
+  }
+  const vink = (naam, waarde, label, aan, extra = '') => `<label class="vink"><input type="checkbox" name="${naam}" value="${esc(waarde)}" ${aan ? 'checked' : ''} ${extra}><span class="vakje"></span>${esc(label)}</label>`;
+  const regioNaam = (id) => keuzes.regios.find((r) => r.id === id)?.naam;
+  dialoog.innerHTML = `<form method="dialog">
+    <h2>${c ? esc(c.naam) : 'Nieuw Teams-kanaal'}</h2>
+    <label class="veld"><span>Naam</span><input class="invoer" name="naam" value="${esc(c?.naam || '')}" placeholder="Bijvoorbeeld: Redactie Heerenveen" required></label>
+    <label class="veld"><span>Adres van de workflow in Teams</span><input class="invoer" name="url" type="url" ${c ? '' : 'required'} placeholder="${c ? `Leeg laten: blijft ${esc(c.adres)}` : 'https://…'}" autocomplete="off"></label>
+    <fieldset class="veld"><legend>Regio's</legend><div class="vinkraster">${keuzes.regios.map((r) => vink('regio', r.id, r.naam, c?.regios.includes(r.id))).join('')}</div>
+      <p class="uitleg-klein kanaalhint">Niets aangevinkt: alle regio's. Een landelijke bron stuurt alleen wat via een sleutelwoord of plek bij een van deze regio's hoort.</p></fieldset>
+    <fieldset class="veld"><legend>Bronnen</legend>
+      ${keuzes.soorten.map((s) => {
+        const heel = c?.soorten.includes(s.id);
+        const los = s.bronnen.filter((b) => c?.bronnen.includes(b.id)).length;
+        return `<div class="bronsoort">${vink('soort', s.id, `Alles uit ${s.naam}`, heel)}
+          <details ${los ? 'open' : ''}><summary class="klein zacht">${s.bronnen.length === 1 ? '1 bron' : `${s.bronnen.length} bronnen`}${los ? ` · ${los} gekozen` : ''}</summary>
+            <div class="vinkraster">${s.bronnen.map((b) => vink('bron', b.id, `${b.naam}${b.regio && !b.naam.includes(regioNaam(b.regio) || '\u0000') ? ` (${regioNaam(b.regio) || b.regio})` : ''}`, heel || c?.bronnen.includes(b.id), heel ? 'disabled' : '')).join('')}</div></details></div>`;
+      }).join('')}
+      <p class="uitleg-klein kanaalhint">Niets aangevinkt: alle bronnen. "Alles uit" geldt ook voor bronnen die er later bij komen.</p></fieldset>
+    <div class="knoppenrij"><button class="knop primair" value="opslaan">Opslaan</button><button class="knop zacht" value="annuleer" formnovalidate>Annuleren</button></div>
+  </form>`;
+  const form = dialoog.querySelector('form');
+  // "Alles uit" vinkt de losse bronnen van die soort mee aan, en zet ze vast.
+  form.addEventListener('change', (e) => {
+    if (e.target.name !== 'soort') return;
+    for (const b of $$('input[name="bron"]', e.target.closest('.bronsoort'))) {
+      b.checked = e.target.checked;
+      b.disabled = e.target.checked;
+    }
+  });
+  dialoog.showModal();
+  dialoog.onclose = () => {
+    if (dialoog.returnValue !== 'opslaan') return;
+    const waarden = (naam) => $$(`input[name="${naam}"]:checked:not(:disabled)`, form).map((i) => i.value);
+    opslaan({ naam: form.naam.value, ...(form.url.value ? { url: form.url.value } : {}), regios: waarden('regio'), soorten: waarden('soort'), bronnen: waarden('bron') });
+  };
+}
+
+export async function toonTeams(hoofd) {
+  let { kanalen, keuzes, siteUrl } = await vraag('GET', '/api/beheer/kanalen');
+  hoofd.innerHTML = '<div class="pagina" id="kanalen"></div>';
+  const teken = () => {
+    $('#kanalen').innerHTML = `
+      <div class="paginakop"><h1>Teams-kanalen</h1><span class="klein zacht">${kanalen.length ? `${kanalen.length} kana${kanalen.length === 1 ? 'al' : 'len'}` : 'Nog geen kanalen'}</span>
+        <div class="rechts"><button class="knop primair klein" id="kanaal-nieuw">+ Kanaal</button></div></div>
+      ${kanalen.length ? `<div class="tabelkop kanaalrij"><span>Kanaal</span><span>Regio's</span><span>Bronnen</span><span>Aan</span><span>Laatst verstuurd</span><span></span></div>
+      ${kanalen.map((c) => kanaalRij(c, keuzes)).join('')}` : ''}
+      <div class="uitleg-klein kanaaluitleg">
+        <p>Wat er binnenkomt voor de gekozen regio's en bronnen, gaat na elke ronde als kaartje naar het kanaal: elk stuk een eigen kaartje, en bij meer dan tien tegelijk de oudere samen in één overzicht. Een nieuw kanaal begint vanaf nu, zonder achterstand.</p>
+        <p><strong>Een kanaal koppelen:</strong> open in Teams het kanaal, kies bij de drie puntjes <em>Workflows</em> en dan <em>Post to a channel when a webhook request is received</em> (Nederlands: <em>Berichten in een kanaal plaatsen wanneer een webhookaanvraag wordt ontvangen</em>). Kies team en kanaal, en kopieer aan het eind het adres. Plak dat hier. Wie dat adres heeft, kan in het kanaal berichten zetten; het staat daarom alleen op de server en is hier na het opslaan niet meer te zien.</p>
+        ${siteUrl ? '' : '<p>REGIOCHECKER_SITE_URL is niet ingesteld: de kaartjes krijgen dan geen knop naar de Regiochecker.</p>'}
+      </div>`;
+  };
+  teken();
+  const werkBij = async (c, wijziging) => {
+    try {
+      const nieuw = await vraag('PUT', `/api/beheer/kanalen/${encodeURIComponent(c.id)}`, wijziging);
+      kanalen = kanalen.map((x) => (x.id === c.id ? nieuw : x));
+    } catch (fout) {
+      toast(fout.message, 'fout');
+    }
+    teken();
+  };
+  const pagina = $('#kanalen');
+  pagina.addEventListener('click', async (e) => {
+    const knop = e.target.closest('button');
+    if (!knop) return;
+    if (knop.id === 'kanaal-nieuw') {
+      kanaalDialoog(null, keuzes, async (invoer) => {
+        try {
+          kanalen.push(await vraag('POST', '/api/beheer/kanalen', invoer));
+          teken();
+          toast(`${invoer.naam} toegevoegd. Stuur met "Proef" een proefbericht.`);
+        } catch (fout) {
+          toast(fout.message, 'fout');
+        }
+      });
+      return;
+    }
+    const rij = knop.closest('[data-id]');
+    const c = rij && kanalen.find((x) => x.id === rij.dataset.id);
+    if (!c) return;
+    const actie = knop.dataset.actie;
+    if (actie === 'aan') werkBij(c, { actief: c.actief === false });
+    if (actie === 'bewerk') kanaalDialoog(c, keuzes, (wijziging) => werkBij(c, wijziging));
+    if (actie === 'test') {
+      await bezig(knop, async () => {
+        await vraag('POST', `/api/beheer/kanalen/${encodeURIComponent(c.id)}/test`);
+        c.laatsteFout = null;
+        toast(`Proefbericht naar ${c.naam} verstuurd. Staat het in het kanaal?`);
+      });
+      teken();
+    }
+    if (actie === 'verwijder') {
+      if (!confirm(`Kanaal ${c.naam} verwijderen? Er gaat dan niets meer naartoe; de workflow in Teams blijft bestaan.`)) return;
+      try {
+        await vraag('DELETE', `/api/beheer/kanalen/${encodeURIComponent(c.id)}`);
+        kanalen = kanalen.filter((x) => x.id !== c.id);
+        teken();
+      } catch (fout) {
+        toast(fout.message, 'fout');
+      }
+    }
+  });
 }
 
 // ---------- logboek ----------

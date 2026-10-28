@@ -503,9 +503,41 @@ Het Authelia-account zelf, en toegang tot deze site, regel je in Authelia
   wijzigen (naam, bereik, bij audio pauzeren) en te verwijderen.
 - **Audio**: workerstatus, wat er nu gebeurt, de wachtrij, mislukte afleveringen
   en de volgorde van de bronnen.
+- **Teams**: kanalen in Microsoft Teams die meekrijgen wat er binnenkomt (zie
+  hieronder).
 - **Instellingen**: controle-interval, standaard weekmail, SMTP, samenvatting
   (Claude of Ollama), de Whisper-worker en hoe lang audio bewaard blijft.
   Wachtwoorden, sleutels en tokens gaan nooit terug naar de browser.
+
+### Teams-kanalen
+
+Overgenomen uit de checker (`src/kanalen.mjs`). Een admin koppelt bij Beheer ›
+Teams een kanaal en kiest wat erheen gaat:
+
+- **Regio's**: geen vinkje is alle regio's. Een landelijke bron stuurt alleen
+  wat via een sleutelwoord of plek bij een van die regio's hoort, net als in de
+  feed.
+- **Bronnen**: per soort (de tabbladen van de feed: Gemeentenieuws, Ingekomen,
+  Woo, Kamerstukken, Audio & video, KNMI, Raad van State, Ransomware) "Alles uit",
+  wat ook geldt voor bronnen die er later bij komen; of losse bronnen. Niets
+  aangevinkt is alle bronnen.
+
+Na elke ronde (websites, kamerstukken, audio) gaat wat er sinds de vorige keer
+binnenkwam als Adaptive Card naar het kanaal: titel, regio en soort, het begin
+van de tekst (bij audio de AI-samenvatting), datum, bron, bij ransomware de
+vestiging, en knoppen naar de Regiochecker en de bron. Zijn het er in één
+keer meer dan tien, dan krijgen de tien nieuwste een eigen kaartje en staan de
+oudere samen in één overzicht. Een nieuw kanaal, of een kanaal dat weer aan
+gaat, begint vanaf dat moment. Lukt het versturen niet, dan probeert de
+volgende ronde het opnieuw, zonder wat al was aangekomen; de fout staat bij het
+kanaal en één keer in het logboek. **Proef** stuurt een proefbericht.
+
+Koppelen gaat via een workflow in Teams (de oude Office 365-connectors bestaan
+niet meer): bij het kanaal ••• › Workflows › *Post to a channel when a webhook
+request is received*, team en kanaal kiezen, en het adres aan het eind
+kopiëren. Wie dat adres heeft, kan in het kanaal berichten zetten. Het staat
+daarom alleen in `data/kanalen.json`, gaat nooit terug naar de browser en komt
+niet in het logboek; bij Wijzig leeg laten houdt het oude adres.
 
 ### Van audioscraper naar de Regiochecker
 
@@ -539,6 +571,7 @@ voorkeur met de dienst gestopt).
 | `items.json` | alles wat de websites opleverden, met `eersteGezien` |
 | `status.json` | per bron de laatste ronde; laatste mailronde |
 | `meldingen.json` | directe meldingen per gebruiker |
+| `kanalen.json` | Teams-kanalen: workflowadres, regio's, bronnen, laatste verzending |
 | `logboek.json` | verzonden mails, meldingen en fouten |
 | `samenvattingen.json` | cache van Claude- en Ollama-antwoorden |
 | `kamerstukken.sqlite` | de kamerstukken met zoekindex |

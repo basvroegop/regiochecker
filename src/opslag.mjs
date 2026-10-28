@@ -68,6 +68,7 @@ const BESTANDEN = {
   logboek: [],
   samenvattingen: {},
   meldingen: [],
+  kanalen: [],
 };
 
 export class Opslag {
