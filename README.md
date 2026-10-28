@@ -284,6 +284,10 @@ losse regel boven een lange alinea is een kop; korte regels na elkaar (een adres
 de kop van een brief) blijven bij elkaar. Kamerstukken gaan op dezelfde manier.
 Het document staat in `regiochecker.sqlite` zolang het bericht bestaat.
 
+Geeft het stuk zelf een 404 of 410, dan heeft de bron het weggehaald. Het blijft
+in de feed staan met het label "Verwijderd bij de bron", de tekst zoals die eerder
+is opgehaald, en een knop naar het Internet Archive in plaats van naar de bron.
+
 Voor de samenvatting gaan de eerste 6000 tekens daarvan als platte tekst mee
 (`inhoud` in `data/items.json`); die gaat er na vijf weken weer af. Een mislukte
 poging staat als `inhoudFout` bij het bericht.

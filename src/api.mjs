@@ -97,6 +97,9 @@ export async function api(req, res, url, ctx) {
     try {
       document = await documentOpVraag(opslag, id.slice(2));
     } catch (fout) {
+      // Weggehaald bij de bron: geen fout, maar dat feit.
+      const weg = opslag.items[id.slice(2)]?.verdwenen;
+      if (weg) return stuur({ document: null, verdwenen: weg });
       throw new Fout(502, `Het document kon niet worden opgehaald: ${fout.message}`);
     }
     if (!document) throw new Fout(404, 'Van deze bron wordt geen document opgehaald');

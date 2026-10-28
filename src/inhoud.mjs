@@ -172,6 +172,13 @@ export async function documentVoor(item, bron) {
 
 const inhoudVan = (doc) => (doc ? kort(platVan(doc.blokken), MAX_INHOUD) : '');
 
+// Geeft het stuk zelf 404 of 410, dan heeft de bron het weggehaald. Dat is voor
+// een journalist ook nieuws: het item blijft staan, met de tekst van eerder.
+const isWeg = (fout) => /gaf HTTP (404|410)$/.test(String(fout?.message || ''));
+function markeerWeg(item, fout, nu = new Date()) {
+  if (isWeg(fout)) item.verdwenen ||= nu.toISOString();
+}
+
 export async function inhoudVoor(item, bron) {
   if (bron?.inhoud === false) return null;
   return inhoudVan(await documentVoor(item, bron));
@@ -180,7 +187,7 @@ export async function inhoudVoor(item, bron) {
 // Het document van één item voor het leespaneel: uit de database, of nu
 // ophalen (en bewaren). Twee keer tegelijk openen haalt het één keer op.
 const bezig = new Map();
-export function documentOpVraag(opslag, sleutel) {
+export function documentOpVraag(opslag, sleutel, { nu = new Date() } = {}) {
   const item = opslag.items[sleutel];
   if (!item) return null;
   const bestaand = opslag.feeddb?.document(sleutel);
@@ -192,7 +199,17 @@ export function documentOpVraag(opslag, sleutel) {
     .then((doc) => {
       const uit = doc || { blokken: [], volledig: true };
       opslag.feeddb?.zetDocument(sleutel, uit);
+      if (item.verdwenen) {
+        delete item.verdwenen;
+        opslag.bewaar('items');
+      }
       return uit;
+    }, (fout) => {
+      if (isWeg(fout) && !item.verdwenen) {
+        markeerWeg(item, fout, nu);
+        opslag.bewaar('items');
+      }
+      throw fout;
     })
     .finally(() => bezig.delete(sleutel));
   bezig.set(sleutel, klus);
@@ -231,10 +248,12 @@ export async function vulInhoud(opslag, { nu = new Date(), voortgang } = {}) {
         fdb?.zetDocument(sleutel, doc || { blokken: [], volledig: true });
         if (item.eersteGezien > oud) item.inhoud = inhoudVan(doc);
         delete item.inhoudFout;
+        delete item.verdwenen;
         gevuld++;
       } catch (fout) {
         item.inhoudPogingen = (item.inhoudPogingen || 0) + 1;
         item.inhoudFout = fout.message;
+        markeerWeg(item, fout, nu);
         mislukt++;
       }
       voortgang?.({ stap: gevuld + mislukt, totaal, tekst: `inhoud ophalen: ${gevuld + mislukt} van ${totaal}` });

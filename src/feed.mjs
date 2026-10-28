@@ -108,7 +108,7 @@ export function kamerTijd(stuk) {
 // ---------- regels in de lijst ----------
 
 function itemRegel(item, regios, match) {
-  return { id: `i:${item.sleutel}`, soort: item.soort, titel: item.titel, regios, tijd: item.eersteGezien, tijdBekend: true, datum: item.datum || null, bron: item.bron, match };
+  return { id: `i:${item.sleutel}`, soort: item.soort, titel: item.titel, regios, tijd: item.eersteGezien, tijdBekend: true, datum: item.datum || null, bron: item.bron, match, ...(item.verdwenen ? { verdwenen: item.verdwenen } : {}) };
 }
 
 function kamerRegel(stuk, regios, match) {
@@ -385,7 +385,9 @@ function itemDetail(k, gebruiker, sleutel) {
   // inhoud, en haalt het leespaneel het document op (GET /api/stuk/document).
   const opgehaald = k.fdb?.document(sleutel);
   const plat = item.inhoud || item.tekst || '';
-  const document = opgehaald?.blokken.length ? opgehaald : { blokken: plat ? tekstBlokken(plat) : [], volledig: Boolean(opgehaald) && !item.inhoud };
+  // In de platte inhoud staan bijlagen achter " || ".
+  const platBlokken = () => plat.split(/\s\|\|\s/).flatMap((deel, i) => [...(i ? [['d', 'Bijlage']] : []), ...tekstBlokken(deel)]);
+  const document = opgehaald?.blokken.length ? opgehaald : { blokken: plat ? platBlokken() : [], volledig: Boolean(opgehaald) && !item.inhoud };
   // De titel staat al boven het leespaneel.
   const gelijk = (a, b) => a.toLowerCase().replace(/\s+/g, ' ').trim() === String(b || '').toLowerCase().replace(/\s+/g, ' ').trim();
   if (document.blokken[0]?.[0] === 'k' && gelijk(document.blokken[0][1], item.titel)) document.blokken = document.blokken.slice(1);
@@ -409,7 +411,8 @@ function itemDetail(k, gebruiker, sleutel) {
       meta('Regio', regios.map((r) => k.regioMap.get(r)?.naam || r).join(', ')),
     ].filter(Boolean),
     document,
-    documentOphalen: !opgehaald && bron.inhoud !== false && Boolean(k.fdb),
+    documentOphalen: !opgehaald && !item.verdwenen && bron.inhoud !== false && Boolean(k.fdb),
+    verdwenen: item.verdwenen || null,
     // Bij een gemeentelijk stuk tellen alleen de termen van de meldingen; bij een
     // landelijk stuk ook de sleutelwoorden van de gevolgde regio's.
     treffers: redenen(k, gebruiker, (termen) => vindTermen(tekstVan(item), termen), {

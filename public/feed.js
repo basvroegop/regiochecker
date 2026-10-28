@@ -130,6 +130,7 @@ function rijHtml(i) {
   if (i.match?.term) tags.push(`<span class="match">${esc(i.match.term)}${i.match.tijd !== undefined && i.match.tijd !== null ? ` · ${tijdcode(i.match.tijd)}` : ''}</span>`);
   if (i.bewaard && staat.modus !== 'bewaard') tags.push(`<span class="ster" title="Bewaard">${icoon('star', 12)}</span>`);
   if (i.notitie) tags.push(`<span class="ster" title="Met notitie">${icoon('pencil', 12)}</span>`);
+  if (i.verdwenen) tags.push('<span class="weg" title="De bron heeft deze pagina weggehaald">Verwijderd bij de bron</span>');
   return `<button class="rij" role="option" data-id="${esc(i.id)}" aria-selected="${i.id === staat.gekozen}">
     <div class="stip">${i.gelezen ? '' : '<span title="Ongelezen"></span>'}</div>
     <div class="rij-tekst">
@@ -234,13 +235,17 @@ function volgende(stap) {
 
 // ---------- leespaneel ----------
 
+// Een weggehaalde pagina: misschien heeft het Internet Archive een kopie.
+const archiefLink = (url) => `https://web.archive.org/web/*/${url}`;
+
 function actiesHtml(d) {
   const s = d.status || {};
   const audio = d.groep === 'audio';
   const rechts = [];
   rechts.push(`<button class="tekstlink" data-actie="volledig">${staat.volledig ? 'Terug naar de lijst' : 'Volledig scherm ↗'}</button>`);
   return `
-    ${d.url ? `<a class="knop primair" href="${esc(d.url)}" target="_blank" rel="noopener noreferrer">Openen bij ${esc(d.openenBij)}${icoon('arrow-up-right', 16, 2.5)}</a>` : ''}
+    ${d.url && d.verdwenen ? `<a class="knop primair" href="${esc(archiefLink(d.url))}" target="_blank" rel="noopener noreferrer">Kopie zoeken in het Internet Archive${icoon('arrow-up-right', 16, 2.5)}</a>` : ''}
+    ${d.url && !d.verdwenen ? `<a class="knop primair" href="${esc(d.url)}" target="_blank" rel="noopener noreferrer">Openen bij ${esc(d.openenBij)}${icoon('arrow-up-right', 16, 2.5)}</a>` : ''}
     <button class="knop" data-actie="bewaar" aria-pressed="${Boolean(s.bewaard)}">${icoon('star')}${s.bewaard ? 'Bewaard' : 'Bewaren'}</button>
     <button class="knop ${s.gelezen ? 'zacht' : ''}" data-actie="gelezen" aria-pressed="${Boolean(s.gelezen)}" title="${s.gelezen ? 'Markeer als ongelezen' : 'Markeer als gelezen'}">${icoon('check', 16, 2.5)}${s.gelezen ? 'Gelezen' : 'Markeer gelezen'}</button>
     <span class="rechts" style="display:flex;gap:16px">${rechts.join('')}</span>`;
@@ -335,9 +340,13 @@ function documentHtml(d) {
     ? `${documentTekst(doc, termen)}${doc.volledig ? '' : '<p class="document-rest">…</p>'}`
     : d.documentOphalen ? '' : `<p class="toelichting">${esc(d.toelichting || 'De tekst van dit stuk is (nog) niet opgehaald; open het bij de bron.')}</p>`;
   // "Openen bij …" staat al bij de knoppen bovenaan; hier alleen als het stuk niet helemaal hier staat.
-  const bronLink = d.url && !doc.volledig ? `<a href="${esc(d.url)}" target="_blank" rel="noopener noreferrer">Volledig stuk openen →</a>` : '';
+  const bronLink = d.url && !doc.volledig && !d.verdwenen ? `<a href="${esc(d.url)}" target="_blank" rel="noopener noreferrer">Volledig stuk openen →</a>` : '';
+  const weg = d.verdwenen
+    ? `<p class="document-weg"><strong>Verwijderd bij de bron.</strong> De pagina bestaat niet meer (vastgesteld op ${esc(new Date(d.verdwenen).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }))}). ${doc.blokken.length ? 'Hieronder de tekst zoals de Regiochecker hem eerder ophaalde; de opmaak is toen niet bewaard.' : 'De tekst is niet eerder opgehaald.'}</p>`
+    : '';
   return `<div class="document" id="document">
       <div class="document-kop"><span>Uit het document</span><span class="klein" style="display:flex;gap:16px">${d.download ? `<a href="${esc(d.download)}" target="_blank" rel="noopener noreferrer">Downloaden</a>` : ''}${bronLink}</span></div>
+      ${weg}
       ${d.documentOphalen ? '<p class="document-laden" id="document-laden">Het hele document wordt opgehaald…</p>' : ''}
       <div class="document-tekst">${tekst}</div>
       ${d.toelichting && doc.blokken.length ? `<p class="toelichting">${esc(d.toelichting)}</p>` : ''}
@@ -352,12 +361,22 @@ async function laadDocument(d) {
     r = await vraag('GET', `/api/stuk/document?id=${encodeURIComponent(d.id)}`);
   } catch (fout) {
     const el = staat.detail === d && $('#document-laden');
-    if (el) el.textContent = `Het hele document kon niet worden opgehaald: ${fout.message}`;
+    if (el) el.textContent = fout.message;
     return;
   }
   if (r.document?.blokken?.length) d.document = r.document;
-  const el = staat.detail === d && $('#document');
+  if (r.verdwenen) d.verdwenen = r.verdwenen;
+  if (staat.detail !== d) return;
+  const el = $('#document');
   if (el) el.outerHTML = documentHtml(d);
+  if (r.verdwenen) {
+    tekenActies();
+    const rij = staat.items.find((x) => x.id === d.id);
+    if (rij) {
+      rij.verdwenen = r.verdwenen;
+      tekenLijst();
+    }
+  }
 }
 
 function tekstPaneel(d) {

@@ -179,9 +179,13 @@ test('het hele document: bewaard na een verzamelronde, en op verzoek voor een ou
     zet('nieuw');
     zet('al-inhoud', { eersteGezien: '2026-10-01T10:00:00.000Z', inhoud: 'plat' });
     zet('basislijn', { basislijn: true });
+    zet('weggehaald', { url: `${nep.basis}/bestaat-niet`, inhoud: 'Tekst van toen.' });
     opslag.feeddb.zetDocument('verdwenen', { blokken: [['p', 'x']], volledig: true });
 
-    assert.deepEqual(await vulInhoud(opslag, { nu }), { gevuld: 2, mislukt: 0 }, 'ook een ouder bericht met inhoud krijgt zijn document');
+    assert.deepEqual(await vulInhoud(opslag, { nu }), { gevuld: 2, mislukt: 1 }, 'ook een ouder bericht met inhoud krijgt zijn document');
+    assert.equal(opslag.items.weggehaald.verdwenen, nu.toISOString(), '404: door de bron weggehaald');
+    assert.equal(opslag.items.weggehaald.inhoud, 'Tekst van toen.', 'de tekst van eerder blijft');
+    assert.equal(opslag.items.nieuw.verdwenen, undefined);
     const doc = opslag.feeddb.document('nieuw');
     assert.deepEqual(doc.blokken.slice(0, 3), [['k', 'Brug dicht'], ['p', 'De Bleekersbrêge is 2 weken dicht.'], ['p', 'Omleiding']]);
     assert.deepEqual(doc.blokken[3], ['d', 'Omleiding'], 'de bijlage met de linktekst als naam');
@@ -198,6 +202,9 @@ test('het hele document: bewaard na een verzamelronde, en op verzoek voor een ou
     assert.equal(nep.opgevraagd.slice(voor).filter((u) => u === '/artikel').length, 1);
     assert.deepEqual(opslag.feeddb.document('basislijn').blokken[0], ['k', 'Brug dicht']);
     assert.equal(documentOpVraag(opslag, 'bestaat-niet'), null);
+    delete opslag.items.weggehaald.verdwenen;
+    await assert.rejects(documentOpVraag(opslag, 'weggehaald', { nu }), /HTTP 404/);
+    assert.equal(opslag.items.weggehaald.verdwenen, nu.toISOString(), 'ook bij openen in het leespaneel');
   } finally {
     nep.server.close();
   }
