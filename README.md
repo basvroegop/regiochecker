@@ -230,6 +230,15 @@ wachttijd; een echte fout drie keer, daarna "mislukt" met een knop **Opnieuw**.
 **Pauzeer alles** legt de verwerking stil; een bron pauzeren stopt alleen het
 zoeken naar nieuwe afleveringen.
 
+**Lange opnames** gaan in delen van 45 minuten naar de worker (met een paar
+seconden overlap; het laatste deel neemt de rest mee, dus pas vanaf zo'n 56
+minuten). Een vergadering van ruim drie uur in één keer liet de worker crashen.
+Elk deel wordt meteen bewaard (`transcript_delen`), zodat het na een storing
+verdergaat bij het volgende deel; daarna worden de delen één transcript met
+tijden vanaf het begin. Een stem zonder profiel geldt alleen binnen zijn deel;
+een stemprofiel geldt in de hele opname. De lengte van een deel is in te stellen
+met `AUDIO_DEEL_S` (seconden).
+
 **Audio bewaren**: standaard alleen van raadsvergaderingen (om terug te luisteren
 in het leespaneel), 180 dagen; daarna blijft het transcript. YouTube speelt af bij
 YouTube (tijden openen de video op dat moment), een podcast bij de bron.
