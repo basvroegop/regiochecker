@@ -1,5 +1,6 @@
-# regiochecker: gemeentelijke bronnen → wekelijkse speerpuntenmail per
-# regioverslaggever. Pad op VPS: /opt/regiochecker/
+# regiochecker: bronnenplatform voor regioverslaggevers (gemeentelijke bronnen,
+# kamerstukken, audio en video) met feed, meldingen en weekmail.
+# Pad op VPS: /opt/regiochecker/
 #
 # Zelfde patroon als /opt/suikerbroodindex en /opt/prijspeiler: Traefik pakt de
 # container op via de labels, traefik-cloudflare-companion maakt het DNS-record
@@ -17,12 +18,14 @@ services:
       # Alleen op loopback, zodat het uitsluitend via Traefik naar buiten gaat.
       - "127.0.0.1:3056:3000"
     volumes:
-      # Ontvangers, instellingen (ook SMTP-wachtwoord en Claude-sleutel), alle
-      # gevonden items en het logboek. Back-up = deze map kopiëren. Moet van
+      # Gebruikers, instellingen (ook SMTP-wachtwoord, Claude-sleutel en
+      # worker-token), alle gevonden items, de databases (kamerstukken, gelezen/
+      # bewaard, het audioarchief) en bewaarde audio. Back-up = deze map kopiëren
+      # (de .sqlite-bestanden bij voorkeur met de dienst gestopt). Moet van
       # uid 1000 zijn: de container draait als gebruiker node.
       - ./data:/app/data
     env_file:
-      # Optioneel, voor ANTHROPIC_API_KEY; zie .env.example.
+      # Optioneel, voor ANTHROPIC_API_KEY, WORKER_URL en WORKER_TOKEN; zie .env.example.
       - path: .env
         required: false
     environment:
@@ -32,9 +35,9 @@ services:
       # die koptekst weigert de API alles; zo kan een verzoek dat de inlog omzeilt
       # (van binnen het Docker-netwerk) niets.
       - REGIOCHECKER_AUTH_KOP=remote-user
-      # Ollama draait op een machine in het tailnet. Deze server zit daar zelf
-      # niet in; de Tailscale-container hieronder wel. Alleen het Ollama-verkeer
-      # gaat door zijn proxy.
+      # Ollama en de Whisper-worker draaien op een machine in het tailnet. Deze
+      # server zit daar zelf niet in; de Tailscale-container hieronder wel. Alleen
+      # dat verkeer gaat door zijn proxy.
       - REGIOCHECKER_TAILNET_PROXY=http://regiochecker-tailscale:1055
     labels:
       - "traefik.enable=true"

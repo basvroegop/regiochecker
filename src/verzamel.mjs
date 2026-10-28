@@ -11,7 +11,7 @@
 //    site wordt omgebouwd en ineens alle links veranderen. Voor Woo geldt die
 //    grens niet, om de reden hierboven.
 
-import { alleBronnen } from './regios.mjs';
+import { teVerzamelen } from './register.mjs';
 import { haalBron } from './bronnen/index.mjs';
 import { dagenGeleden } from './datum.mjs';
 import { vulInhoud } from './inhoud.mjs';
@@ -48,7 +48,9 @@ export function verwerk(opslag, bron, gevonden, nu = new Date()) {
     const item = {
       sleutel,
       bron: bron.id,
-      regio: bron.regio,
+      // Een landelijk stuk hoort bij geen regio; het gaat naar de regio's
+      // waarvan een sleutelwoord erin staat (src/feed.mjs).
+      regio: bron.bereik === 'landelijk' ? null : bron.regio,
       soort: bron.soort,
       titel: g.titel,
       url: g.url,
@@ -116,7 +118,7 @@ let lopend = null;
 export function verzamelAlles(opslag, voortgang) {
   if (lopend) return lopend;
   lopend = (async () => {
-    const bronnen = alleBronnen().filter((b) => b.type !== 'ontbreekt');
+    const bronnen = teVerzamelen(opslag);
     const resultaten = [];
     const wachtrij = [...bronnen];
     await Promise.all(Array.from({ length: GELIJKTIJDIG }, async () => {

@@ -1,8 +1,13 @@
 # Regiochecker: Node plus pdftotext (poppler) voor de weeklijsten van
-# Súdwest-Fryslân, en tzdata zodat "maandag 07:00" Nederlandse tijd is.
+# Súdwest-Fryslân, tzdata zodat "maandag 07:00" Nederlandse tijd is, en voor
+# audio en video ffmpeg (alles naar één compacte mono-mp3) en yt-dlp (YouTube;
+# gebruikt Node uit dit image voor de JavaScript-uitdagingen van YouTube).
 FROM node:22-alpine
 
-RUN apk add --no-cache poppler-utils tzdata
+RUN apk add --no-cache poppler-utils tzdata ffmpeg python3 \
+ && python3 -m venv /opt/yt-dlp \
+ && /opt/yt-dlp/bin/pip install --no-cache-dir "yt-dlp[default]>=2026.8.19" \
+ && ln -s /opt/yt-dlp/bin/yt-dlp /usr/local/bin/yt-dlp
 
 WORKDIR /app
 

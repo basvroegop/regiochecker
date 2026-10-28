@@ -1,6 +1,6 @@
 // De kamerstukken in SQLite (data/kamerstukken.sqlite), met een FTS5-index op
 // titel, onderwerp en volledige tekst. Zoeken negeert hoofdletters en accenten
-// (remove_diacritics), net als de termen in src/kamer/termen.mjs.
+// (remove_diacritics), net als de termen in src/termen.mjs.
 //
 // node:sqlite zit in Node 22 en nieuwer; we laden het pas bij het openen, zodat
 // de rest van de Regiochecker ook zonder draait (en te testen is).
@@ -10,7 +10,7 @@
 // Tabel stuk_fts:  titel, onderwerp en tekst; rowid = stukken.nr.
 // Tabel staat:     sleutel/waarde, onder meer het synchronisatiepunt.
 
-import { ftsVoorTermen, vindTermen } from './termen.mjs';
+import { ftsVoorTermen, vindTermen, normaliseer, schoneTermen } from '../termen.mjs';
 
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS stukken (
@@ -198,6 +198,53 @@ class KamerDb {
       if (gevonden.length) uit.push({ stuk, gevonden });
     }
     return uit;
+  }
+
+  stuk(id) {
+    return this.db.prepare('SELECT * FROM stukken WHERE id = ?').get(id) || null;
+  }
+
+  // Verandert zodra er een stuk met tekst bijkomt; voor caches in de feed.
+  versie() {
+    return this.db.prepare('SELECT max(binnen) v, count(*) n FROM stukken').get();
+  }
+
+  // Voor de feed: stukken die sinds `sinds` binnenkwamen met een van de termen,
+  // met per stuk de eerste gevonden term en een fragment. Sneller dan
+  // treffers(): SQLite maakt het fragment, wij lezen de hele tekst niet.
+  // `ookTermen`: het stuk moet daarnaast ook een van die termen bevatten (een
+  // melding beperkt tot de sleutelwoorden van bepaalde regio's).
+  feedTreffers(termen, { sinds, tot = '9999', minDatum, max = 300, ookTermen = null }) {
+    let fts = ftsVoorTermen(termen);
+    if (!fts) return [];
+    if (ookTermen) {
+      const ook = ftsVoorTermen(ookTermen);
+      if (!ook) return [];
+      fts = `(${fts}) AND (${ook})`;
+    }
+    const rijen = this.db.prepare(`SELECT s.*, snippet(stuk_fts, -1, '${MARK_BEGIN}', '${MARK_EIND}', '…', 24) fragment
+      FROM stuk_fts JOIN stukken s ON s.nr = stuk_fts.rowid
+      WHERE stuk_fts MATCH ? AND s.binnen > ? AND s.binnen <= ? AND s.datum >= ?
+      ORDER BY s.datum DESC, s.nr DESC LIMIT ?`).all(fts, sinds, tot, minDatum || '0000', max);
+    const genormaliseerd = termen.map((t) => [t, normaliseer(t).split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(' ')]);
+    return rijen.map((stuk) => {
+      const begin = stuk.fragment.indexOf(MARK_BEGIN);
+      const eind = stuk.fragment.indexOf(MARK_EIND, begin);
+      const gemarkeerd = begin >= 0 && eind > begin ? stuk.fragment.slice(begin + 1, eind) : '';
+      const sleutel = normaliseer(gemarkeerd).split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(' ');
+      const term = genormaliseerd.find(([, n]) => n === sleutel)?.[0]
+        || genormaliseerd.find(([, n]) => sleutel && (n.startsWith(sleutel) || sleutel.startsWith(n)))?.[0]
+        || termen[0];
+      const tekst = stuk.fragment.replaceAll(MARK_BEGIN, '').replaceAll(MARK_EIND, '').replace(/\s+/g, ' ').trim();
+      return { stuk, term, fragment: { tekst, treffer: gemarkeerd } };
+    });
+  }
+
+  // Hoeveel stukken (op datum van het stuk, sinds `vanaf`) bevatten een van de termen?
+  telStukken(termen, vanaf) {
+    const fts = ftsVoorTermen(schoneTermen(termen));
+    if (!fts) return 0;
+    return this.db.prepare('SELECT count(*) n FROM stuk_fts JOIN stukken s ON s.nr = stuk_fts.rowid WHERE stuk_fts MATCH ? AND s.datum >= ?').get(fts, vanaf).n;
   }
 
   // Hoe vaak komt elke term voor in stukken van de afgelopen `dagen`? Voor de

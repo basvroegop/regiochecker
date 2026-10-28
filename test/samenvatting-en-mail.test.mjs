@@ -12,7 +12,7 @@ import path from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { Opslag } from '../src/opslag.mjs';
 import { maakSamenvatting, bouwVraag } from '../src/samenvatting.mjs';
-import { stelMailSamen, verstuur, mailOntvanger } from '../src/mail.mjs';
+import { stelMailSamen, verstuur, mailGebruiker } from '../src/mail.mjs';
 import { regioOpId } from '../src/regios.mjs';
 
 const leegOpslag = () => new Opslag(mkdtempSync(path.join(tmpdir(), 'rc-test-')));
@@ -252,10 +252,10 @@ test('twee keer tegelijk op versturen drukken geeft één mail, niet twee', asyn
     opslag.instellingen.smtp = { host: '127.0.0.1', port: smtp.poort, secure: false, user: '', pass: '', from: 'rc@example.nl' };
     opslag.instellingen.samenvattingVia = 'uit';
     for (const item of ITEMS) opslag.items[item.sleutel] = item;
-    const ontvanger = { email: 'x@example.nl', regios: ['heerenveen'], laatsteMail: '2026-10-19T05:00:00.000Z', actief: true };
-    opslag.ontvangers = [ontvanger];
+    const gebruiker = { email: 'x@example.nl', regios: ['heerenveen'], laatsteMail: '2026-10-19T05:00:00.000Z', weekmail: { aan: true, dagen: [1], tijd: '07:00', ookLeeg: false } };
+    opslag.gebruikers = [gebruiker];
     const nu = new Date('2026-10-20T05:00:00.000Z');
-    const [eerste, tweede] = await Promise.all([mailOntvanger(opslag, ontvanger, { nu }), mailOntvanger(opslag, ontvanger, { nu })]);
+    const [eerste, tweede] = await Promise.all([mailGebruiker(opslag, gebruiker, { nu }), mailGebruiker(opslag, gebruiker, { nu })]);
     assert.equal(eerste.verstuurd, true);
     assert.deepEqual(tweede, { verstuurd: false, reden: 'niets nieuws' });
     assert.equal(smtp.ontvangen.length, 1);

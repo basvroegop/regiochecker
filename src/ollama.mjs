@@ -6,49 +6,18 @@
 // Zonder proxy-instelling praten we rechtstreeks met de opgegeven URL, voor het
 // geval Tailscale ooit op de server zelf komt te draaien.
 
-import net from 'node:net';
-import { fetch, ProxyAgent } from 'undici';
+import { fetch } from 'undici';
+import { tailnetDispatcher, langDispatcher, proxyReden } from './tailnet.mjs';
 
 const VERBINDEN_MS = 15_000;
 // Een lokaal model op gewone hardware doet over een week aan berichten zo een
 // paar minuten. Ruim nemen: het gaat om een wekelijkse mail, niet om een klik.
 const ANTWOORD_MS = 15 * 60_000;
 
-let proxy = null;
-function dispatcher() {
-  const adres = process.env.REGIOCHECKER_TAILNET_PROXY;
-  if (!adres) return undefined;
-  if (!proxy || proxy.adres !== adres) proxy = { adres, agent: new ProxyAgent(adres) };
-  return proxy.agent;
-}
-
 function basis(url) {
   const schoon = String(url || '').trim().replace(/\/+$/, '');
   if (!/^https?:\/\/[^/]+/.test(schoon)) throw new Error('Vul de Ollama-URL in, bijvoorbeeld http://naam-van-machine:11434');
   return schoon;
-}
-
-// Bij een mislukte tunnel zet de Tailscale-proxy de reden in de kop
-// Tailscale-Connect-Error, maar undici geeft alleen de statuscode door. Dus
-// vragen we het zelf nog een keer, kaal, en lezen we die kop.
-function proxyReden(doelUrl) {
-  return new Promise((klaar) => {
-    let proxy;
-    let doel;
-    try {
-      proxy = new URL(process.env.REGIOCHECKER_TAILNET_PROXY);
-      const u = new URL(doelUrl);
-      doel = `${u.hostname}:${u.port || (u.protocol === 'https:' ? 443 : 80)}`;
-    } catch {
-      return klaar(null);
-    }
-    const sok = net.connect(Number(proxy.port) || 80, proxy.hostname);
-    const stop = (reden) => { sok.destroy(); klaar(reden); };
-    sok.setTimeout(10_000, () => stop(null));
-    sok.on('error', () => stop(null));
-    sok.on('connect', () => sok.write(`CONNECT ${doel} HTTP/1.1\r\nHost: ${doel}\r\n\r\n`));
-    sok.on('data', (d) => stop(String(d).match(/Tailscale-Connect-Error: ([^\r\n]+)/i)?.[1] || null));
-  });
 }
 
 function vertaalProxyReden(reden, url) {
@@ -91,7 +60,8 @@ async function vraag(url, pad, { body, tijd } = {}) {
       method: body ? 'POST' : 'GET',
       headers: body ? { 'Content-Type': 'application/json' } : {},
       body: body ? JSON.stringify(body) : undefined,
-      dispatcher: dispatcher(),
+      // Een antwoord van het model kan langer dan vijf minuten duren.
+      dispatcher: tijd ? (tailnetDispatcher({ lang: true }) || langDispatcher()) : tailnetDispatcher(),
       signal: AbortSignal.timeout(tijd || VERBINDEN_MS),
     });
   } catch (fout) {

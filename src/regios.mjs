@@ -16,6 +16,31 @@ export const SOORTEN = {
   woo: 'Woo-publicaties',
 };
 
+// Alle soorten stukken in de feed, met de naam van één stuk ("Ingekomen stuk")
+// en het tabblad waar ze onder vallen. Audio en video komen uit audioscraper
+// (src/audio/), kamerstukken uit de Tweede Kamer (src/kamer/).
+export const ENKELVOUD = {
+  nieuws: 'Gemeentenieuws',
+  ingekomen: 'Ingekomen stuk',
+  woo: 'Woo-publicatie',
+  kamerstuk: 'Kamerstuk',
+  raadsvergadering: 'Raadsvergadering',
+  youtube: 'YouTube',
+  podcast: 'Podcast',
+};
+
+export const GROEPEN = {
+  nieuws: 'Gemeentenieuws',
+  ingekomen: 'Ingekomen',
+  woo: 'Woo',
+  kamerstuk: 'Kamerstukken',
+  audio: 'Audio & video',
+};
+
+export const AUDIOSOORTEN = ['raadsvergadering', 'youtube', 'podcast'];
+
+export const groepVan = (soort) => (AUDIOSOORTEN.includes(soort) ? 'audio' : soort);
+
 export const REGIOS = [
   {
     id: 'smallingerland',
@@ -214,4 +239,12 @@ export const REGIOS = [
 
 export const regioOpId = (id) => REGIOS.find((r) => r.id === id);
 
-export const alleBronnen = () => REGIOS.flatMap((r) => r.bronnen.map((b) => ({ ...b, regio: r.id })));
+// De ingebouwde bronnen. Wat een beheerder via de webUI toevoegt (en de
+// landelijke bronnen) staat in src/register.mjs.
+export const ingebouwdeBronnen = () => REGIOS.flatMap((r) => r.bronnen.map((b) => ({
+  ...b,
+  regio: r.id,
+  bereik: 'regio',
+  naam: `${r.naam} · ${b.label}`,
+  ingebouwd: true,
+})));

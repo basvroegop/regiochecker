@@ -44,3 +44,18 @@ export function moetMailen(nu, instellingen, status) {
   const vanaf = Date.parse(status.planningVanaf || 0);
   return gepland > vorigeRonde && gepland >= vanaf;
 }
+
+// De weekmail van één gebruiker: eigen dagen en tijd, eigen afgehandelde
+// momenten (laatsteWeekronde) en eigen startpunt (weekmailVanaf, gezet bij
+// het aanmaken en bij elke wijziging van het schema).
+const schemaVan = (g) => ({ mailTijd: g.weekmail?.tijd, mailDagen: g.weekmail?.dagen || [] });
+
+export function weekmailNodig(nu, g) {
+  if (!g.weekmail?.aan || !g.weekmail.dagen?.length) return false;
+  return moetMailen(nu, schemaVan(g), { laatsteMailronde: { tijd: g.laatsteWeekronde }, planningVanaf: g.weekmailVanaf });
+}
+
+export function volgendeWeekmail(nu, g) {
+  if (!g.weekmail?.aan || !g.weekmail.dagen?.length) return null;
+  return volgendMoment(nu, schemaVan(g));
+}

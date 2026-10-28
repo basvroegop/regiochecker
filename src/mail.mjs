@@ -1,21 +1,29 @@
-// De mail per verslaggever. Opbouw: per gemeente een H2 met daaronder de
+// De weekmail per journalist. Opbouw: per gemeente een H2 met daaronder de
 // samenvatting van wat er speelt, en dan altijd dezelfde drie H3's in vaste volgorde:
 // Gemeentenieuws, Ingekomen stukken, Woo-publicaties. Ook een lege categorie
 // krijgt zijn kop, zodat alles elke week op dezelfde plek staat; wat er bij een
-// categorie niet gecontroleerd kon worden, staat onder die kop.
+// categorie niet gecontroleerd kon worden, staat onder die kop. Daarna, als er
+// iets is: stukken uit landelijke bronnen met een sleutelwoord van de regio,
+// kamerstukken, en raadsvergaderingen en andere audio en video (met per
+// vergadering een samenvatting per onderwerp, src/vergadering.mjs).
 //
-// De periode loopt altijd van de vorige mail aan deze ontvanger tot het moment
+// De periode loopt altijd van de vorige mail aan deze gebruiker tot het moment
 // van versturen. Ging er een week geen mail uit (niets nieuws, een fout, of de
-// ontvanger stond uit), dan zit die week gewoon in de volgende mail. Wie nog
-// nooit een mail kreeg, krijgt de afgelopen week.
+// weekmail stond uit), dan zit die week gewoon in de volgende mail. Wie nog
+// nooit een mail kreeg, krijgt de afgelopen week. Wanneer de mail gaat, stelt
+// iedere gebruiker zelf in (src/planning.mjs).
 
 import nodemailer from 'nodemailer';
-import { REGIOS, SOORTEN } from './regios.mjs';
+import { SOORTEN, ENKELVOUD } from './regios.mjs';
+import { alleRegios, bronnenVanRegio, geldtVoor, actieveTermen, TWEEDE_KAMER, isAudioBron } from './register.mjs';
 import { maakSamenvatting, samenvattingAanbieder } from './samenvatting.mjs';
+import { vatVergaderingSamen, tijdcode } from './vergadering.mjs';
+import { maakKader, routeerItem, routeerAflevering } from './feed.mjs';
 import { html, kort } from './html.mjs';
 import { korteDatum, lokaleDatum } from './datum.mjs';
 import { minDatum } from './kamer/db.mjs';
-import { trefferHtml, trefferTekst } from './kamer/weergave.mjs';
+import { trefferHtml, trefferTekst, fragmentHtml } from './kamer/weergave.mjs';
+import { weekmailNodig } from './planning.mjs';
 
 const SOORT_VOLGORDE = ['nieuws', 'ingekomen', 'woo'];
 const DAG_MS = 86400000;
@@ -43,9 +51,9 @@ function bronOpmerkingen(opslag, regio, soort) {
       regels.push('Niet gecontroleerd: de gemeente publiceert deze niet (vindbaar) online.');
       continue;
     }
-    if (bron.vervangend) regels.push(`Vervangende bron: ${bron.label}; ${bron.mailnotitie}.`);
+    if (bron.vervangend) regels.push(`Vervangende bron: ${bron.label || bron.naam}${bron.mailnotitie ? `; ${bron.mailnotitie}` : ''}.`);
     const status = opslag.status.bronnen[bron.id];
-    if (status && !status.ok) regels.push(`${bron.label} kon de laatste keer niet worden opgehaald (${status.fout}).`);
+    if (status && !status.ok) regels.push(`${bron.label || bron.naam} kon de laatste keer niet worden opgehaald (${status.fout}).`);
   }
   return regels;
 }
@@ -102,6 +110,10 @@ function regioHtml(blok, opslag) {
     if (c.items.length) uit += c.items.map(itemHtml).join('');
     else if (c.gecontroleerd) uit += `<p style="${STIJL.item};color:#6b6b66;">Geen nieuwe berichten.</p>`;
   }
+  if (blok.landelijk.length) {
+    uit += `<h3 style="${STIJL.h3}">Landelijke bronnen <span style="font-weight:normal;color:#6b6b66;">(${blok.landelijk.length})</span></h3>`;
+    uit += blok.landelijk.map(landelijkHtml).join('');
+  }
   if (blok.kamerTermen?.length) {
     const n = blok.kamerstukken.length;
     uit += `<h3 style="${STIJL.h3}">Kamerstukken${n ? ` <span style="font-weight:normal;color:#6b6b66;">(${n})</span>` : ''}</h3>`;
@@ -109,7 +121,35 @@ function regioHtml(blok, opslag) {
       ? blok.kamerstukken.map(trefferHtml).join('')
       : `<p style="${STIJL.item};color:#6b6b66;">Geen nieuwe kamerstukken met ${html(blok.kamerTermen.join(', '))}.</p>`;
   }
+  if (blok.audio.length) {
+    uit += `<h3 style="${STIJL.h3}">Raadsvergaderingen, audio en video <span style="font-weight:normal;color:#6b6b66;">(${blok.audio.length})</span></h3>`;
+    uit += blok.audio.map(audioHtml).join('');
+  }
   return `${uit}</div>`;
+}
+
+const duurTekst = (s) => (s ? `${Math.floor(s / 3600) ? `${Math.floor(s / 3600)} u ` : ''}${Math.round((s % 3600) / 60)} min` : '');
+
+function landelijkHtml({ item, bron, gevonden }) {
+  const termen = gevonden.map((g) => `${g.term}${g.aantal > 1 ? ` (${g.aantal}×)` : ''}`).join(', ');
+  return `<div style="${STIJL.item}"><span style="color:#6b6b66;">${html(korteDatum(item.datum) || 'z.d.')}</span> &nbsp;<a href="${html(item.url)}" style="${STIJL.link}">${html(item.titel)}</a>
+    <br><span style="${STIJL.klein}">${html(bron.naam)} · gevonden: <strong>${html(termen)}</strong></span>
+    <div style="margin:4px 0 0 10px;padding-left:8px;border-left:2px solid #e3e1da;font-size:13px;color:#3b3b38;">${fragmentHtml(gevonden[0].fragment)}</div></div>`;
+}
+
+function audioHtml({ aflevering: a, bron, gevonden, samenvatting, samenvattingFout }) {
+  const kenmerk = [ENKELVOUD[a.soort], duurTekst(a.duur)].filter(Boolean).join(' · ');
+  let uit = `<div style="${STIJL.item}"><span style="color:#6b6b66;">${html(korteDatum(String(a.gepubliceerd || '').slice(0, 10)) || 'z.d.')}</span> &nbsp;<a href="${html(a.url)}" style="${STIJL.link}">${html(a.titel)}</a>
+    <br><span style="${STIJL.klein}">${html([bron.naam, kenmerk].filter(Boolean).join(' · '))}</span>`;
+  for (const g of gevonden || []) {
+    uit += `<div style="margin:4px 0 0 10px;padding-left:8px;border-left:2px solid #e3e1da;font-size:13px;color:#3b3b38;"><strong>${tijdcode(g.treffers[0].tijd)}</strong> ${fragmentHtml(g.treffers[0].fragment)}${g.aantal > 1 ? ` <span style="color:#6b6b66;">(${g.aantal}× ${html(g.term)})</span>` : ''}</div>`;
+  }
+  uit += '</div>';
+  for (const o of samenvatting?.onderwerpen || []) {
+    uit += `<h4 style="font-size:16px;margin:14px 0 6px;">${html(o.kop)}</h4><ul style="margin:0 0 8px;padding:0 0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.45;">${o.punten.map((p) => `<li style="margin:0 0 4px;">${html(p)}</li>`).join('')}</ul>`;
+  }
+  if (samenvattingFout) uit += `<p style="${STIJL.klein}">Geen samenvatting van de vergadering: ${html(samenvattingFout)}.</p>`;
+  return uit;
 }
 
 function regioTekst(blok, opslag) {
@@ -130,10 +170,27 @@ function regioTekst(blok, opslag) {
     if (!c.items.length && c.gecontroleerd) r.push('Geen nieuwe berichten.');
     r.push('');
   }
+  if (blok.landelijk.length) {
+    r.push(`-- Landelijke bronnen (${blok.landelijk.length}) --`);
+    for (const { item, bron, gevonden } of blok.landelijk) {
+      r.push(`* ${korteDatum(item.datum) || 'z.d.'}  ${item.titel}`, `  ${bron.naam} · gevonden: ${gevonden.map((g) => g.term).join(', ')}`, `  "${gevonden[0].fragment.tekst}"`, `  ${item.url}`);
+    }
+    r.push('');
+  }
   if (blok.kamerTermen?.length) {
     r.push(`-- Kamerstukken${blok.kamerstukken.length ? ` (${blok.kamerstukken.length})` : ''} --`);
     if (blok.kamerstukken.length) r.push(...blok.kamerstukken.map(trefferTekst));
     else r.push(`Geen nieuwe kamerstukken met ${blok.kamerTermen.join(', ')}.`);
+    r.push('');
+  }
+  if (blok.audio.length) {
+    r.push(`-- Raadsvergaderingen, audio en video (${blok.audio.length}) --`);
+    for (const { aflevering: a, bron, gevonden, samenvatting } of blok.audio) {
+      r.push(`* ${korteDatum(String(a.gepubliceerd || '').slice(0, 10)) || 'z.d.'}  ${a.titel}`, `  ${bron.naam}`);
+      for (const g of gevonden || []) r.push(`  ${tijdcode(g.treffers[0].tijd)} "${g.treffers[0].fragment.tekst}"`);
+      for (const o of samenvatting?.onderwerpen || []) r.push(`  ${o.kop}`, ...o.punten.map((p) => `   - ${p}`));
+      r.push(`  ${a.url}`);
+    }
     r.push('');
   }
   return r.join('\n');
@@ -146,24 +203,65 @@ function onderwerp(blokken, sinds, nu) {
   return `${namen}: ${aantal} (${korteDatum(lokaleDatum(new Date(sinds)))} – ${korteDatum(lokaleDatum(nu))})`;
 }
 
-// opties.sinds: ISO-tijd; standaard de vorige mail aan deze ontvanger.
+// Stukken uit landelijke bronnen (niet de Tweede Kamer, die heeft een eigen
+// kopje) met een sleutelwoord van deze regio.
+function landelijkVoor(k, regio, sinds, tot) {
+  const uit = [];
+  for (const item of Object.values(k.opslag.items)) {
+    if (item.regio || item.basislijn || item.eersteGezien <= sinds || item.eersteGezien > tot) continue;
+    const bron = k.bronnen.get(item.bron);
+    if (bron?.bereik !== 'landelijk') continue;
+    const r = routeerItem(k, item, bron).find((x) => x.regio === regio.id);
+    if (r) uit.push({ item, bron, gevonden: r.gevonden });
+  }
+  return uit.sort((a, b) => String(b.item.datum || '').localeCompare(String(a.item.datum || '')));
+}
+
+// Audio en video: alles van de regio zelf, en landelijke afleveringen waarin
+// een sleutelwoord valt.
+function audioVoor(k, regio, sinds, tot) {
+  if (!k.adb) return [];
+  const uit = [];
+  for (const a of k.adb.metTranscriptSinds(sinds, tot)) {
+    const bron = k.bronnen.get(a.bron);
+    if (!bron) continue;
+    if (bron.bereik === 'landelijk') {
+      const r = routeerAflevering(k, a).find((x) => x.regio === regio.id);
+      if (r) uit.push({ aflevering: a, bron, gevonden: r.gevonden });
+    } else if (bron.regio === regio.id) {
+      uit.push({ aflevering: a, bron, gevonden: [] });
+    }
+  }
+  return uit;
+}
+
+// opties.sinds: ISO-tijd; standaard de vorige mail aan deze gebruiker.
 // opties.samenvatting: false om het taalmodel over te slaan (snel voorbeeld).
-export async function stelMailSamen(opslag, ontvanger, opties = {}) {
+export async function stelMailSamen(opslag, gebruiker, opties = {}) {
   const nu = opties.nu || new Date();
   const tot = nu.toISOString();
-  const sinds = opties.sinds || ontvanger.laatsteMail || new Date(nu - EERSTE_MAIL_DAGEN * DAG_MS).toISOString();
-  const regios = REGIOS.filter((r) => ontvanger.regios.includes(r.id));
+  const sinds = opties.sinds || gebruiker.laatsteMail || new Date(nu - EERSTE_MAIL_DAGEN * DAG_MS).toISOString();
+  const k = maakKader({ opslag, kdb: opslag.kamer, fdb: opslag.feeddb, adb: opslag.audiodb });
+  const regios = k.regios
+    .filter((r) => gebruiker.regios.includes(r.id))
+    .map((r) => ({ ...r, bronnen: bronnenVanRegio(opslag, r.id).filter((b) => !isAudioBron(b)) }));
+  const aanbieder = samenvattingAanbieder(opslag);
+  const samenvatten = opties.samenvatting !== false;
 
   const blokken = [];
   for (const [n, regio] of regios.entries()) {
     const items = nieuweItems(opslag, regio.id, sinds, tot);
-    // Kamerstukken met de termen van deze regio (opslag.kamer: de database, als
-    // die draait; zonder database geen kopje).
-    const kamerTermen = opslag.kamer ? (opslag.kamertermen[regio.id] || []) : [];
+    // Kamerstukken met de sleutelwoorden van deze regio (opslag.kamer: de
+    // database, als die draait; zonder database of sleutelwoorden geen kopje).
+    const kamerTermen = opslag.kamer && geldtVoor(regio, TWEEDE_KAMER.id) ? actieveTermen(regio) : [];
     const kamerstukken = kamerTermen.length ? opslag.kamer.treffers(kamerTermen, { sinds, tot, minDatum: minDatum(sinds) }) : [];
-    const blok = { regio, items, kamerTermen, kamerstukken, samenvatting: null, samenvattingFout: null };
-    if (items.length && opties.samenvatting !== false) {
-      const aanbieder = samenvattingAanbieder(opslag);
+    const blok = {
+      regio, items, kamerTermen, kamerstukken,
+      landelijk: landelijkVoor(k, regio, sinds, tot),
+      audio: audioVoor(k, regio, sinds, tot),
+      samenvatting: null, samenvattingFout: null,
+    };
+    if (items.length && samenvatten) {
       if (!aanbieder.klaar) {
         blok.samenvattingFout = aanbieder.reden;
       } else {
@@ -176,13 +274,24 @@ export async function stelMailSamen(opslag, ontvanger, opties = {}) {
         }
       }
     }
+    // Per raadsvergadering van de regio een samenvatting per onderwerp.
+    for (const a of blok.audio.filter((x) => x.aflevering.soort === 'raadsvergadering' && x.bron.bereik === 'regio')) {
+      if (!samenvatten || !aanbieder.klaar) continue;
+      opties.voortgang?.({ stap: n + 1, totaal: regios.length, tekst: `Samenvatting vergadering: ${a.aflevering.titel}` });
+      try {
+        a.samenvatting = await vatVergaderingSamen({ opslag, aflevering: a.aflevering, regioNaam: regio.naam });
+      } catch (fout) {
+        a.samenvattingFout = fout.message;
+        opslag.log({ soort: aanbieder.via === 'ollama' ? 'ollamafout' : 'claudefout', tekst: `${regio.naam}, vergadering: ${fout.message}` });
+      }
+    }
     blokken.push(blok);
   }
 
   const sindsTekst = new Date(sinds).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   const kopTekst = `Regiochecker · ${nu.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}`;
   const totTekst = nu.toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  const voet = `Je krijgt deze mail omdat je ${regios.map((r) => r.naam).join(', ')} volgt. Nieuw = voor het eerst gezien tussen ${sindsTekst} en ${totTekst}.`;
+  const voet = `Je krijgt deze mail omdat je ${regios.map((r) => r.naam).join(', ')} volgt. Nieuw = voor het eerst gezien tussen ${sindsTekst} en ${totTekst}. Je weekmail stel je in bij Meldingen.`;
   const site = process.env.REGIOCHECKER_SITE_URL;
 
   const htmlMail = `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
@@ -190,7 +299,7 @@ export async function stelMailSamen(opslag, ontvanger, opties = {}) {
 <div style="${STIJL.kop}"><h1 style="${STIJL.h1}">${html(kopTekst)}</h1>
 <div style="${STIJL.klein}">Gemeentenieuws, ingekomen stukken en Woo-publicaties van ${html(sindsTekst)} tot ${html(totTekst)}</div></div>
 ${blokken.map((b) => regioHtml(b, opslag)).join('<hr style="border:0;border-top:1px solid #e3e1da;margin:8px 28px;">')}
-<div style="padding:18px 28px 26px;${STIJL.klein}">${html(voet)}${site ? ` Instellingen: <a href="${html(site)}" style="color:#6b6b66;">${html(site)}</a>` : ''}</div>
+<div style="padding:18px 28px 26px;${STIJL.klein}">${html(voet)}${site ? ` <a href="${html(site)}/#/meldingen" style="color:#6b6b66;">${html(site)}/#/meldingen</a>` : ''}</div>
 </div></body></html>`;
 
   const tekst = [kopTekst, '', ...blokken.map((b) => regioTekst(b, opslag)), voet, site || ''].join('\n');
@@ -199,7 +308,7 @@ ${blokken.map((b) => regioHtml(b, opslag)).join('<hr style="border:0;border-top:
     onderwerp: onderwerp(blokken, sinds, nu),
     html: htmlMail,
     tekst,
-    aantal: blokken.reduce((n, b) => n + b.items.length + b.kamerstukken.length, 0),
+    aantal: blokken.reduce((n, b) => n + b.items.length + b.kamerstukken.length + b.landelijk.length + b.audio.length, 0),
     tot,
   };
 }
@@ -237,42 +346,56 @@ function eenTegelijk(werk) {
   return resultaat;
 }
 
-// Eén ontvanger: samenstellen, versturen, en bij succes de "vorige mail"-tijd
+// Eén gebruiker: samenstellen, versturen, en bij succes de "vorige mail"-tijd
 // verschuiven. Mislukt het versturen, dan blijft die staan en komen dezelfde
 // items de volgende keer opnieuw mee.
-async function verstuurAan(opslag, ontvanger, { nu = new Date(), forceer = false, voortgang } = {}) {
-  const mail = await stelMailSamen(opslag, ontvanger, { nu, voortgang });
-  if (!mail.aantal && !opslag.instellingen.mailBijNiets && !forceer) {
+async function verstuurAan(opslag, gebruiker, { nu = new Date(), forceer = false, voortgang } = {}) {
+  const mail = await stelMailSamen(opslag, gebruiker, { nu, voortgang });
+  if (!mail.aantal && !gebruiker.weekmail?.ookLeeg && !forceer) {
     return { verstuurd: false, reden: 'niets nieuws' };
   }
-  await verstuur(opslag, { aan: ontvanger.email, ...mail });
-  ontvanger.laatsteMail = mail.tot;
-  opslag.bewaar('ontvangers');
-  opslag.log({ soort: 'verzonden', aan: ontvanger.email, tekst: mail.onderwerp });
+  await verstuur(opslag, { aan: gebruiker.email, ...mail });
+  gebruiker.laatsteMail = mail.tot;
+  delete gebruiker.mailFout;
+  opslag.bewaar('gebruikers');
+  opslag.log({ soort: 'verzonden', aan: gebruiker.email, tekst: mail.onderwerp });
   return { verstuurd: true, onderwerp: mail.onderwerp };
 }
 
-export function mailOntvanger(opslag, ontvanger, opties = {}) {
-  return eenTegelijk(() => verstuurAan(opslag, ontvanger, opties));
+export function mailGebruiker(opslag, gebruiker, opties = {}) {
+  return eenTegelijk(() => verstuurAan(opslag, gebruiker, opties));
 }
 
-export function mailronde(opslag, nu = new Date(), voortgang) {
-  return eenTegelijk(() => doeRonde(opslag, nu, voortgang));
+// Wie krijgt nu een weekmail? Iedereen met de weekmail aan, een e-mailadres,
+// minstens één regio, en een verstuurmoment dat nog niet is afgehandeld.
+export function teMailen(opslag, nu = new Date()) {
+  return opslag.gebruikers.filter((g) => g.email && g.regios.length && weekmailNodig(nu, g));
 }
 
-async function doeRonde(opslag, nu, voortgang) {
+// Iedereen met de weekmail aan, ongeacht het schema (knop "Mailronde nu versturen").
+export const allemaalMetWeekmail = (opslag) => opslag.gebruikers.filter((g) => g.email && g.regios.length && g.weekmail?.aan);
+
+export function mailronde(opslag, nu = new Date(), voortgang, gebruikers = teMailen(opslag, nu)) {
+  return eenTegelijk(() => doeRonde(opslag, nu, voortgang, gebruikers));
+}
+
+async function doeRonde(opslag, nu, voortgang, gebruikers) {
   const resultaten = [];
-  const ontvangers = opslag.ontvangers.filter((o) => o.actief && o.regios.length);
-  for (const [n, ontvanger] of ontvangers.entries()) {
-    const melding = (v) => voortgang?.({ ...v, tekst: `Mail ${n + 1} van ${ontvangers.length} (${ontvanger.email}): ${v.tekst}` });
+  for (const [n, g] of gebruikers.entries()) {
+    const melding = (v) => voortgang?.({ ...v, tekst: `Mail ${n + 1} van ${gebruikers.length} (${g.email}): ${v.tekst}` });
     melding({ tekst: 'samenstellen' });
+    // Dit verstuurmoment is afgehandeld, ook als er niets nieuws was of het
+    // versturen mislukte; een mislukte mail proberen we nog een dag opnieuw.
+    g.laatsteWeekronde = nu.toISOString();
     try {
-      resultaten.push({ email: ontvanger.email, ...(await verstuurAan(opslag, ontvanger, { nu, voortgang: melding })) });
+      resultaten.push({ gebruiker: g.id, email: g.email, ...(await verstuurAan(opslag, g, { nu, voortgang: melding })) });
     } catch (fout) {
-      opslag.log({ soort: 'mailfout', aan: ontvanger.email, tekst: fout.message });
-      resultaten.push({ email: ontvanger.email, verstuurd: false, fout: fout.message });
+      g.mailFout = { tijd: nu.toISOString(), fout: fout.message, pogingen: 1 };
+      opslag.log({ soort: 'mailfout', aan: g.email, tekst: fout.message });
+      resultaten.push({ gebruiker: g.id, email: g.email, verstuurd: false, fout: fout.message });
     }
   }
+  opslag.bewaar('gebruikers');
   opslag.status.laatsteMailronde = { tijd: nu.toISOString(), resultaten };
   opslag.bewaar('status');
   return resultaten;
@@ -280,29 +403,28 @@ async function doeRonde(opslag, nu, voortgang) {
 
 // Een mislukte verzending (SMTP even onbereikbaar) proberen we de rest van de
 // dag elk half uur opnieuw. Lukt het niet, dan blijft de vorige-mail-tijd van
-// die ontvanger staan en zit alles in de mail van volgende week.
+// die gebruiker staan en zit alles in de volgende weekmail.
 export function herkansMislukte(opslag, nu = new Date()) {
   return eenTegelijk(() => herkans(opslag, nu));
 }
 
 async function herkans(opslag, nu) {
-  const ronde = opslag.status.laatsteMailronde;
-  if (!ronde || nu - Date.parse(ronde.tijd) > DAG_MS) return;
-  const mislukt = ronde.resultaten.filter((r) => r.fout);
-  if (!mislukt.length || nu - Date.parse(ronde.laatsteHerkansing || ronde.tijd) < HERKANSING_MS) return;
-  for (const r of mislukt) {
-    const ontvanger = opslag.ontvangers.find((o) => o.email === r.email && o.actief && o.regios.length);
-    if (!ontvanger) {
-      r.fout = null;
+  let gewijzigd = false;
+  for (const g of opslag.gebruikers.filter((x) => x.mailFout)) {
+    const f = g.mailFout;
+    if (nu - Date.parse(f.tijd) > DAG_MS || !g.weekmail?.aan || !g.email) {
+      delete g.mailFout;
+      gewijzigd = true;
       continue;
     }
+    if (nu - Date.parse(f.laatstePoging || f.tijd) < HERKANSING_MS) continue;
     try {
-      Object.assign(r, await verstuurAan(opslag, ontvanger, { nu }), { fout: null, herkansing: true });
+      await verstuurAan(opslag, g, { nu });
+      delete g.mailFout;
     } catch (fout) {
-      r.fout = fout.message;
+      Object.assign(f, { fout: fout.message, laatstePoging: nu.toISOString(), pogingen: (f.pogingen || 1) + 1 });
     }
+    gewijzigd = true;
   }
-  ronde.laatsteHerkansing = nu.toISOString();
-  opslag.bewaar('status');
+  if (gewijzigd) opslag.bewaar('gebruikers');
 }
-

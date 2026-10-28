@@ -1,9 +1,8 @@
-// Eén kamerronde: metadata bijwerken, teksten ophalen, meldingen versturen.
-// Loopt los van de gemeentebronnen (elk half uur), zodat een lange inhaalslag
-// de mail niet ophoudt. Nooit twee tegelijk.
+// Eén kamerronde: metadata bijwerken en teksten ophalen. Loopt los van de
+// gemeentebronnen (elk half uur), zodat een lange inhaalslag de mail niet
+// ophoudt. Nooit twee tegelijk. De meldingen gaan daarna (src/dienst.mjs).
 
 import { synchroniseer, haalTeksten } from './ophalen.mjs';
-import { verwerkMeldingen } from './meldingen.mjs';
 
 let lopend = null;
 
@@ -16,7 +15,6 @@ export function kamerRonde(opslag, kdb, voortgang) {
       voortgang?.({ tekst: 'kamerstukken: metadata bijwerken' });
       uitkomst.metadata = await synchroniseer(kdb);
       uitkomst.teksten = await haalTeksten(kdb, { voortgang });
-      uitkomst.meldingen = await verwerkMeldingen(opslag, kdb);
       uitkomst.ok = true;
     } catch (fout) {
       uitkomst.ok = false;

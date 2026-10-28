@@ -11,10 +11,10 @@ export function kenmerkenStuk(s) {
   return [s.soort, s.dossier && `dossier ${s.dossier}`, s.afzender].filter(Boolean).join(' · ');
 }
 
-const titel = (s) => s.titel && s.onderwerp && !s.onderwerp.includes(s.titel) ? `${s.titel}: ${s.onderwerp}` : (s.onderwerp || s.titel || s.nummer);
+export const stukTitel = (s) => (s.titel && s.onderwerp && !s.onderwerp.includes(s.titel) ? `${s.titel}: ${s.onderwerp}` : (s.onderwerp || s.titel || s.nummer));
 
 // Het fragment met de treffer gemarkeerd. Eerst ontsnappen, dan markeren.
-function fragmentHtml({ tekst, treffer }) {
+export function fragmentHtml({ tekst, treffer }) {
   const veilig = html(kort(tekst, 400));
   const t = html(treffer);
   const i = veilig.indexOf(t);
@@ -25,7 +25,7 @@ function fragmentHtml({ tekst, treffer }) {
 export function trefferHtml({ stuk, gevonden }) {
   const termen = gevonden.map((g) => `${g.term}${g.aantal > 1 ? ` (${g.aantal}×)` : ''}`).join(', ');
   return `<div style="margin:0 0 14px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.45;">
-    <span style="color:#6b6b66;">${html(korteDatum(stuk.datum) || 'z.d.')}</span> &nbsp;<a href="${html(stukUrl(stuk))}" style="color:#1d1d1b;">${html(kort(titel(stuk), 200))}</a>
+    <span style="color:#6b6b66;">${html(korteDatum(stuk.datum) || 'z.d.')}</span> &nbsp;<a href="${html(stukUrl(stuk))}" style="color:#1d1d1b;">${html(kort(stukTitel(stuk), 200))}</a>
     <br><span style="${KLEIN}">${html(kenmerkenStuk(stuk))}</span>
     <br><span style="${KLEIN}">Gevonden: <strong>${html(termen)}</strong></span>
     ${gevonden.slice(0, 2).map((g) => `<div style="margin:4px 0 0 10px;padding-left:8px;border-left:2px solid #e3e1da;font-size:13px;color:#3b3b38;">${fragmentHtml(g.fragment)}</div>`).join('')}
@@ -34,7 +34,7 @@ export function trefferHtml({ stuk, gevonden }) {
 
 export function trefferTekst({ stuk, gevonden }) {
   return [
-    `* ${korteDatum(stuk.datum) || 'z.d.'}  ${titel(stuk)}`,
+    `* ${korteDatum(stuk.datum) || 'z.d.'}  ${stukTitel(stuk)}`,
     `  ${kenmerkenStuk(stuk)}`,
     `  Gevonden: ${gevonden.map((g) => g.term).join(', ')}`,
     ...gevonden.slice(0, 2).map((g) => `  "${kort(g.fragment.tekst, 300)}"`),

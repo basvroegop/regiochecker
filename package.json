@@ -1,13 +1,14 @@
 {
   "name": "regiochecker",
   "version": "1.0.0",
-  "description": "Controleert gemeentelijke bronnen en mailt regioverslaggevers hun speerpunten",
+  "description": "Bronnenplatform voor regioverslaggevers: gemeentelijke bronnen, kamerstukken en audio en video in één feed",
   "type": "module",
   "private": true,
   "scripts": {
     "start": "node src/dienst.mjs",
     "test": "node --test test/*.test.mjs",
-    "verzamel": "node src/verzamel-eenmalig.mjs"
+    "verzamel": "node src/verzamel-eenmalig.mjs",
+    "importeer-audioscraper": "node src/importeer-audioscraper.mjs"
   },
   "engines": {
     "node": ">=20"

@@ -120,7 +120,9 @@ function foutmelding(fout) {
   return fout.message;
 }
 
-async function vraagClaude(opslag, vraag, client) {
+// Eén vraag aan Claude met een JSON-schema voor het antwoord. Ook gebruikt
+// voor de samenvatting van raadsvergaderingen (src/vergadering.mjs).
+export async function vraagClaude(opslag, { systeem, vraag, schema }, client) {
   const model = opslag.instellingen.claude.model || 'claude-opus-5-5';
   const claude = client || new Anthropic({ apiKey: claudeSleutel(opslag) });
   let antwoord;
@@ -134,9 +136,9 @@ async function vraagClaude(opslag, vraag, client) {
       fallbacks: 'default',
       output_config: {
         effort: 'medium',
-        format: { type: 'json_schema', schema: SCHEMA },
+        format: { type: 'json_schema', schema },
       },
-      system: SYSTEEM,
+      system: systeem,
       messages: [{ role: 'user', content: vraag }],
     });
   } catch (fout) {
@@ -219,7 +221,7 @@ async function maak(opslag, regio, items, client, aanbieder, sleutel) {
   } else {
     let vraag;
     ({ vraag, ids } = bouwVraag(regio.naam, items));
-    ({ json: ruw, model } = await vraagClaude(opslag, vraag, client));
+    ({ json: ruw, model } = await vraagClaude(opslag, { systeem: SYSTEEM, vraag, schema: SCHEMA }, client));
   }
 
   const resultaat = {

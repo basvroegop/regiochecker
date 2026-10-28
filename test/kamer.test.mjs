@@ -128,7 +128,7 @@ test('bijhouden, meldingen en het kopje in de regiomail', metSqlite, async () =>
   try {
     const { openKamerDb } = await import('../src/kamer/db.mjs');
     const { synchroniseer, haalTeksten, zetOm } = await import('../src/kamer/ophalen.mjs');
-    const { verwerkMeldingen } = await import('../src/kamer/meldingen.mjs');
+    const { verwerkMeldingen } = await import('../src/meldingen.mjs');
     const { stelMailSamen } = await import('../src/mail.mjs');
 
     assert.deepEqual({ ...zetOm({ Id: 'x', Datum: '2026-10-06T00:00:00+02:00', Kamerstukdossier: [{ Nummer: 36600, Toevoeging: 'XII', Titel: 'Begroting' }], DocumentActor: [{ ActorNaam: 'Jansen', ActorFractie: 'CDA' }] }), gewijzigd: undefined },
@@ -158,34 +158,38 @@ test('bijhouden, meldingen en het kopje in de regiomail', metSqlite, async () =>
 
     // Melding op "ziekenhuis" (staat in de brief) en "Lunchwijs" (in de pdf).
     opslag.instellingen.smtp = { host: '127.0.0.1', port: smtp.poort, secure: false, user: '', pass: '', from: 'rc@example.nl' };
-    opslag.meldingen = [
-      { id: 'm1', naam: 'Zorg', email: 'x@example.nl', termen: ['ziekenhuis', 'Lunchwijs'], frequentie: 'direct', actief: true, aangemaakt: '2026-10-01T00:00:00Z', laatsteMelding: null },
-      { id: 'm2', email: 'y@example.nl', termen: ['Bakkeveen'], frequentie: 'direct', actief: true, aangemaakt: '2026-10-01T00:00:00Z', laatsteMelding: null },
+    opslag.gebruikers = [
+      { id: 'g1', email: 'x@example.nl', regios: [] },
+      { id: 'g2', email: 'y@example.nl', regios: [] },
+      { id: 'g3', email: 'z@example.nl', regios: [] },
     ];
-    const eerste = await verwerkMeldingen(opslag, kdb);
+    const melding = (id, gebruiker, termen, extra = {}) => ({ id, gebruiker, termen, bereik: 'overal', bronnen: 'kamerstuk', frequentie: 'direct', tijd: '07:00', actief: true, aangemaakt: '2026-10-01T00:00:00Z', laatsteMelding: null, ...extra });
+    opslag.meldingen = [melding('m1', 'g1', ['ziekenhuis', 'Lunchwijs']), melding('m2', 'g2', ['Bakkeveen'])];
+    const ctx = { opslag, kdb, fdb: null };
+    const eerste = await verwerkMeldingen(ctx);
     assert.deepEqual(eerste.map((r) => [r.id, r.verstuurd, r.aantal]), [['m1', true, 2], ['m2', false, undefined]]);
     assert.equal(smtp.ontvangen.length, 1);
-    assert.match(smtp.ontvangen[0], /Subject: Kamerstukken: 2 nieuwe met ziekenhuis, Lunchwijs/);
-    const tweede = await verwerkMeldingen(opslag, kdb);
+    assert.match(smtp.ontvangen[0], /Subject: Melding: 2 nieuwe stukken met ziekenhuis, Lunchwijs/);
+    const tweede = await verwerkMeldingen(ctx);
     assert.equal(tweede[0].verstuurd, false, 'niet nog eens hetzelfde');
 
-    // Dagelijks: pas na het verstuurmoment, en één keer per dag.
-    opslag.meldingen = [{ id: 'm3', email: 'z@example.nl', termen: ['ziekenhuis'], frequentie: 'dagelijks', actief: true, aangemaakt: '2026-10-01T00:00:00Z', laatsteMelding: null }];
-    opslag.instellingen.mailTijd = '07:00';
+    // Dagelijks: pas na het verstuurmoment van de melding, en één keer per dag.
+    opslag.meldingen = [melding('m3', 'g3', ['ziekenhuis'], { frequentie: 'dagelijks' })];
     // Morgen, want de stukken hierboven zijn "nu" binnengekomen.
     const morgen = (uur) => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(uur, 0, 0, 0); return d; };
-    assert.equal((await verwerkMeldingen(opslag, kdb, { nu: morgen(6) })).length, 0);
-    assert.equal((await verwerkMeldingen(opslag, kdb, { nu: morgen(8) }))[0].verstuurd, true);
-    assert.equal((await verwerkMeldingen(opslag, kdb, { nu: morgen(9) })).length, 0);
+    assert.equal((await verwerkMeldingen(ctx, { nu: morgen(6) })).length, 0);
+    assert.equal((await verwerkMeldingen(ctx, { nu: morgen(8) }))[0].verstuurd, true);
+    assert.equal((await verwerkMeldingen(ctx, { nu: morgen(9) })).length, 0);
 
-    // Regiomail: Opsterland volgt "ziekenhuis" en krijgt een kopje Kamerstukken.
-    opslag.kamertermen = { opsterland: ['ziekenhuis'] };
+    // Regiomail: Opsterland heeft "ziekenhuis" als sleutelwoord en krijgt een kopje Kamerstukken.
+    opslag.regios = { opsterland: { sleutelwoorden: [{ term: 'ziekenhuis', actief: true }] } };
     const mail = await stelMailSamen(opslag, { email: 'v@example.nl', regios: ['opsterland', 'heerenveen'], laatsteMail: '2026-10-01T00:00:00Z' }, { samenvatting: false });
-    const opsterland = mail.html.slice(mail.html.indexOf('>Opsterland</h2>'), mail.html.indexOf('>Heerenveen</h2>'));
+    // De regio's staan op naam: eerst Heerenveen, dan Opsterland.
+    const opsterland = mail.html.slice(mail.html.indexOf('>Opsterland</h2>'));
     assert.match(opsterland, /<h3[^>]*>Kamerstukken <span[^>]*>\(1\)<\/span><\/h3>/);
     assert.match(opsterland, /href="https:\/\/www\.tweedekamer\.nl\/kamerstukken\/detail\?id=2026Z21147&amp;did=2026D1"/);
     assert.match(opsterland, /<strong style="background:#fff3b0;">ziekenhuis<\/strong>/);
-    assert.ok(!mail.html.slice(mail.html.indexOf('>Heerenveen</h2>')).includes('Kamerstukken'), 'zonder termen geen kopje');
+    assert.ok(!mail.html.slice(mail.html.indexOf('>Heerenveen</h2>'), mail.html.indexOf('>Opsterland</h2>')).includes('Kamerstukken'), 'zonder termen geen kopje');
     assert.match(mail.tekst, /-- Kamerstukken \(1\) --/);
     kdb.sluit();
   } finally {

@@ -67,6 +67,11 @@ export function kort(tekst, max) {
 // krijgt. Pakt <main> (of het element met role="main") en laat menu's, kop- en
 // voetteksten en formulieren weg.
 export function hoofdtekst(pagina, max = 1500) {
+  return kort(platteTekst(hoofdHtml(pagina)), max);
+}
+
+// Het hoofdgedeelte van een pagina als HTML, zonder menu's en formulieren.
+export function hoofdHtml(pagina) {
   let stuk = String(pagina ?? '');
   let start = stuk.search(/<main\b|role=["']main["']/i);
   if (start >= 0) {
@@ -80,6 +85,8 @@ export function hoofdtekst(pagina, max = 1500) {
     const body = stuk.search(/<body\b/i);
     if (body >= 0) stuk = stuk.slice(body);
   }
-  stuk = stuk.replace(/<(nav|header|footer|form|aside|button|select)\b[\s\S]*?<\/\1>/gi, ' ');
-  return kort(platteTekst(stuk), max);
+  return stuk
+    .replace(/<(nav|header|footer|form|aside|button|select)\b[\s\S]*?<\/\1>/gi, ' ')
+    // Kruimelpaden ("Home › Nieuws › …") horen niet bij de tekst.
+    .replace(/<(ul|ol|div|p)\b[^>]*\b(?:class|id)="[^"]*(?:breadcrumb|kruimel)[^"]*"[^>]*>[\s\S]*?<\/\1>/gi, ' ');
 }

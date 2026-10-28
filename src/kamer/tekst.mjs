@@ -47,5 +47,6 @@ export async function stukNaarTekst(buffer, contentType) {
   if (isPdf(buffer)) tekst = await pdfNaarTekst(buffer);
   else if (contentType === DOCX || isZip(buffer)) tekst = await docxNaarTekst(buffer);
   if (tekst === null) return null;
-  return tekst.replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim().slice(0, MAX_TEKST);
+  // Witregels blijven staan: in een pdf zijn dat vaak de grenzen tussen alinea's.
+  return tekst.replace(/[ \t]+/g, ' ').replace(/\n[ \t]*\n\s*/g, '\n\n').trim().slice(0, MAX_TEKST);
 }
