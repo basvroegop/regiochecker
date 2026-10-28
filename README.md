@@ -230,12 +230,32 @@ wachttijd; een echte fout drie keer, daarna "mislukt" met een knop **Opnieuw**.
 **Pauzeer alles** legt de verwerking stil; een bron pauzeren stopt alleen het
 zoeken naar nieuwe afleveringen.
 
+**AI-samenvatting**: na de namen maakt het taalmodel van Instellingen ›
+Samenvatting (Claude of Ollama) een samenvatting van de hele opname in hooguit
+100 woorden (`vatKortSamen` in `src/vergadering.mjs`). Die staat in het
+leespaneel onder de speler, boven het transcript, met het kopje
+"AI-samenvatting". De worker heeft zelf geen route om samen te vatten. Daarom
+gebeurt dit in de Regiochecker, als laatste stap in dezelfde wachtrij: nooit
+tegelijk met een eigen transcriptie, bij Ollama alleen als de GPU van de worker
+vrij is, en het model gaat daarna meteen uit het geheugen (`keep_alive: 0`). Een
+transcript dat niet in het contextvenster past, wordt eerst per deel tot
+aantekeningen teruggebracht. Lukt een samenvatting drie keer niet, dan blijft de
+aflevering zonder; de aflevering zelf mislukt daar nooit door.
+
+**Nieuw na de eerste import** is alleen wat niet ouder is dan de oudste
+aflevering uit die eerste catalogus (`audio.ondergrens` bij de bron). Een
+catalogus van "de nieuwste honderd" kan een stukje terugschuiven, bijvoorbeeld
+als een vergadering van vandaag nog niet is geweest. Wat daardoor alsnog
+opduikt, is achterstand en gaat niet in de wachtrij.
+
 **Lange opnames** gaan in delen van 45 minuten naar de worker (met een paar
 seconden overlap; het laatste deel neemt de rest mee, dus pas vanaf zo'n 56
 minuten). Een vergadering van ruim drie uur in één keer liet de worker crashen.
 Elk deel wordt meteen bewaard (`transcript_delen`), zodat het na een storing
 verdergaat bij het volgende deel; daarna worden de delen één transcript met
-tijden vanaf het begin. Een stem zonder profiel geldt alleen binnen zijn deel;
+tijden vanaf het begin. Een sprekersbeurt die in de overlap begint en daarna
+doorloopt, blijft staan; de woorden die letterlijk al aan het eind van het
+vorige deel stonden, gaan eruit. Een stem zonder profiel geldt alleen binnen zijn deel;
 een stemprofiel geldt in de hele opname. De lengte van een deel is in te stellen
 met `AUDIO_DEEL_S` (seconden).
 

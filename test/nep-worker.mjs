@@ -84,7 +84,8 @@ export function nepWorker({ token = TOKEN } = {}) {
 
 // Een podcastfeed met `n` afleveringen, nieuwste eerst; de audio staat ernaast.
 export function nepPodcast({ n = 5 } = {}) {
-  const staat = { downloads: 0 };
+  // `extra`: losse afleveringen { guid, dagen } die later in de feed opduiken.
+  const staat = { downloads: 0, extra: [] };
   const server = http.createServer((req, res) => {
     const basis = `http://127.0.0.1:${server.address().port}`;
     if (req.url === '/feed.xml') {
@@ -93,7 +94,8 @@ export function nepPodcast({ n = 5 } = {}) {
         return `<item><title>Aflevering ${n - i}: Drachten en de N31</title><guid isPermaLink="false">afl-${n - i}</guid><pubDate>${datum}</pubDate>
           <link>${basis}/afl/${n - i}</link><itunes:duration>01:10</itunes:duration>
           <enclosure url="${basis}/audio/${n - i}.wav" type="audio/x-wav" length="1"/></item>`;
-      }).join('');
+      }).join('') + staat.extra.map((e) => `<item><title>${e.guid}</title><guid isPermaLink="false">${e.guid}</guid>
+          <pubDate>${new Date(Date.now() - e.dagen * 86400000).toUTCString()}</pubDate><enclosure url="${basis}/audio/${e.guid}.wav" type="audio/x-wav" length="1"/></item>`).join('');
       res.writeHead(200, { 'Content-Type': 'application/rss+xml' });
       return res.end(`<?xml version="1.0"?><rss xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"><channel><title>De Regiopodcast</title><itunes:image href="${basis}/hoes.jpg"/>${items}</channel></rss>`);
     }

@@ -20,6 +20,7 @@ import { stukUrl, downloadUrl, minDatum } from './kamer/db.mjs';
 import { stukTitel } from './kamer/weergave.mjs';
 import { lokaleDatum } from './datum.mjs';
 import { tekstBlokken, begrens, MAX_DOCUMENT } from './document.mjs';
+import { samenvattingAanbieder } from './samenvatting.mjs';
 
 export const FEED_DAGEN = 30;
 const MAX_LIJST = 500;
@@ -543,6 +544,10 @@ function audioDetail(k, gebruiker, id) {
     eersteGezien: a.eersteGezien,
     getranscribeerd: a.transcript && a.bijgewerkt ? new Date(a.bijgewerkt * 1000).toISOString() : null,
     verwerking: { status: a.status, stap: a.stap, fout: a.fout, sprekerFout: a.sprekerFout },
+    // De AI-samenvatting (src/vergadering.mjs), of `volgt` zolang die gemaakt wordt.
+    samenvatting: a.samenvatting?.tekst
+      ? { tekst: a.samenvatting.tekst, model: a.samenvatting.model || null, tijd: a.samenvatting.tijd || null }
+      : (a.transcript && (a.samenvatting?.pogingen || 0) < 3 && samenvattingAanbieder(k.opslag).klaar ? { volgt: true } : null),
     youtube: a.vorm === 'youtube',
     speler,
     meta: [

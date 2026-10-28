@@ -269,6 +269,13 @@ test('verwerking: van podcastfeed tot transcript, namen, stemmen en telefoonnumm
     assert.equal(adb.gezien(bron.id).size, 5);
     assert.equal(opslag.status.bronnen[bron.id].nulmeting, true);
     assert.deepEqual((await verwerking.synchroniseer(bron)).nieuw, 0, 'niets dubbel');
+    // Duikt er later iets ouders op dan de eerste import, dan is dat achterstand.
+    feed.staat.extra.push({ guid: 'oud-archief', dagen: 30 }, { guid: 'net-binnen', dagen: 0.5 });
+    assert.deepEqual((await verwerking.synchroniseer(bron)).nieuw, 1, 'alleen wat niet ouder is dan de eerste import');
+    assert.ok(!adb.lijst({ bron: bron.id }).some((a) => a.titel === 'oud-archief'));
+    const netBinnen = adb.lijst({ bron: bron.id }).find((a) => a.titel === 'net-binnen');
+    assert.ok(netBinnen);
+    adb.db.prepare('DELETE FROM afleveringen WHERE id = ?').run(netBinnen.id);
     const [nieuwste, tweede] = verwerking.volgende().map((v) => adb.aflevering(v.id));
     assert.equal(nieuwste.titel, 'Aflevering 5: Drachten en de N31');
 
@@ -391,6 +398,19 @@ test('lange opnames in delen naar de worker, met tussenstand', metAlles, async (
     [0, 10, 'SPEAKER_0', null], [10, 2702, 'SPEAKER_1', X], [2703, 2720, 'SPEAKER_100', null], [2720, 2730, 'SPEAKER_101', X],
   ], 'tijden vanaf het begin; een stem zonder profiel per deel apart, een profiel overal hetzelfde');
   assert.equal(samen.language, 'nl');
+  // Een lange beurt die in de overlap begint en daarna doorloopt, blijft staan:
+  // met woordtijden zonder de dubbele woorden, zonder woordtijden heel.
+  const beurt = (words) => voegDelenSamen([
+    { start: 0, segments: [{ start: 2690, end: 2702, text: ' Dat is het. Voorzitter,' }] },
+    { start: 2700, segments: [{ start: 0.5, end: 320, text: ' Voorzitter, dank u wel. Lang verhaal.', ...(words ? { words: [{ start: 0.5, end: 1.6, word: ' Voorzitter,' }, { start: 2.2, end: 2.6, word: ' dank' }, { start: 2.6, end: 3, word: ' u' }, { start: 3, end: 3.3, word: ' wel.' }, { start: 4, end: 320, word: ' Lang verhaal.' }] } : {}) }] },
+  ]);
+  assert.deepEqual(beurt(true).segments.map((s) => [s.start, s.text, s.words]), [[2690, ' Dat is het. Voorzitter,', undefined], [2702.2, 'dank u wel. Lang verhaal.', undefined]]);
+  assert.deepEqual(beurt(false).segments.map((s) => [s.start, s.end, s.text]), [[2690, 2702, ' Dat is het. Voorzitter,'], [2700.5, 3020, ' Voorzitter, dank u wel. Lang verhaal.']], 'één woord gelijk: te weinig om op te vertrouwen');
+  const dubbel = voegDelenSamen([
+    { start: 0, segments: [{ start: 2690, end: 2703, text: ' Dat is het. Dank u wel, voorzitter.' }] },
+    { start: 2700, segments: [{ start: 1, end: 300, text: ' dank u wel voorzitter. Dan de begroting.' }] },
+  ]);
+  assert.equal(dubbel.segments[1].text, 'Dan de begroting.', 'zonder woordtijden: de herhaalde woorden uit de overlap eruit');
 
   // Een opname van twee seconden met delen van één seconde: twee keer naar de worker.
   process.env.AUDIO_DEEL_S = '1';
@@ -411,7 +431,9 @@ test('lange opnames in delen naar de worker, met tussenstand', metAlles, async (
     assert.equal(worker.staat.laatsteUpload.opname, `regiochecker:${a.id}-2`);
     assert.equal(a.status, 'getranscribeerd');
     assert.deepEqual(a.transcriptDelen, [], 'de tussenstand is opgeruimd');
-    assert.deepEqual(a.segmenten.map((s) => s.speaker), ['Voorzitter Bos', 'Anke Postma', 'Spreker 1', 'Spreker 2']);
+    // De nagebootste worker geeft voor elk deel 70 seconden tekst, ook voor één seconde audio:
+    // van deel 2 blijft alleen het segment staan dat na het einde van deel 1 doorloopt.
+    assert.deepEqual(a.segmenten.map((s) => [s.speaker, s.start]), [['Voorzitter Bos', 2], ['Anke Postma', 15], ['Spreker 1', 39], ['Spreker 2', 45], ['Spreker 3', 46]]);
     assert.ok(a.duur > 1.5 && a.duur < 2.5, 'de lengte van de hele opname');
 
     // Na een storing: verder bij het deel dat nog ontbreekt.
@@ -424,6 +446,97 @@ test('lange opnames in delen naar de worker, met tussenstand', metAlles, async (
     delete process.env.AUDIO_DEEL_S;
     worker.server.close();
     feed.server.close();
+  }
+});
+
+test('AI-samenvatting: de hele opname in hooguit 100 woorden, als laatste stap', metSqlite, async () => {
+  const { beperkWoorden } = await import('../src/vergadering.mjs');
+  const zin = (n) => Array.from({ length: n }, (_, i) => `woord${i + 1}`).join(' ');
+  assert.equal(beperkWoorden(`${zin(70)}. ${zin(50)}.`), `${zin(70)}.`, 'op een zinsgrens');
+  assert.equal(beperkWoorden(zin(150)), `${zin(100)}…`);
+  assert.equal(beperkWoorden('  Kort.  '), 'Kort.');
+
+  // Een nagebootste Ollama: aantekeningen per deel, of de samenvatting (te lang).
+  const chats = [];
+  let kapot = false;
+  const ollama = http.createServer(async (req, res) => {
+    let ruw = '';
+    for await (const stuk of req) ruw += stuk;
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/api/show') return res.end(JSON.stringify({ capabilities: ['completion'] }));
+    const body = JSON.parse(ruw);
+    chats.push(body);
+    if (kapot) return res.end(JSON.stringify({ message: { content: 'geen json' }, done_reason: 'stop' }));
+    const deel = Boolean(body.format?.properties?.punten);
+    const inhoud = deel ? { punten: [`Punt uit deel ${chats.length}.`] } : { samenvatting: `De raad besprak de huisartsenpost in Drachten. ${zin(120)}.` };
+    return res.end(JSON.stringify({ model: body.model, message: { content: JSON.stringify(inhoud) }, done_reason: 'stop' }));
+  });
+  await new Promise((klaar) => ollama.listen(0, '127.0.0.1', klaar));
+  const worker = await nepWorker();
+  // De nagebootste Ollama staat op deze machine, niet in het tailnet.
+  const proxy = process.env.REGIOCHECKER_TAILNET_PROXY;
+  delete process.env.REGIOCHECKER_TAILNET_PROXY;
+  try {
+    const { opslag, adb, fdb, verwerking } = await opzet();
+    opslag.instellingen.audio = { ...opslag.instellingen.audio, workerUrl: worker.url, workerToken: TOKEN, viaTailnet: false };
+    opslag.instellingen.samenvattingVia = 'ollama';
+    opslag.instellingen.ollama = { url: `http://127.0.0.1:${ollama.address().port}`, model: 'qwen3:14b', maxContext: 4096 };
+    const bron = { id: 'raad', naam: 'Smallingerland · Raad', soort: 'raadsvergadering', bereik: 'regio', regio: 'smallingerland', type: 'audio', url: 'https://smallingerland.raadsinformatie.nl/', audio: { kind: 'notubiz', prioriteit: 0 } };
+    opslag.bronnen.push(bron);
+    const voeg = (id, segmenten) => {
+      adb.voegToe(bron, { id, extern: `ntb:1/${id.slice(0, 4)}`, vorm: 'vergadering', url: `https://x/${id}`, titel: 'Raadsvergadering 23 oktober', gepubliceerdOp: Date.now() / 1000 - 86400 });
+      adb.werkBij(id, { transcript: segmenten.map((t) => t.text).join(' '), segmenten, entiteiten: [], status: 'klaar', eersteGezien: new Date().toISOString() });
+    };
+    const KORT = 'a'.repeat(32);
+    const LANG = 'b'.repeat(32);
+    voeg(KORT, [{ start: 2, end: 14, text: 'Dan gaan we naar agendapunt 6.', speaker: 'Voorzitter Bos' }]);
+    // Te lang voor één keer in het (kleine) contextvenster: in delen.
+    voeg(LANG, Array.from({ length: 120 }, (_, i) => ({ start: i * 30, end: i * 30 + 29, text: `Zin ${i} over de begroting van de gemeente en de plannen voor het komende jaar.`, speaker: 'Spreker 1' })));
+    assert.equal(verwerking.volgende().length, 2, 'klaar, maar nog zonder samenvatting');
+
+    // De GPU is bezig (Plaud): wachten.
+    worker.staat.gpuBezig = true;
+    await verwerking.verwerkEen();
+    assert.equal(chats.length, 0);
+    assert.ok([LANG, KORT].some((id) => /wacht op de gedeelde GPU/.test(adb.aflevering(id).stap)));
+    worker.staat.gpuBezig = false;
+    adb.db.prepare('UPDATE afleveringen SET opnieuw_op = 0').run();
+
+    while (verwerking.volgende().length) await verwerking.verwerkEen();
+    const kort = adb.aflevering(KORT);
+    assert.equal(kort.status, 'klaar');
+    assert.equal(kort.samenvatting.tekst.split(' ').length <= 100, true, 'hooguit 100 woorden');
+    assert.match(kort.samenvatting.tekst, /^De raad besprak de huisartsenpost in Drachten\./);
+    assert.equal(kort.samenvatting.model, 'qwen3:14b');
+    const lang = adb.aflevering(LANG);
+    const delen = chats.filter((c) => c.format?.properties?.punten);
+    assert.ok(delen.length >= 2, 'een lang transcript eerst in delen');
+    assert.ok(chats.some((c) => !c.format?.properties?.punten && /^Aantekeningen per deel/m.test(c.messages[1].content)), 'daarna de aantekeningen tot het geheel');
+    assert.ok(lang.samenvatting.tekst);
+    assert.ok(chats.every((c) => c.keep_alive === 0), 'het model gaat meteen uit het geheugen');
+    assert.match(chats[0].messages[0].content, /hooguit|Noteer de belangrijkste punten/);
+
+    // In het leespaneel, boven het transcript.
+    const jan = herkenGebruiker(opslag, { login: 'jan', email: 'jan@example.nl' });
+    const r = await roep({ opslag, kdb: null, fdb, adb }, jan, 'GET', `/api/stuk?id=a:${KORT}`);
+    assert.deepEqual([r.data.samenvatting.tekst, r.data.samenvatting.model], [kort.samenvatting.tekst, 'qwen3:14b']);
+
+    // Lukt het niet, dan blijft de aflevering klaar; na drie keer niet meer proberen.
+    kapot = true;
+    adb.werkBij(KORT, { samenvatting: null });
+    for (let i = 0; i < 3; i++) {
+      adb.db.prepare('UPDATE afleveringen SET opnieuw_op = 0').run();
+      await verwerking.verwerkEen();
+    }
+    const mislukt = adb.aflevering(KORT);
+    assert.deepEqual([mislukt.status, mislukt.samenvatting.pogingen, mislukt.stap], ['klaar', 3, 'Klaar · geen samenvatting']);
+    adb.db.prepare('UPDATE afleveringen SET opnieuw_op = 0').run();
+    assert.equal(verwerking.volgende().length, 0);
+    assert.equal((await roep({ opslag, kdb: null, fdb, adb }, jan, 'GET', `/api/stuk?id=a:${KORT}`)).data.samenvatting, null);
+  } finally {
+    if (proxy) process.env.REGIOCHECKER_TAILNET_PROXY = proxy;
+    ollama.close();
+    worker.server.close();
   }
 });
 

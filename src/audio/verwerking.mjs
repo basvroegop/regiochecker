@@ -26,6 +26,8 @@ import { mediaVoor } from './vergaderingen.mjs';
 import { downloadAudio, gooiAudioWeg, audioDuur, knipAudio } from './ophalen.mjs';
 import { delen, splits, plaatsNamen } from './namen.mjs';
 import { vindNummers, nummerlijst, contextVenster, namenInBuurt, controleerDuiding } from './telefoon.mjs';
+import { vatKortSamen } from '../vergadering.mjs';
+import { samenvattingAanbieder } from '../samenvatting.mjs';
 
 const BRON_INTERVAL_MS = 60 * 60_000;
 const DAG_MS = 86400_000;
@@ -42,9 +44,25 @@ const deelSeconden = () => Number(process.env.AUDIO_DEEL_S) || 45 * 60;
 const OVERLAP_S = 4;
 
 // De delen weer tot één transcript, met tijden vanaf het begin van de opname.
-// Wat in de overlap al in het vorige deel stond, gaat eruit. Een stem zonder
-// profiel ("SPEAKER_00") geldt alleen binnen zijn deel, dus die krijgt per
-// deel een eigen nummer; een stemprofiel (speaker_id) geldt overal.
+// Wat in de overlap al in het vorige deel stond, gaat eruit: een segment dat
+// daar helemaal in valt. Loopt een segment (een hele sprekersbeurt, soms
+// minuten) daarna door, dan blijft het staan; met woordtijden zonder de
+// dubbele woorden, anders heel (een paar woorden dubbel is beter dan een beurt
+// kwijt). Een stem zonder profiel ("SPEAKER_00") geldt alleen binnen zijn
+// deel, dus die krijgt per deel een eigen nummer; een stemprofiel
+// (speaker_id) geldt overal.
+// Zonder woordtijden: de woorden waarmee een segment begint en waarmee het
+// vorige eindigde (de overlap), maar één keer. Pas vanaf twee woorden.
+const normaal = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+function zonderHerhaling(vorige, tekst) {
+  const a = vorige.split(/\s+/).filter(Boolean).slice(-20).map(normaal);
+  const b = tekst.trim().split(/\s+/).filter(Boolean);
+  for (let k = Math.min(a.length, b.length - 1, 20); k >= 2; k--) {
+    if (a.slice(-k).join(' ') === b.slice(0, k).map(normaal).join(' ')) return b.slice(k).join(' ');
+  }
+  return tekst;
+}
+
 export function voegDelenSamen(delen) {
   const segments = [];
   let eind = 0;
@@ -52,9 +70,17 @@ export function voegDelenSamen(delen) {
     for (const s of d.segments || []) {
       const start = Number(s.start || 0) + d.start;
       const stop = Number(s.end || 0) + d.start;
-      if (i && start < eind - 0.25) continue;
+      let seg = { ...s, start, end: stop };
+      if (i && start < eind - 0.25) {
+        if (stop <= eind + 0.25) continue;
+        const woorden = Array.isArray(s.words) ? s.words.filter((w) => Number(w.start || 0) + d.start >= eind - 0.1) : null;
+        if (woorden?.length) seg = { ...seg, start: Number(woorden[0].start) + d.start, text: woorden.map((w) => w.word ?? w.text ?? '').join('').trim() };
+        else seg.text = zonderHerhaling(segments.at(-1)?.text || '', String(s.text || ''));
+      }
+      delete seg.words;
       const lokaal = /^SPEAKER_(\d+)$/.exec(s.speaker || '');
-      segments.push({ ...s, start, end: stop, ...(lokaal ? { speaker: `SPEAKER_${i * 100 + Number(lokaal[1])}` } : {}) });
+      if (lokaal) seg.speaker = `SPEAKER_${i * 100 + Number(lokaal[1])}`;
+      segments.push(seg);
       eind = Math.max(eind, stop);
     }
   });
@@ -144,7 +170,16 @@ export class Verwerking {
       const vers = items.filter((i) => !gezien.has(i.extern));
       const eersteKeer = !bron.audio.geinitialiseerd;
       const limiet = Number(bron.audio.eersteImport ?? 3);
-      const gekozen = eersteKeer && limiet ? vers.slice(0, limiet) : vers;
+      // Na de eerste import is "nieuw" alleen wat niet ouder is dan de oudste
+      // aflevering van toen. Iets ouders dat later opduikt (een catalogus van
+      // de nieuwste honderd die een stukje terugschuift, oktober 2026), is
+      // achterstand. Een bron van vóór deze regel: de aanmaakdatum min 30 dagen.
+      const data = items.map((i) => i.gepubliceerdOp).filter(Boolean);
+      if (eersteKeer) bron.audio.ondergrens = data.length ? Math.min(...data) : null;
+      const ondergrens = bron.audio.ondergrens ?? (Date.parse(bron.aangemaakt || '') / 1000 - 30 * 86400 || null);
+      const gekozen = eersteKeer
+        ? (limiet ? vers.slice(0, limiet) : vers)
+        : vers.filter((i) => !ondergrens || !i.gepubliceerdOp || i.gepubliceerdOp >= ondergrens);
       let nieuw = 0;
       for (const i of gekozen) {
         // De eerste import is een nulmeting: die afleveringen staan in de feed
@@ -195,11 +230,17 @@ export class Verwerking {
     const volgorde = new Map(this.bronVolgorde().map((b, i) => [b.id, i]));
     const rijen = this.adb.wachtrij(nu).filter((r) => volgorde.has(r.bron));
     const transcriptWerk = new Set(rijen.filter((r) => r.zonder_transcript || r.sprekers_gevraagd).map((r) => r.bron));
-    const kandidaten = rijen.filter((r) => ['wacht', 'getranscribeerd'].includes(r.status) && r.klaarVoor
-      && ((r.zonder_transcript || r.sprekers_gevraagd) || (r.zonder_entiteiten && !transcriptWerk.has(r.bron))));
-    const transcriptEerst = (r) => (r.zonder_transcript || r.sprekers_gevraagd ? 0 : 1);
+    // Drie fasen per aflevering: transcript, namen, AI-samenvatting. Binnen een
+    // bron eerst alle transcripten, dan de rest.
+    const samenvatten = samenvattingAanbieder(this.opslag).klaar;
+    const fase = (r) => (r.zonder_transcript || r.sprekers_gevraagd ? 0 : r.zonder_entiteiten ? 1 : 2);
+    const kandidaten = rijen.filter((r) => ['wacht', 'getranscribeerd', 'klaar'].includes(r.status) && r.klaarVoor
+      && (fase(r) === 0
+        || (fase(r) === 1 && !transcriptWerk.has(r.bron))
+        // Na een herstart midden in de samenvatting staat hij op "getranscribeerd".
+        || (fase(r) === 2 && !transcriptWerk.has(r.bron) && ((samenvatten && r.zonder_samenvatting) || r.status === 'getranscribeerd'))));
     kandidaten.sort((a, b) => volgorde.get(a.bron) - volgorde.get(b.bron)
-      || transcriptEerst(a) - transcriptEerst(b)
+      || fase(a) - fase(b)
       || Number(b.met_stemmen) - Number(a.met_stemmen)
       || b.moment - a.moment);
     return kandidaten;
@@ -239,7 +280,7 @@ export class Verwerking {
         werk({ status: 'wacht', stap: `Gepauzeerd · ${i} van ${n} delen klaar` });
         return null;
       }
-      werk({ status: 'transcriberen', stap: `${wat} · deel ${i + 1} van ${n}` });
+      werk({ status: 'transcriberen', stap: `${wat} · deel ${i + 1} van ${n}`, fout: null });
       const start = i * deel;
       const deelPad = path.join(path.dirname(pad), `deel-${i + 1}.mp3`);
       try {
@@ -292,7 +333,7 @@ export class Verwerking {
         if (!r) return;
         r.duration = lengte;
       } else {
-        werk({ status: 'transcriberen', stap: af.sprekersGevraagd ? 'Stemmen herkennen · Whisper en stemherkenning' : 'Transcriberen met Whisper · wacht zo nodig op de gedeelde GPU' });
+        werk({ status: 'transcriberen', stap: af.sprekersGevraagd ? 'Stemmen herkennen · Whisper en stemherkenning' : 'Transcriberen met Whisper · wacht zo nodig op de gedeelde GPU', fout: null });
         r = await w.transcribeer(pad, af.id);
       }
       const tekst = String(r.text || '').trim();
@@ -301,7 +342,7 @@ export class Verwerking {
       const verder = this.adb.aflevering(af.id);
       werk({
         transcript: tekst, segmenten, taal: r.language || null, duur: r.duration ?? verder.duur, sprekerFout: r.diarization_error || null,
-        sprekersGevraagd: false, entiteiten: null, entiteitDelen: null, transcriptDelen: null, pogingen: 0,
+        sprekersGevraagd: false, entiteiten: null, entiteitDelen: null, transcriptDelen: null, samenvatting: null, pogingen: 0,
         // De eerste import (nulmeting) op de eigen datum, de rest op nu.
         eersteGezien: verder.eersteGezien || (verder.nulmeting && verder.gepubliceerd ? verder.gepubliceerd : new Date().toISOString()),
       });
@@ -312,6 +353,11 @@ export class Verwerking {
       }
       werk({ status: 'getranscribeerd', stap: 'Transcript klaar · namen volgen', fout: null });
       this.bijBeschikbaar?.(this.adb.aflevering(af.id));
+      return;
+    }
+
+    if (af.entiteiten) {
+      await this.samenvat(af, w, werk);
       return;
     }
 
@@ -333,6 +379,45 @@ export class Verwerking {
       werk({ entiteitDelen: klaar });
     }
     werk({ entiteiten: plaatsNamen(klaar.flat(), af.segmenten), status: 'klaar', stap: 'Klaar', fout: null, pogingen: 0 });
+    // De samenvatting volgt als aparte stap in de wachtrij.
+    this.wek();
+  }
+
+  // De AI-samenvatting van de hele opname (hooguit 100 woorden), door de
+  // aanbieder van Instellingen › Samenvatting. Ollama draait op dezelfde
+  // machine als de worker, dus alleen als de GPU vrij is, en het model gaat
+  // daarna meteen uit het geheugen. Een mislukte samenvatting laat de
+  // aflevering zelf nooit mislukken: drie echte pogingen, daarna niet meer.
+  async samenvat(af, w, werk) {
+    const aanbieder = samenvattingAanbieder(this.opslag);
+    if (!aanbieder.klaar) {
+      werk({ status: 'klaar', stap: 'Klaar' });
+      return;
+    }
+    if (aanbieder.via === 'ollama' && await w.gpuBezig()) {
+      werk({ status: 'klaar', stap: 'Klaar · samenvatting wacht op de gedeelde GPU', opnieuwOp: Date.now() / 1000 + 30 });
+      return;
+    }
+    const vorige = af.samenvatting || {};
+    werk({ status: 'analyseren', stap: 'AI-samenvatting maken', fout: null });
+    const bron = this.bronnen().find((b) => b.id === af.bron);
+    try {
+      const s = await vatKortSamen({ opslag: this.opslag, aflevering: af, bronNaam: bron?.naam, voortgang: (stap) => werk({ stap }) });
+      werk(s
+        ? { status: 'klaar', stap: 'Klaar', samenvatting: { tekst: s.tekst, model: s.model, tijd: new Date().toISOString() } }
+        : { status: 'klaar', stap: 'Klaar' });
+    } catch (fout) {
+      const storing = tijdelijkeFout(fout) || /niet bereikbaar|reageert niet|geen antwoord/i.test(fout.message);
+      const pogingen = (vorige.pogingen || 0) + (storing ? 0 : 1);
+      const storingen = (vorige.storingen || 0) + (storing ? 1 : 0);
+      const wacht = storing ? Math.min(1800, 60 * 2 ** Math.min(storingen - 1, 5)) : 60 * pogingen;
+      werk({
+        status: 'klaar',
+        stap: pogingen >= 3 ? 'Klaar · geen samenvatting' : `Klaar · samenvatting over ${Math.max(1, Math.round(wacht / 60))} min opnieuw`,
+        samenvatting: { fout: String(fout.message).slice(0, 500), pogingen, storingen },
+        opnieuwOp: Date.now() / 1000 + wacht,
+      });
+    }
   }
 
   // Lukt een deel niet (een 500 van de worker: het model kreeg er geen geldige

@@ -45,6 +45,7 @@ const SCHEMA = `
     entiteiten TEXT,
     entiteit_delen TEXT,
     transcript_delen TEXT,
+    samenvatting TEXT,
     sprekers_gevraagd INTEGER NOT NULL DEFAULT 0,
     spreker_fout TEXT,
     nulmeting INTEGER NOT NULL DEFAULT 0,
@@ -129,6 +130,7 @@ function aflevering(r, { licht = false } = {}) {
       entiteiten: json(r.entiteiten, null),
       entiteitDelen: json(r.entiteit_delen, []),
       transcriptDelen: json(r.transcript_delen, []),
+      samenvatting: json(r.samenvatting, null),
     }),
   };
 }
@@ -140,10 +142,10 @@ const LICHT = `id, bron, extern, soort, vorm, titel, url, media_url, auteur, gep
 const VELDEN = {
   titel: 'titel', url: 'url', mediaUrl: 'media_url', auteur: 'auteur', gepubliceerdTekst: 'gepubliceerd', gepubliceerdOp: 'gepubliceerd_op',
   duur: 'duur', afbeelding: 'afbeelding', status: 'status', stap: 'stap', pogingen: 'pogingen', opnieuwOp: 'opnieuw_op', fout: 'fout',
-  audioPad: 'audio_pad', transcript: 'transcript', segmenten: 'segmenten', taal: 'taal', entiteiten: 'entiteiten', entiteitDelen: 'entiteit_delen', transcriptDelen: 'transcript_delen',
+  audioPad: 'audio_pad', transcript: 'transcript', segmenten: 'segmenten', taal: 'taal', entiteiten: 'entiteiten', entiteitDelen: 'entiteit_delen', transcriptDelen: 'transcript_delen', samenvatting: 'samenvatting',
   sprekersGevraagd: 'sprekers_gevraagd', sprekerFout: 'spreker_fout', eersteGezien: 'eerst_gezien', nulmeting: 'nulmeting',
 };
-const ALS_JSON = new Set(['segmenten', 'entiteiten', 'entiteitDelen', 'transcriptDelen']);
+const ALS_JSON = new Set(['segmenten', 'entiteiten', 'entiteitDelen', 'transcriptDelen', 'samenvatting']);
 
 export class AudioDb {
   constructor(db) {
@@ -156,6 +158,7 @@ export class AudioDb {
     // Later bijgekomen kolommen.
     const nu = db.prepare("SELECT name FROM pragma_table_info('afleveringen')").all().map((r) => r.name);
     if (!nu.includes('transcript_delen')) db.exec('ALTER TABLE afleveringen ADD COLUMN transcript_delen TEXT');
+    if (!nu.includes('samenvatting')) db.exec('ALTER TABLE afleveringen ADD COLUMN samenvatting TEXT');
     // Na een herstart: wat bezig was, gaat terug in de wachtrij.
     db.prepare("UPDATE afleveringen SET status = CASE WHEN transcript IS NULL OR sprekers_gevraagd = 1 THEN 'wacht' ELSE 'getranscribeerd' END, stap = 'Hervatten na herstart' WHERE status IN ('downloaden', 'transcriberen', 'analyseren')").run();
     db.prepare("UPDATE telefoon_context SET status = 'wacht' WHERE status = 'bezig'").run();
@@ -221,9 +224,13 @@ export class AudioDb {
   // Kandidaten voor de wachtrij, zonder transcript (licht). De volgorde
   // bepaalt src/audio/verwerking.mjs, want die hangt van de bronnen af.
   wachtrij(nu = Date.now() / 1000) {
+    // Een samenvatting ontbreekt nog, of mislukte minder dan drie keer.
+    const zonderSamenvatting = "(samenvatting IS NULL OR (json_extract(samenvatting, '$.tekst') IS NULL AND COALESCE(json_extract(samenvatting, '$.pogingen'), 0) < 3))";
     return this.db.prepare(`SELECT id, bron, status, transcript IS NULL AS zonder_transcript, sprekers_gevraagd, entiteiten IS NULL AS zonder_entiteiten,
+        ${zonderSamenvatting} AS zonder_samenvatting,
         segmenten LIKE '%speaker_id%' AS met_stemmen, COALESCE(gepubliceerd_op, aangemaakt) AS moment, opnieuw_op
-      FROM afleveringen WHERE status IN ('wacht', 'getranscribeerd', 'downloaden', 'transcriberen', 'analyseren')`).all()
+      FROM afleveringen WHERE status IN ('wacht', 'getranscribeerd', 'downloaden', 'transcriberen', 'analyseren')
+        OR (status = 'klaar' AND transcript IS NOT NULL AND ${zonderSamenvatting})`).all()
       .map((r) => ({ ...r, klaarVoor: r.opnieuw_op <= nu }));
   }
 

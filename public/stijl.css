@@ -204,6 +204,9 @@ input:focus-visible + .vakje { outline: 2px solid var(--color-accent); outline-o
 .document-tekst li::marker { color: var(--color-accent); }
 .document-deel { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--color-divider); font: 800 12px var(--font-heading); text-transform: uppercase; letter-spacing: .04em; color: var(--color-neutral-700); }
 .document-laden { font-size: 13px; color: var(--color-neutral-700); }
+.ai-samenvatting { display: flex; flex-direction: column; gap: 8px; border-top: 2px solid var(--color-divider); padding-top: 16px; }
+.ai-samenvatting p { margin: 0; max-width: 72ch; font-size: 15px; line-height: 1.6; }
+.ai-samenvatting .toelichting { font-size: 13px; color: var(--color-neutral-700); }
 .document .document-weg { padding: 10px 12px; border-left: 3px solid var(--color-accent); background: color-mix(in srgb, var(--color-accent) 7%, transparent); font-size: 14px; white-space: normal; overflow-wrap: anywhere; }
 .rij-tags .weg { font-size: 11px; font-weight: 700; color: var(--color-accent-700); }
 .rij[aria-selected="true"] .rij-tags .weg { color: var(--color-bg); }

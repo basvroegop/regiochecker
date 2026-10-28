@@ -130,7 +130,7 @@ export function ollamaJson(opties) {
   return eenTegelijk(() => chat(opties));
 }
 
-async function chat({ url, model, systeem, vraag: vraagTekst, schema, context }) {
+async function chat({ url, model, systeem, vraag: vraagTekst, schema, context, vrijgeven = false }) {
   if (!model) throw new Error('Kies in de instellingen een Ollama-model');
   const denken = await kanDenken(url, model);
   const antwoord = await vraag(url, '/api/chat', {
@@ -140,6 +140,8 @@ async function chat({ url, model, systeem, vraag: vraagTekst, schema, context })
       stream: false,
       ...(denken ? { think: false } : {}),
       format: schema,
+      // Op een GPU die ook Whisper draait: het model meteen weer uit het geheugen.
+      ...(vrijgeven ? { keep_alive: 0 } : {}),
       messages: [
         { role: 'system', content: systeem },
         { role: 'user', content: vraagTekst },

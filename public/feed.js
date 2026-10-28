@@ -7,7 +7,7 @@ import { $, $$, esc, vraag, icoon, toast, bezig, dagKop, uurMinuut, moment, tijd
 import { app, zetBewaardTeller, laadIk } from './app.js';
 import { archiefFilters, archiefBalkHtml, koppelArchiefBalk, laadBronnen } from './archief.js';
 
-const STATUSNAAM = { wacht: 'in de wachtrij', downloaden: 'wordt gedownload', transcriberen: 'wordt getranscribeerd', getranscribeerd: 'namen volgen', analyseren: 'namen volgen', mislukt: 'mislukt' };
+const STATUSNAAM = { wacht: 'in de wachtrij', downloaden: 'wordt gedownload', transcriberen: 'wordt getranscribeerd', getranscribeerd: 'namen volgen', analyseren: 'wordt geanalyseerd', mislukt: 'mislukt' };
 
 const GROEPEN = ['alles', 'nieuws', 'ingekomen', 'woo', 'kamerstuk', 'audio'];
 const GROEPNAAM = { alles: 'Alles', nieuws: 'Gemeentenieuws', ingekomen: 'Ingekomen', woo: 'Woo', kamerstuk: 'Kamerstukken', audio: 'Audio & video' };
@@ -498,6 +498,17 @@ function tabInhoud(d) {
   return transcriptHtml(d);
 }
 
+// De hele opname in hooguit 100 woorden, boven het transcript.
+function samenvattingHtml(d) {
+  const s = d.samenvatting;
+  if (!s) return '';
+  const termen = (d.treffers || []).map((t) => t.term);
+  const kop = `<div class="document-kop"><span>AI-samenvatting</span>${s.model ? `<span class="klein zacht">${esc(s.model)}</span>` : ''}</div>`;
+  if (s.volgt) return `<div class="ai-samenvatting">${kop}<p class="toelichting">Volgt zodra de namen gezocht zijn en de gedeelde GPU vrij is.</p></div>`;
+  return `<div class="ai-samenvatting">${kop}<p>${markeerTermen(s.tekst, termen)}</p>
+    <p class="toelichting">Automatisch gemaakt uit het transcript, dat zelf ook verkeerd verstane woorden kan bevatten. Controleer het voor publicatie.</p></div>`;
+}
+
 function audioPaneel(d) {
   const onbekend = (d.sprekers || []).filter((s) => !s.heeftNaam).length;
   const kicker = d.landelijk ? [d.soortNaam, 'landelijk', 'transcript'] : [d.regioNaam, d.soortNaam, d.soort === 'podcast' ? 'audio' : 'video'];
@@ -536,6 +547,7 @@ function audioPaneel(d) {
     ${speler}
     ${waaromHtml(d)}
     ${chips}
+    ${samenvattingHtml(d)}
     <div class="subtabs" role="tablist">
       <button class="subtab" role="tab" data-tab="transcript" aria-selected="${audioTab.tab === 'transcript'}">Transcript</button>
       <button class="subtab" role="tab" data-tab="sprekers" aria-selected="${audioTab.tab === 'sprekers'}">Sprekers${onbekend ? ` <span class="badge">${onbekend} zonder naam</span>` : ''}</button>
