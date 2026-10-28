@@ -300,8 +300,11 @@ async function notubizItems(portaal, org, gremia, ev) {
 async function notubizOntdek(bron) {
   const portaal = bron.url;
   if (!NOTUBIZ_PORTAAL.test(new URL(portaal).hostname)) throw new Error(ARCHIEF_HULP);
-  const org = ORGANISATIE.exec(await haalTekstOpenbaar(portaal))?.[1];
+  // De organisatie staat op het portaal; daarna onthouden, want het portaal zit
+  // sinds 28 oktober 2026 achter een Cloudflare-controle (de API niet).
+  const org = bron.audio.organisatie || ORGANISATIE.exec(await haalTekstOpenbaar(portaal))?.[1];
   if (!org) throw new Error('Dit raadsinformatieportaal noemt geen Notubiz-organisatie.');
+  bron.audio.organisatie = org;
   const gremia = new Map(((await notubiz(`organisations/${org}/gremia`)).gremia || []).map((g) => [g.id, String(g.title || '').trim()]));
   const limiet = Number(bron.audio.eersteImport ?? 3);
   const max = limiet ? Math.max(PAGINA, limiet) : 0;
@@ -342,6 +345,18 @@ async function notubizDomein(host) {
   return { kind: 'notubiz', url: portaal };
 }
 
+// De opname volgens de API (/media?event_id=…): een streamer en een streamnaam,
+// zoals rtmp://wowza1.notubiz.nl/nbvod/_definst_ en Gemeente/bestanden/Raad.mp4.
+export function notubizApiStream(data) {
+  for (const m of data?.media || []) {
+    if (!m.streamer || !m.stream_name) continue;
+    const stream = `${m.streamer.replace(/^rtmps?:\/\//, 'https://')}/${m.stream_name.split('/').map(encodeURIComponent).join('/')}/playlist.m3u8`;
+    if (!NOTUBIZ_MEDIA.test(new URL(stream).hostname.toLowerCase())) throw new Error('Deze vergadering verwijst naar een onbekende mediaserver.');
+    return stream;
+  }
+  return null;
+}
+
 export function notubizStream(pagina) {
   for (const [, blok] of String(pagina).matchAll(MEDIA_BLOK)) {
     const velden = Object.fromEntries([...blok.matchAll(MEDIA_VELD)].map((m) => [m[1], m[2]]));
@@ -357,16 +372,30 @@ async function notubizMedia(af) {
   const host = new URL(af.url).hostname.toLowerCase();
   const code = af.extern.slice(4);
   if (!NOTUBIZ_PORTAAL.test(host) || !NOTUBIZ_CODE.test(code)) throw new Error('Deze vergadering heeft geen herkenbare bronverwijzing meer.');
-  const pagina = await haalTekstOpenbaar(af.url);
-  const stream = notubizStream(pagina);
+  const vergadering = code.split('/')[1];
+  // De opname en de agenda uit de API. De vergaderpagina (wie wanneer sprak, de
+  // volledige titel) zit sinds 28 oktober 2026 achter een Cloudflare-controle:
+  // die alleen als hij lukt, en daar niet omheen.
+  let pagina = null;
+  try {
+    pagina = await haalTekstOpenbaar(af.url);
+  } catch { /* achter de controle */ }
+  let stream = null;
+  try {
+    stream = notubizApiStream(await notubiz('media', { event_id: vergadering }));
+  } catch (fout) {
+    if (/onbekende mediaserver/.test(fout.message)) throw fout;
+  }
+  if (!stream && pagina) stream = notubizStream(pagina);
+  if (!stream) throw geenOpname('Deze vergadering biedt geen opname aan.');
   // De speler kent de volledige naam van deze zaal of vergadering wél.
-  const titel = SPELER_TITEL.exec(pagina.slice(Math.max(0, pagina.indexOf('createPlayer'))))?.[1]?.trim();
+  const titel = pagina && SPELER_TITEL.exec(pagina.slice(Math.max(0, pagina.indexOf('createPlayer'))))?.[1]?.trim();
   const velden = titel ? { titel } : {};
   let agenda = [];
   try {
-    agenda = notubizAgenda((await notubiz(`events/meetings/${code.split('/')[1]}`)).meeting);
+    agenda = notubizAgenda((await notubiz(`events/meetings/${vergadering}`)).meeting);
   } catch { /* zonder agenda gaat het ook */ }
-  velden.platform = { agenda, sprekers: notubizSprekers(pagina) };
+  velden.platform = { agenda, sprekers: pagina ? notubizSprekers(pagina) : [] };
   // Een raadsopname is video van gigabytes: alleen het geluid van de stream halen.
   return { adres: stream, velden, stream: true };
 }

@@ -494,6 +494,32 @@ test('namen van het vergaderplatform gelden meteen voor de stemmen', metSqlite, 
   }
 });
 
+test('Notubiz: de opname en agenda uit de API als het portaal achter een Cloudflare-controle zit', async () => {
+  const { mediaVoor, notubizApiStream } = await import('../src/audio/vergaderingen.mjs');
+  const media = { media: [{ streamer: 'rtmp://wowza1.notubiz.nl/nbvod/_definst_', stream_name: 'Sudwestfryslan/bestanden/08.10.26 SudwestFryslan Raad.mp4', event_id: 88 }] };
+  assert.equal(notubizApiStream(media), 'https://wowza1.notubiz.nl/nbvod/_definst_/Sudwestfryslan/bestanden/08.10.26%20SudwestFryslan%20Raad.mp4/playlist.m3u8');
+  assert.equal(notubizApiStream({ media: [] }), null);
+  assert.throws(() => notubizApiStream({ media: [{ streamer: 'rtmp://elders.example/vod', stream_name: 'x.mp4' }] }), /onbekende mediaserver/);
+  const net = await nepInternet((u) => {
+    if (u.host === 'sudwestfryslan.raadsinformatie.nl') return { status: 403, body: '<title>Just a moment...</title>' };
+    if (u.host === 'api.notubiz.nl' && u.pathname === '/media') return u.searchParams.get('event_id') === '88' ? media : { media: [] };
+    if (u.host === 'api.notubiz.nl' && u.pathname === '/events/meetings/88') {
+      return { meeting: { agenda_items: [{ type_data: { title_prefix: '1', attributes: [{ id: 1, value: 'Iepening' }] }, start_offset: '13', end_offset: '88' }] } };
+    }
+  });
+  try {
+    const af = { extern: 'ntb:1512/88', url: 'https://sudwestfryslan.raadsinformatie.nl/vergadering/88', vorm: 'vergadering', gepubliceerd: new Date().toISOString() };
+    const m = await mediaVoor(af);
+    assert.equal(m.adres, notubizApiStream(media));
+    assert.deepEqual(m.velden.platform.agenda.map((a) => a.titel), ['1 Iepening']);
+    assert.deepEqual(m.velden.platform.sprekers, [], 'de sprekers staan alleen op de pagina');
+    // Zonder opname in de API en zonder pagina: (nog) geen opname.
+    await assert.rejects(mediaVoor({ ...af, extern: 'ntb:1512/89', url: 'https://sudwestfryslan.raadsinformatie.nl/vergadering/89' }), /geen opname/);
+  } finally {
+    net.herstel();
+  }
+});
+
 test('een vergadering die al klaar was, krijgt de sprekers van Notubiz alsnog', metSqlite, async () => {
   const { TRANSCRIPT } = await import('./nep-worker.mjs');
   const worker = await nepWorker();

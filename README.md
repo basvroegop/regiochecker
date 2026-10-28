@@ -331,8 +331,19 @@ seconden (via `api.notubiz.nl/events/meetings/<id>`) en de spreekmomenten onder
 "Nu aan het woord" op de vergaderpagina (`speaker_index` met `start_offset` en
 `end_offset`; de API geeft die niet; "Vries de, Jannewietske" wordt "Jannewietske
 de Vries"); babscast de tijdlijn (`TimelineEvents` van het soort Topic).
-GemeenteOplossingen geeft via de open API geen agenda met tijden. Ze worden
-opgehaald bij het downloaden; voor een opname die al binnen was, in de stap na
+GemeenteOplossingen geeft via de open API geen agenda met tijden.
+
+Sinds 28 oktober 2026 zitten de Notubiz-portalen (`*.raadsinformatie.nl`)
+achter een Cloudflare-controle; de API (`api.notubiz.nl`) niet. Daar gaan we
+niet omheen: de opname komt uit de API (`/media?event_id=…`, streamer en
+streamnaam), net als de agenda, en de catalogus gebruikt de organisatie die bij
+de bron is onthouden (`audio.organisatie`). Alleen de spreekmomenten staan
+uitsluitend op de pagina: die komen pas als de pagina weer te lezen is (een
+recente vergadering wordt dertig dagen lang elke dag opnieuw bekeken). Een
+nieuwe Notubiz-bron toevoegen lukt zolang de controle er staat niet, want de
+organisatie staat alleen op het portaal.
+
+De platformgegevens worden opgehaald bij het downloaden; voor een opname die al binnen was, in de stap na
 het transcript. Haalt de Regiochecker meer uit een platform dan eerst
 (`PLATFORM_VERSIE` in `src/audio/vergaderingen.mjs`), dan krijgen afgeronde
 vergaderingen dat alsnog, één tegelijk vóór ander werk (het is maar een
