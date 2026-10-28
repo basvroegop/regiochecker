@@ -5,6 +5,7 @@ import * as smallingerland from './smallingerland.mjs';
 import * as swf from './sudwestfryslan.mjs';
 import { haalGppWoo } from './gppwoo.mjs';
 import { haalBwBesluiten } from './groningen.mjs';
+import { haalAardbevingen, haalWaarschuwingen, haalUitspraken, haalRansomware } from './signalen.mjs';
 
 // type in src/regios.mjs → functie die een lijst items teruggeeft.
 export const TYPES = {
@@ -18,6 +19,10 @@ export const TYPES = {
   'swf-woo': swf.haalWoo,
   'gpp-woo': haalGppWoo,
   'groningen-bw-besluiten': haalBwBesluiten,
+  'knmi-aardbevingen': haalAardbevingen,
+  'knmi-waarschuwingen': haalWaarschuwingen,
+  'raad-van-state': haalUitspraken,
+  ransomware: haalRansomware,
 };
 
 export async function haalBron(bron) {

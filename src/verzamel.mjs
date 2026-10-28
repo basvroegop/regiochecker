@@ -60,6 +60,9 @@ export function verwerk(opslag, bron, gevonden, nu = new Date()) {
       soortStuk: g.soortStuk ?? null,
       advies: g.advies ?? null,
       document: g.document ?? null,
+      // Waar het gebeurde, voor de routering naar regio's (src/geo.mjs).
+      ...(g.plek ? { plek: g.plek } : {}),
+      ...(g.provincies ? { provincies: g.provincies } : {}),
       eersteGezien: tijd,
       laatstGezien: tijd,
       basislijn: !telAlsNieuw(g, bron.soort, eersteKeer, nu),
@@ -89,7 +92,9 @@ async function verzamelBron(opslag, bron) {
       ok: true,
       fout: null,
       // Een parser die ineens niets meer vindt, is vrijwel altijd een gewijzigde site.
-      waarschuwing: gevonden.length === 0 ? 'De bron leverde niets op. Is de pagina veranderd?' : null,
+      // Bij een bron waar niets vaak gewoon niets is (geen code oranje, geen
+      // Nederlands slachtoffer), is een lege ronde geen waarschuwing waard.
+      waarschuwing: gevonden.length === 0 && !bron.leegKan ? 'De bron leverde niets op. Is de pagina veranderd?' : null,
       laatsteRonde: new Date().toISOString(),
       laatsteSucces: new Date().toISOString(),
       aantal: gevonden.length,

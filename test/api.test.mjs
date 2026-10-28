@@ -95,11 +95,11 @@ test('beheer: regio\'s, sleutelwoorden, landelijke bronnen aan en uit, gebruiker
 
   r = await roep(ctx, jan, 'PUT', '/api/beheer/regios/heerenveen', { sleutelwoorden: ['Thialf', '"Sportstad Heerenveen"', 'thialf', ' '] });
   assert.deepEqual(r.data.sleutelwoorden.map((s) => [s.term, s.actief]), [['Thialf', true], ['Sportstad Heerenveen', true]]);
-  assert.deepEqual(r.data.landelijk, [{ id: 'tweede-kamer', naam: 'Tweede Kamer', aan: true }]);
+  assert.deepEqual(r.data.landelijk, [{ id: 'tweede-kamer', naam: 'Tweede Kamer', aan: true }, { id: 'knmi-aardbevingen', naam: 'KNMI · Aardbevingen', aan: true }, { id: 'knmi-waarschuwingen', naam: 'KNMI · Weerwaarschuwingen', aan: true }, { id: 'raad-van-state', naam: 'Raad van State · Uitspraken', aan: true }, { id: 'ransomware', naam: 'Ransomware · Nederlandse slachtoffers', aan: true }]);
   assert.deepEqual(r.data.volgers.map((v) => [v.naam, v.mail]), [['Sanne', 'weekmail ma 07:00']]);
   r = await roep(ctx, jan, 'PUT', '/api/beheer/regios/heerenveen', { sleutelwoorden: [{ term: 'Thialf', actief: false }], landelijkUit: ['tweede-kamer', 'bestaat-niet'] });
   assert.deepEqual(r.data.sleutelwoorden.map((s) => [s.term, s.actief]), [['Thialf', false]]);
-  assert.deepEqual(r.data.landelijk, [{ id: 'tweede-kamer', naam: 'Tweede Kamer', aan: false }]);
+  assert.deepEqual(r.data.landelijk, [{ id: 'tweede-kamer', naam: 'Tweede Kamer', aan: false }, { id: 'knmi-aardbevingen', naam: 'KNMI · Aardbevingen', aan: true }, { id: 'knmi-waarschuwingen', naam: 'KNMI · Weerwaarschuwingen', aan: true }, { id: 'raad-van-state', naam: 'Raad van State · Uitspraken', aan: true }, { id: 'ransomware', naam: 'Ransomware · Nederlandse slachtoffers', aan: true }]);
   assert.equal((await roep(ctx, jan, 'PUT', '/api/beheer/regios/heerenveen', { naam: 'Hearrenfean' })).status, 400, 'ingebouwd: naam staat in de code');
   r = await roep(ctx, jan, 'GET', '/api/beheer/termproef?term=Thialf&regio=heerenveen');
   assert.deepEqual(r.data, { term: 'Thialf', aantal: 0 });
@@ -158,11 +158,11 @@ test('beheer: bron toevoegen met proefronde, landelijk via sleutelwoorden', metS
     assert.equal(r.status, 201);
     assert.deepEqual([r.data.id, r.data.naam, r.data.bereik, r.data.lezer, r.data.termen], ['landelijk-testfeed', 'Testfeed', 'landelijk', 'RSS', 1]);
     r = await roep(ctx, jan, 'GET', '/api/beheer/bronnen');
-    assert.deepEqual(r.data.bronnen.filter((b) => b.bereik === 'landelijk').map((b) => b.id), ['tweede-kamer', 'landelijk-testfeed']);
+    assert.deepEqual(r.data.bronnen.filter((b) => b.bereik === 'landelijk').map((b) => b.id), ['tweede-kamer', 'knmi-aardbevingen', 'knmi-waarschuwingen', 'raad-van-state', 'ransomware', 'landelijk-testfeed']);
     assert.ok(r.data.bronnen.some((b) => b.id === 'opsterland-woo' && b.status.staat === 'ontbreekt' && b.nieuw7 === null));
     // De nieuwe landelijke bron staat bij elke regio onder "Geldt voor".
     r = await roep(ctx, jan, 'GET', '/api/beheer/regios/opsterland');
-    assert.deepEqual(r.data.landelijk.map((b) => [b.id, b.aan]), [['tweede-kamer', true], ['landelijk-testfeed', true]]);
+    assert.deepEqual(r.data.landelijk.map((b) => [b.id, b.aan]), [['tweede-kamer', true], ['knmi-aardbevingen', true], ['knmi-waarschuwingen', true], ['raad-van-state', true], ['ransomware', true], ['landelijk-testfeed', true]]);
 
     // Een verzamelronde haalt hem op (nulmeting), en de proef-items gaan via het sleutelwoord naar Opsterland.
     const { verwerk } = await import('../src/verzamel.mjs');

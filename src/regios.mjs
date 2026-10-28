@@ -27,6 +27,10 @@ export const ENKELVOUD = {
   raadsvergadering: 'Raadsvergadering',
   youtube: 'YouTube',
   podcast: 'Podcast',
+  aardbeving: 'Aardbeving',
+  weerwaarschuwing: 'Weerwaarschuwing',
+  uitspraak: 'Uitspraak Raad van State',
+  ransomware: 'Ransomware',
 };
 
 export const GROEPEN = {
@@ -35,11 +39,15 @@ export const GROEPEN = {
   woo: 'Woo',
   kamerstuk: 'Kamerstukken',
   audio: 'Audio & video',
+  signaal: 'Signalen',
 };
 
 export const AUDIOSOORTEN = ['raadsvergadering', 'youtube', 'podcast'];
 
-export const groepVan = (soort) => (AUDIOSOORTEN.includes(soort) ? 'audio' : soort);
+// Aardbevingen, weerwaarschuwingen, uitspraken en ransomware: landelijke
+// signalen uit de vroegere checker (src/bronnen/signalen.mjs).
+export const SIGNAALSOORTEN = ['aardbeving', 'weerwaarschuwing', 'uitspraak', 'ransomware'];
+export const groepVan = (soort) => (AUDIOSOORTEN.includes(soort) ? 'audio' : SIGNAALSOORTEN.includes(soort) ? 'signaal' : soort);
 
 export const REGIOS = [
   {

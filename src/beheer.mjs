@@ -95,6 +95,8 @@ function bronVoorClient(k, bron, nieuw) {
     status: bronStatus(k.opslag, bron),
     nieuw7: bron.type === 'ontbreekt' ? null : (nieuw[bron.id] || 0),
     termen: bron.bereik === 'landelijk' ? k.regios.filter((r) => geldtVoor(r, bron.id)).reduce((n, r) => n + actieveTermen(r).length, 0) : null,
+    // Signalen gaan (ook) via hun plek naar een regio (src/feed.mjs).
+    viaPlek: bron.geo ? (bron.soort === 'weerwaarschuwing' ? 'provincie' : 'plek') : bron.plaatsen ? 'plaatsnaam' : null,
     audio: bron.audio ? {
       kind: bron.audio.kind,
       eersteImport: bron.audio.eersteImport,

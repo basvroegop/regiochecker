@@ -25,6 +25,33 @@ export const TWEEDE_KAMER = {
   ingebouwd: true,
 };
 
+// Landelijke signalen, overgenomen uit de checker (src/bronnen/signalen.mjs).
+// Een stuk gaat naar een regio via de plek (`geo`: de coördinaat binnen
+// `straalKm` van de gemeente, of de provincie), via plaatsnamen in de tekst
+// (`plaatsen`), en net als elke landelijke bron via de sleutelwoorden.
+export const SIGNAALBRONNEN = [
+  {
+    id: 'knmi-aardbevingen', naam: 'KNMI · Aardbevingen', label: 'Openbare FDSN-dienst · vanaf kracht 1,0, in of tot 5 km buiten de gemeente',
+    soort: 'aardbeving', bereik: 'landelijk', type: 'knmi-aardbevingen', url: 'https://rdsa.knmi.nl/fdsnws/event/1/query',
+    minMagnitude: 1, straalKm: 5, geo: true, inhoud: false, ingebouwd: true,
+  },
+  {
+    id: 'knmi-waarschuwingen', naam: 'KNMI · Weerwaarschuwingen', label: 'RSS per provincie · alleen code oranje en rood',
+    soort: 'weerwaarschuwing', bereik: 'landelijk', type: 'knmi-waarschuwingen', url: 'https://cdn.knmi.nl/knmi/xml/rss/rss_KNMIwaarschuwingen.xml',
+    minCode: 'oranje', geo: true, inhoud: false, leegKan: true, ingebouwd: true,
+  },
+  {
+    id: 'raad-van-state', naam: 'Raad van State · Uitspraken', label: 'Afdeling bestuursrechtspraak · via gemeente en plaats in de uitspraak',
+    soort: 'uitspraak', bereik: 'landelijk', type: 'raad-van-state', url: 'https://www.raadvanstate.nl/uitspraken/?zoeken=true&pager_rows=100',
+    plaatsen: true, alleenSamenvatting: true, ingebouwd: true,
+  },
+  {
+    id: 'ransomware', naam: 'Ransomware · Nederlandse slachtoffers', label: 'ransomlook.io (en ransomware.live Pro met sleutel) · via vestigingsplaats',
+    soort: 'ransomware', bereik: 'landelijk', type: 'ransomware', url: 'https://www.ransomlook.io/api/recent',
+    plaatsen: true, inhoud: false, leegKan: true, ingebouwd: true,
+  },
+];
+
 export const isAudioBron = (b) => AUDIOSOORTEN.includes(b?.soort);
 
 export function alleRegios(opslag) {
@@ -45,7 +72,7 @@ export function alleRegios(opslag) {
 export const regioOpId = (opslag, id) => alleRegios(opslag).find((r) => r.id === id) || null;
 
 export function alleBronnen(opslag) {
-  return [...ingebouwdeBronnen(), TWEEDE_KAMER, ...opslag.bronnen];
+  return [...ingebouwdeBronnen(), TWEEDE_KAMER, ...SIGNAALBRONNEN, ...opslag.bronnen];
 }
 
 export const bronOpId = (opslag, id) => alleBronnen(opslag).find((b) => b.id === id) || null;

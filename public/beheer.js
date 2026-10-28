@@ -248,7 +248,7 @@ function audioTelling(a) {
 }
 
 function bronnenRij(b) {
-  const bereik = b.bereik === 'landelijk' ? `Alle regio's · ${b.termen} termen` : b.regioNaam || '';
+  const bereik = b.bereik === 'landelijk' ? `Alle regio's · ${b.viaPlek ? `via ${b.viaPlek} en ` : ''}${b.termen} termen` : b.regioNaam || '';
   let sub = b.status.staat === 'werkt' || !b.toelichting ? [b.host, b.lezer].filter(Boolean).join(' · ') : eersteZin(b.toelichting);
   if (b.audio) sub = `${b.lezer} · ${audioTelling(b.audio)}`;
   const status = b.audio && !b.audio.actief ? { staat: 'wacht', tekst: 'Gepauzeerd' } : b.audio?.bezig ? { staat: 'wacht', tekst: 'Catalogus lezen…' } : b.status;
@@ -351,7 +351,7 @@ export async function toonBronnen(hoofd, params) {
       <div class="paginakop"><h1>Bronnen</h1><span class="klein zacht">${data.bronnen.length} bronnen: ${landelijk.length} landelijk en ${gemeentelijk.length} gemeentelijk</span>
         <div class="rechts"><button class="knop klein" id="nu-controleren">Nu controleren</button></div></div>
       <div class="tabelkop bronnenrij"><span>Bron</span><span>Soort</span><span>Bereik</span><span>Status</span><span class="rechts-uitgelijnd">7 d</span><span></span></div>
-      <div class="groepkop">Landelijk · via sleutelwoorden</div>
+      <div class="groepkop">Landelijk · via sleutelwoorden of plek</div>
       ${landelijk.map(bronnenRij).join('')}
       <div class="groepkop">Gemeentelijk</div>
       ${gemeentelijk.map(bronnenRij).join('')}`;

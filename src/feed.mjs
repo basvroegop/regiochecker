@@ -21,6 +21,7 @@ import { stukTitel } from './kamer/weergave.mjs';
 import { lokaleDatum } from './datum.mjs';
 import { tekstBlokken, begrens, MAX_DOCUMENT } from './document.mjs';
 import { samenvattingAanbieder } from './samenvatting.mjs';
+import { gemeente, afstandKm, plaatsenIn } from './geo.mjs';
 
 export const FEED_DAGEN = 30;
 const MAX_LIJST = 500;
@@ -83,8 +84,52 @@ function routeer(k, bronId, zoek) {
 }
 
 export function routeerItem(k, item, bron) {
-  return onthoud(`ri|${item.sleutel}|${tekstVersie(k, item)}|${k.termVersie}`,
-    () => routeer(k, bron.id, (termen) => vindTermen(tekstVan(k, item), termen)));
+  return onthoud(`ri|${item.sleutel}|${tekstVersie(k, item)}|${k.termVersie}`, () => {
+    // `alleenSamenvatting`: de volledige tekst noemt ook wat er niet over gaat
+    // (bij een uitspraak: "advocaat in Heerenveen").
+    const tekst = bron.alleenSamenvatting ? [item.titel, item.tekst].filter(Boolean).join('\n') : tekstVan(k, item);
+    const viaTermen = routeer(k, bron.id, (termen) => vindTermen(tekst, termen));
+    if (!bron.geo && !bron.plaatsen) return viaTermen;
+    // Eerst de plek, dan de sleutelwoorden; per regio samen.
+    const samen = new Map();
+    for (const r of [...routeerOpPlek(k, item, bron), ...viaTermen]) {
+      const bestaand = samen.get(r.regio);
+      if (!bestaand) samen.set(r.regio, { regio: r.regio, gevonden: [...r.gevonden] });
+      else for (const g of r.gevonden) if (!bestaand.gevonden.some((x) => x.term === g.term)) bestaand.gevonden.push(g);
+    }
+    return [...samen.values()];
+  });
+}
+
+// Een regio heet naar een gemeente (src/geo.mjs). Een stuk met een plek gaat
+// naar de regio als die plek erin ligt (of binnen `straalKm`), of als de
+// provincie klopt; een stuk met plaatsnamen als een van die plaatsen erin ligt.
+function routeerOpPlek(k, item, bron) {
+  // Plaatsnamen alleen in titel en samenvatting: in de volledige tekst van een
+  // uitspraak staat ook "advocaat te Heerenveen".
+  const tekst = bron.plaatsen ? [item.titel, item.tekst].filter(Boolean).join('\n') : '';
+  const plaatsen = bron.plaatsen ? plaatsenIn(tekst) : [];
+  const uit = [];
+  for (const r of k.regios) {
+    if (!geldtVoor(r, bron.id)) continue;
+    const g = gemeente(r.naam);
+    if (!g) continue;
+    const gevonden = [];
+    if (bron.geo && Number.isFinite(item.plek?.lat) && Number.isFinite(item.plek?.lon)) {
+      const km = afstandKm(item.plek, g);
+      const naam = item.plek.naam || 'deze plek';
+      if (km <= (bron.straalKm ?? 0)) {
+        gevonden.push({ term: naam, aantal: 1, fragment: { tekst: km ? `${naam}, ${km.toFixed(1).replace('.', ',')} km buiten de gemeente ${g.naam}` : `${naam}, in de gemeente ${g.naam}`, treffer: naam } });
+      }
+    }
+    if (bron.geo && item.provincies?.includes(g.provincie)) {
+      gevonden.push({ term: `provincie ${g.provincie}`, aantal: 1, fragment: { tekst: item.titel, treffer: '' } });
+    }
+    const hier = plaatsen.filter((p) => p.gemeenten.includes(g.naam)).map((p) => p.plaats);
+    if (hier.length) gevonden.push(...vindTermen(tekst, hier));
+    if (gevonden.length) uit.push({ regio: r.id, gevonden });
+  }
+  return uit;
 }
 
 export function routeerAflevering(k, a) {
@@ -373,12 +418,15 @@ const meta = (k, v) => (v ? { k, v } : null);
 
 // Waarom staat dit stuk in de feed? Per regio de sleutelwoorden, en de termen
 // van de meldingen van deze gebruiker.
-function redenen(k, gebruiker, zoek, { bronId, regioIds }) {
+// `route`: voor een landelijk stuk de uitkomst van routeerItem (sleutelwoorden
+// en plek samen); anders zoeken met de sleutelwoorden van elke regio.
+function redenen(k, gebruiker, zoek, { bronId, regioIds, route = null }) {
   const uit = [];
   for (const id of regioIds) {
     const regio = k.regioMap.get(id);
     if (!regio || (bronId && !geldtVoor(regio, bronId))) continue;
-    for (const g of zoek(actieveTermen(regio))) uit.push({ ...g, regio: id, regioNaam: regio.naam });
+    const gevonden = route ? route.find((r) => r.regio === id)?.gevonden || [] : zoek(actieveTermen(regio));
+    for (const g of gevonden) uit.push({ ...g, regio: id, regioNaam: regio.naam });
   }
   for (const m of k.opslag.meldingen.filter((x) => x.gebruiker === gebruiker.id && x.actief !== false)) {
     for (const g of zoek(m.termen || [])) uit.push({ ...g, melding: m.id });
@@ -429,6 +477,7 @@ function itemDetail(k, gebruiker, sleutel) {
     treffers: redenen(k, gebruiker, (termen) => vindTermen(tekstVan(k, item), termen), {
       bronId: bron.id,
       regioIds: landelijk ? gebruiker.regios : [],
+      route: landelijk ? routeerItem(k, item, bron) : null,
     }),
   };
 }

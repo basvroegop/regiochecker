@@ -180,6 +180,41 @@ podcast voeg je als landelijke bron toe in Beheer › Bronnen, met een
 proefronde die laat zien hoeveel stukken er naar welke regio zouden gaan. Bij
 audio wordt het transcript doorzocht en staat bij elke treffer de tijd.
 
+## Signalen
+
+Vier landelijke bronnen uit de checker (`/opt/checker`) zijn overgenomen, onder
+het tabblad **Signalen** (`src/bronnen/signalen.mjs`). Ze hebben een plek, en gaan
+daarmee rechtstreeks naar de goede regio, naast de gewone sleutelwoorden:
+
+| Bron | Waar het vandaan komt | Naar een regio als |
+|---|---|---|
+| KNMI · Aardbevingen | openbare FDSN-dienst `rdsa.knmi.nl` (geen sleutel), vanaf kracht 1,0, de laatste 60 dagen | het epicentrum in de gemeente ligt of tot 5 km erbuiten |
+| KNMI · Weerwaarschuwingen | RSS per provincie, alleen code oranje en rood | de gemeente in die provincie ligt |
+| Raad van State · Uitspraken | de 100 nieuwste uitspraken van de Afdeling bestuursrechtspraak | de gemeente of een plaats erin in de titel of samenvatting staat |
+| Ransomware · Nederlandse slachtoffers | ransomlook.io (de 100 nieuwste wereldwijd, alleen met een `.nl`-website of Nederland in de beschrijving); met `RANSOMWARE_LIVE_API_KEY` ook ransomware.live Pro | de vestigingsplaats in de beschrijving staat |
+
+Een regio heet naar een gemeente. Welke plekken daarin liggen, staat in
+`src/geo/nl.json`: de gemeentegrenzen (Kadaster, Bestuurlijke Gebieden via PDOK,
+vereenvoudigd tot zo'n 100 meter) en de woonplaatsen met hun gemeente (CBS,
+Woonplaatsen in Nederland 2026), beide open data onder CC BY 4.0. Opnieuw maken,
+bijvoorbeeld na een gemeentelijke herindeling: `node scripts/maak-geo.mjs`.
+
+Een plaatsnaam telt alleen met een woord ervoor dat op een plek wijst ("in
+Sneek", "gemeente Opsterland", "based in Heerenveen", "burgemeester en
+wethouders van Smallingerland"), en alleen in de titel en samenvatting, niet in
+de volledige tekst van een uitspraak, waar ook "advocaat te Heerenveen" staat.
+Om dezelfde reden zoeken ook de sleutelwoorden bij de Raad van State alleen in
+titel en samenvatting; zelf zoeken doorzoekt wel de hele uitspraak.
+Plaatsnamen die ook gewone woorden of achternamen zijn ("Een", "Best", "Vries")
+tellen nooit. Kamerstukken en andere landelijke bronnen gaan niet op
+plaatsnaam, alleen op sleutelwoord: "Groningen" staat in te veel kamerstukken.
+
+Niet overgenomen: files (NDW) en NS-storingen (te vluchtig voor een nieuwsfeed;
+NS vraagt bovendien een sleutel), en de 112-inzendingen via de Telegram-bot
+(geen bron om op te halen). De aardbevingen in de checker liepen via de KNMI
+Open Data API met een gedeelde anonieme sleutel die op 1 juli 2026 verliep; de
+FDSN-dienst heeft geen sleutel nodig.
+
 ## Kamerstukken
 
 Alle stukken van de Tweede Kamer (brieven, moties, Kamervragen, bijlagen …) sinds

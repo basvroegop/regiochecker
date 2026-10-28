@@ -1,0 +1,179 @@
+<?xml version='1.0' encoding='UTF-8'?> 
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<channel>
+<atom:link href="https://cdn.knmi.nl/knmi/xml/rss_KNMIwaarschuwingen.xml" rel="self" type="application/rss+xml" />
+<title>KNMI: Waarschuwingen</title>
+<description>Koninklijk Nederlands Meteorologisch Instituut</description>
+<link>https://www.knmi.nl</link>
+<language>nl-nl</language>
+<copyright>Copyright: KNMI, https://www.knmi.nl/</copyright>
+<image>
+<title>KNMI: Waarschuwingen</title>
+<url>https://cdn.knmi.nl/knmi/xml/RSSread/knmi-rsslogo.gif</url>
+<link>https://www.knmi.nl/nederland-nu/weer/waarschuwingen</link>
+</image>
+<item>
+<title>Code geel: Donderdag zware windstoten vanwege storm Ciarán</title>
+<description>&lt;p&gt;Voor vandaag en morgen zijn er geen waarschuwingen.&lt;br&gt;&lt;br&gt; Donderdag veroorzaakt storm Ciarán veel wind. M.u.v. het noordoosten worden vanaf de tweede helft van donderdagochtend zware windstoten verwacht van 75-90 km/uur, in de kustgebieden van 90-100 km/uur. In het Waddengebied en rondom het IJsselmeer zijn in de middag en avond zeer zware windstoten van 100-110 km/uur mogelijk. De windstoten komen uit een zuidelijke richting. In de loop van donderdagavond beperken de zware windstoten zich tot de kustgebieden. In de nacht naar vrijdag neemt de wind verder af.&lt;/p&gt;&lt;p&gt; Hiervan kunnen verkeer en buitenactiviteiten hinder ondervinden.&lt;/p&gt;&lt;br&gt;Uitgifte: 31/10/2023 22:32 uur LT
+<![CDATA[ <p><img src="https://cdn.knmi.nl/knmi/map/current/weather/warning/waarschuwing_land_0_new.gif" width=300>&nbsp;<img src="https://cdn.knmi.nl/knmi/map/current/weather/warning/waarschuwing_land_1_new.gif" width=300>&nbsp;<img src="https://cdn.knmi.nl/knmi/map/current/weather/warning/waarschuwing_land_2_new.gif" width=300></p>]]>
+</description>
+<enclosure type="image/gif" url="https://cdn.knmi.nl/knmi/map/current/weather/warning/waarschuwing_land_48_new.gif" length="17016"/>
+<link>https://www.knmi.nl/waarschuwingen</link>
+<guid>https://www.knmi.nl/waarschuwingen?Warnings_Tue%2031%20Oct%202023%2022:32:00%20+0100</guid>
+<pubDate>Tue, 31 Oct 2023 22:32:00 +0100</pubDate>
+<category domain="https://www.knmi.nl">Weather</category>
+<category domain="https://www.knmi.nl">Weer</category>
+<author>webmaster@knmi.nl (Webmaster KNMI)</author>
+</item>
+<item>
+<title>Waarschuwingen Waddeneilanden</title>
+<description>Code Geel.&lt;br&gt;Zware windstoten van 80-100 km/uur, mogelijk enige tijd zeer zware windstoten van 100-110 km/uur.&lt;p&gt;&lt;a href="/kennis-en-datacentrum/waarschuwingen/windstoten"&gt;Wat kan ik verwachten en wat kan ik doen bij zware windstoten en storm?&lt;/a&gt; (van 02/11/2023 10:00 tot 02/11/2023 22:00 uur)&lt;br&gt;&lt;br&gt;</description>
+<link>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/waddeneilanden</link>
+<guid>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/waddeneilanden</guid>
+<pubDate>Tue, 31 Oct 2023 22:32:00 +0100</pubDate>
+<category domain="https://www.knmi.nl">Regional Weather</category>
+<category domain="https://www.knmi.nl">Regionaal Weer</category>
+<author>webmaster@knmi.nl (Webmaster KNMI)</author>
+</item>
+<item>
+<title>Waarschuwingen Groningen</title>
+<description>Code Groen. Er zijn momenteel geen waarschuwingen van kracht.</description>
+<link>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/groningen</link>
+<guid>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/groningen</guid>
+<pubDate>Tue, 31 Oct 2023 22:32:00 +0100</pubDate>
+<category domain="https://www.knmi.nl">Regional Weather</category>
+<category domain="https://www.knmi.nl">Regionaal Weer</category>
+<author>webmaster@knmi.nl (Webmaster KNMI)</author>
+</item>
+<item>
+<title>Waarschuwingen Friesland</title>
+<description>Code Geel.&lt;br&gt;Zware windstoten van 80-90 km/uur, vooral aan zee van 90-100 km/uur.&lt;p&gt;&lt;a href="/kennis-en-datacentrum/waarschuwingen/windstoten"&gt;Wat kan ik verwachten en wat kan ik doen bij zware windstoten en storm?&lt;/a&gt; (van 02/11/2023 11:00 tot 02/11/2023 22:00 uur)&lt;br&gt;&lt;br&gt;</description>
+<link>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/friesland</link>
+<guid>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/friesland</guid>
+<pubDate>Tue, 31 Oct 2023 22:32:00 +0100</pubDate>
+<category domain="https://www.knmi.nl">Regional Weather</category>
+<category domain="https://www.knmi.nl">Regionaal Weer</category>
+<author>webmaster@knmi.nl (Webmaster KNMI)</author>
+</item>
+<item>
+<title>Waarschuwingen Drenthe</title>
+<description>Code Groen. Er zijn momenteel geen waarschuwingen van kracht.</description>
+<link>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/drenthe</link>
+<guid>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/drenthe</guid>
+<pubDate>Tue, 31 Oct 2023 22:32:00 +0100</pubDate>
+<category domain="https://www.knmi.nl">Regional Weather</category>
+<category domain="https://www.knmi.nl">Regionaal Weer</category>
+<author>webmaster@knmi.nl (Webmaster KNMI)</author>
+</item>
+<item>
+<title>Waarschuwingen Noord-Holland</title>
+<description>Code Geel.&lt;br&gt;Zware windstoten van 80-90 km/uur, vooral aan zee van 90-100 km/uur.&lt;p&gt;&lt;a href="/kennis-en-datacentrum/waarschuwingen/windstoten"&gt;Wat kan ik verwachten en wat kan ik doen bij zware windstoten en storm?&lt;/a&gt; (van 02/11/2023 11:00 tot 02/11/2023 22:00 uur)&lt;br&gt;&lt;br&gt;</description>
+<link>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/noord-holland</link>
+<guid>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/noord-holland</guid>
+<pubDate>Tue, 31 Oct 2023 22:32:00 +0100</pubDate>
+<category domain="https://www.knmi.nl">Regional Weather</category>
+<category domain="https://www.knmi.nl">Regionaal Weer</category>
+<author>webmaster@knmi.nl (Webmaster KNMI)</author>
+</item>
+<item>
+<title>Waarschuwingen Flevoland</title>
+<description>Code Geel.&lt;br&gt;Zware windstoten van 75-90 km/uur.&lt;p&gt;&lt;a href="/kennis-en-datacentrum/waarschuwingen/windstoten"&gt;Wat kan ik verwachten en wat kan ik doen bij zware windstoten en storm?&lt;/a&gt; (van 02/11/2023 11:00 tot 02/11/2023 20:00 uur)&lt;br&gt;&lt;br&gt;</description>
+<link>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/flevoland</link>
+<guid>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/flevoland</guid>
+<pubDate>Tue, 31 Oct 2023 22:32:00 +0100</pubDate>
+<category domain="https://www.knmi.nl">Regional Weather</category>
+<category domain="https://www.knmi.nl">Regionaal Weer</category>
+<author>webmaster@knmi.nl (Webmaster KNMI)</author>
+</item>
+<item>
+<title>Waarschuwingen Overijssel</title>
+<description>Code Groen. Er zijn momenteel geen waarschuwingen van kracht.</description>
+<link>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/overijssel</link>
+<guid>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/overijssel</guid>
+<pubDate>Tue, 31 Oct 2023 22:32:00 +0100</pubDate>
+<category domain="https://www.knmi.nl">Regional Weather</category>
+<category domain="https://www.knmi.nl">Regionaal Weer</category>
+<author>webmaster@knmi.nl (Webmaster KNMI)</author>
+</item>
+<item>
+<title>Waarschuwingen Gelderland</title>
+<description>Code Geel.&lt;br&gt;Zware windstoten van 75-90 km/uur.&lt;p&gt;&lt;a href="/kennis-en-datacentrum/waarschuwingen/windstoten"&gt;Wat kan ik verwachten en wat kan ik doen bij zware windstoten en storm?&lt;/a&gt; (van 02/11/2023 11:00 tot 02/11/2023 20:00 uur)&lt;br&gt;&lt;br&gt;</description>
+<link>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/gelderland</link>
+<guid>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/gelderland</guid>
+<pubDate>Tue, 31 Oct 2023 22:32:00 +0100</pubDate>
+<category domain="https://www.knmi.nl">Regional Weather</category>
+<category domain="https://www.knmi.nl">Regionaal Weer</category>
+<author>webmaster@knmi.nl (Webmaster KNMI)</author>
+</item>
+<item>
+<title>Waarschuwingen Utrecht</title>
+<description>Code Geel.&lt;br&gt;Zware windstoten van 75-90 km/uur.&lt;p&gt;&lt;a href="/kennis-en-datacentrum/waarschuwingen/windstoten"&gt;Wat kan ik verwachten en wat kan ik doen bij zware windstoten en storm?&lt;/a&gt; (van 02/11/2023 11:00 tot 02/11/2023 20:00 uur)&lt;br&gt;&lt;br&gt;</description>
+<link>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/utrecht</link>
+<guid>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/utrecht</guid>
+<pubDate>Tue, 31 Oct 2023 22:32:00 +0100</pubDate>
+<category domain="https://www.knmi.nl">Regional Weather</category>
+<category domain="https://www.knmi.nl">Regionaal Weer</category>
+<author>webmaster@knmi.nl (Webmaster KNMI)</author>
+</item>
+<item>
+<title>Waarschuwingen Zuid-Holland</title>
+<description>Code Geel.&lt;br&gt;Zware windstoten van 80-90 km/uur, vooral aan zee van 90-100 km/uur.&lt;p&gt;&lt;a href="/kennis-en-datacentrum/waarschuwingen/windstoten"&gt;Wat kan ik verwachten en wat kan ik doen bij zware windstoten en storm?&lt;/a&gt; (van 02/11/2023 10:00 tot 02/11/2023 22:00 uur)&lt;br&gt;&lt;br&gt;</description>
+<link>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/zuid-holland</link>
+<guid>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/zuid-holland</guid>
+<pubDate>Tue, 31 Oct 2023 22:32:00 +0100</pubDate>
+<category domain="https://www.knmi.nl">Regional Weather</category>
+<category domain="https://www.knmi.nl">Regionaal Weer</category>
+<author>webmaster@knmi.nl (Webmaster KNMI)</author>
+</item>
+<item>
+<title>Waarschuwingen Zeeland</title>
+<description>Code Geel.&lt;br&gt;Zware windstoten van 80-90 km/uur, vooral aan zee van 90-100 km/uur.&lt;p&gt;&lt;a href="/kennis-en-datacentrum/waarschuwingen/windstoten"&gt;Wat kan ik verwachten en wat kan ik doen bij zware windstoten en storm?&lt;/a&gt; (van 02/11/2023 10:00 tot 02/11/2023 22:00 uur)&lt;br&gt;&lt;br&gt;</description>
+<link>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/zeeland</link>
+<guid>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/zeeland</guid>
+<pubDate>Tue, 31 Oct 2023 22:32:00 +0100</pubDate>
+<category domain="https://www.knmi.nl">Regional Weather</category>
+<category domain="https://www.knmi.nl">Regionaal Weer</category>
+<author>webmaster@knmi.nl (Webmaster KNMI)</author>
+</item>
+<item>
+<title>Waarschuwingen Noord-Brabant</title>
+<description>Code Geel.&lt;br&gt;Zware windstoten van 75-90 km/uur.&lt;p&gt;&lt;a href="/kennis-en-datacentrum/waarschuwingen/windstoten"&gt;Wat kan ik verwachten en wat kan ik doen bij zware windstoten en storm?&lt;/a&gt; (van 02/11/2023 11:00 tot 02/11/2023 20:00 uur)&lt;br&gt;&lt;br&gt;</description>
+<link>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/noord-brabant</link>
+<guid>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/noord-brabant</guid>
+<pubDate>Tue, 31 Oct 2023 22:32:00 +0100</pubDate>
+<category domain="https://www.knmi.nl">Regional Weather</category>
+<category domain="https://www.knmi.nl">Regionaal Weer</category>
+<author>webmaster@knmi.nl (Webmaster KNMI)</author>
+</item>
+<item>
+<title>Waarschuwingen Limburg</title>
+<description>Code Geel.&lt;br&gt;Zware windstoten van 75-90 km/uur.&lt;p&gt;&lt;a href="/kennis-en-datacentrum/waarschuwingen/windstoten"&gt;Wat kan ik verwachten en wat kan ik doen bij zware windstoten en storm?&lt;/a&gt; (van 02/11/2023 10:00 tot 02/11/2023 16:00 uur)&lt;br&gt;&lt;br&gt;</description>
+<link>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/limburg</link>
+<guid>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/limburg</guid>
+<pubDate>Tue, 31 Oct 2023 22:32:00 +0100</pubDate>
+<category domain="https://www.knmi.nl">Regional Weather</category>
+<category domain="https://www.knmi.nl">Regionaal Weer</category>
+<author>webmaster@knmi.nl (Webmaster KNMI)</author>
+</item>
+<item>
+<title>Waarschuwingen Waddenzee</title>
+<description>Code Geel.&lt;br&gt;Zware windstoten van 80-100 km/uur, mogelijk enige tijd zeer zware windstoten van 100-110 km/uur.&lt;p&gt;&lt;a href="/kennis-en-datacentrum/waarschuwingen/windstoten"&gt;Wat kan ik verwachten en wat kan ik doen bij zware windstoten en storm?&lt;/a&gt; (van 02/11/2023 10:00 tot 02/11/2023 22:00 uur)&lt;br&gt;&lt;br&gt;</description>
+<link>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/waddenzee</link>
+<guid>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/waddenzee</guid>
+<pubDate>Tue, 31 Oct 2023 22:32:00 +0100</pubDate>
+<category domain="https://www.knmi.nl">Regional Weather</category>
+<category domain="https://www.knmi.nl">Regionaal Weer</category>
+<author>webmaster@knmi.nl (Webmaster KNMI)</author>
+</item>
+<item>
+<title>Waarschuwingen IJsselmeergebied</title>
+<description>Code Geel.&lt;br&gt;Zware windstoten van 80-100 km/uur, mogelijk enige tijd zeer zware windstoten van 100-110 km/uur.&lt;p&gt;&lt;a href="/kennis-en-datacentrum/waarschuwingen/windstoten"&gt;Wat kan ik verwachten en wat kan ik doen bij zware windstoten en storm?&lt;/a&gt; (van 02/11/2023 10:00 tot 02/11/2023 22:00 uur)&lt;br&gt;&lt;br&gt;</description>
+<link>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/ijsselmeergebied</link>
+<guid>https://www.knmi.nl/nederland-nu/weer/waarschuwingen/ijsselmeergebied</guid>
+<pubDate>Tue, 31 Oct 2023 22:32:00 +0100</pubDate>
+<category domain="https://www.knmi.nl">Regional Weather</category>
+<category domain="https://www.knmi.nl">Regionaal Weer</category>
+<author>webmaster@knmi.nl (Webmaster KNMI)</author>
+</item>
+</channel>
+</rss>
