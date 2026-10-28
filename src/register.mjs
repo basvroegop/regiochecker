@@ -33,12 +33,12 @@ export const SIGNAALBRONNEN = [
   {
     id: 'knmi-aardbevingen', naam: 'KNMI · Aardbevingen', label: 'Openbare FDSN-dienst · vanaf kracht 1,0, in of tot 5 km buiten de gemeente',
     soort: 'aardbeving', bereik: 'landelijk', type: 'knmi-aardbevingen', url: 'https://rdsa.knmi.nl/fdsnws/event/1/query',
-    minMagnitude: 1, straalKm: 5, geo: true, inhoud: false, ingebouwd: true,
+    minMagnitude: 1, straalKm: 5, geo: true, inhoud: false, bewaarDagen: 730, ingebouwd: true,
   },
   {
     id: 'knmi-waarschuwingen', naam: 'KNMI · Weerwaarschuwingen', label: 'RSS per provincie · alleen code oranje en rood',
     soort: 'weerwaarschuwing', bereik: 'landelijk', type: 'knmi-waarschuwingen', url: 'https://cdn.knmi.nl/knmi/xml/rss/rss_KNMIwaarschuwingen.xml',
-    minCode: 'oranje', geo: true, inhoud: false, leegKan: true, ingebouwd: true,
+    minCode: 'oranje', geo: true, inhoud: false, leegKan: true, bewaarDagen: 730, ingebouwd: true,
   },
   {
     id: 'raad-van-state', naam: 'Raad van State · Uitspraken', label: 'Afdeling bestuursrechtspraak · via gemeente en plaats in de uitspraak',
@@ -48,7 +48,8 @@ export const SIGNAALBRONNEN = [
   {
     id: 'ransomware', naam: 'Ransomware · Nederlandse slachtoffers', label: 'ransomlook.io (en ransomware.live Pro met sleutel) · via vestigingsplaats',
     soort: 'ransomware', bereik: 'landelijk', type: 'ransomware', url: 'https://www.ransomlook.io/api/recent',
-    plaatsen: true, inhoud: false, leegKan: true, ingebouwd: true,
+    // vestiging: na elke ronde de vestigingsplaats opzoeken (src/locatie.mjs).
+    plaatsen: true, vestiging: true, inhoud: false, leegKan: true, bewaarDagen: 730, ingebouwd: true,
   },
 ];
 

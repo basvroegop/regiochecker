@@ -39,15 +39,17 @@ export const GROEPEN = {
   woo: 'Woo',
   kamerstuk: 'Kamerstukken',
   audio: 'Audio & video',
-  signaal: 'Signalen',
+  knmi: 'KNMI',
+  rvs: 'Raad van State',
+  ransomware: 'Ransomware',
 };
 
 export const AUDIOSOORTEN = ['raadsvergadering', 'youtube', 'podcast'];
 
 // Aardbevingen, weerwaarschuwingen, uitspraken en ransomware: landelijke
-// signalen uit de vroegere checker (src/bronnen/signalen.mjs).
-export const SIGNAALSOORTEN = ['aardbeving', 'weerwaarschuwing', 'uitspraak', 'ransomware'];
-export const groepVan = (soort) => (AUDIOSOORTEN.includes(soort) ? 'audio' : SIGNAALSOORTEN.includes(soort) ? 'signaal' : soort);
+// signalen uit de checker (src/bronnen/signalen.mjs), elk met een eigen tabblad.
+export const SIGNAALGROEP = { aardbeving: 'knmi', weerwaarschuwing: 'knmi', uitspraak: 'rvs', ransomware: 'ransomware' };
+export const groepVan = (soort) => (AUDIOSOORTEN.includes(soort) ? 'audio' : SIGNAALGROEP[soort] || soort);
 
 export const REGIOS = [
   {

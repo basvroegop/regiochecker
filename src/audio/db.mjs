@@ -237,6 +237,19 @@ export class AudioDb {
       .map((r) => ({ ...r, klaarVoor: r.opnieuw_op <= nu }));
   }
 
+  // Afgeronde vergaderingen waarvan de agenda en sprekers van het platform
+  // met een oudere versie zijn opgehaald (of nog helemaal niet), en recente
+  // vergaderingen op een platform met sprekers (`prefixen`) waar die nog
+  // ontbraken en die sinds `eerder` niet meer zijn bekeken. Nieuwste eerst.
+  verouderdPlatform(versie, { prefixen = [], recent = 0, eerder = 0 } = {}) {
+    const metSprekers = prefixen.map(() => 'extern LIKE ?').join(' OR ') || '0';
+    return this.db.prepare(`SELECT id FROM afleveringen WHERE vorm = 'vergadering' AND status = 'klaar' AND transcript IS NOT NULL
+        AND (COALESCE(json_extract(platform, '$.versie'), 0) < ?
+          OR ((${metSprekers}) AND COALESCE(json_array_length(platform, '$.sprekers'), 0) = 0
+            AND COALESCE(gepubliceerd_op, aangemaakt) > ? AND COALESCE(json_extract(platform, '$.opgehaald'), 0) < ?))
+      ORDER BY COALESCE(gepubliceerd_op, aangemaakt) DESC`).all(versie, ...prefixen.map((p) => `${p}%`), recent, eerder).map((r) => r.id);
+  }
+
   // Voor de beheerpagina: wat er nu gebeurt, en per bron de tellingen.
   bezig() {
     return this.db.prepare(`SELECT ${LICHT} FROM afleveringen WHERE status IN ('downloaden', 'transcriberen', 'analyseren') ORDER BY bijgewerkt DESC`).all().map((r) => aflevering(r, { licht: true }));

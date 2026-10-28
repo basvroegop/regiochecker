@@ -138,7 +138,7 @@ export async function haalUitspraken(bron) {
 const NL = /\b(netherlands|nederland)\b/i;
 const isNl = (website, beschrijving) => /\.nl(\/|$)/i.test(String(website || '').trim()) || NL.test(String(beschrijving || ''));
 
-function ransomwareStuk({ naam, groep, beschrijving, website, ontdekt }) {
+export function ransomwareStuk({ naam, groep, beschrijving, website, ontdekt }) {
   const schoon = String(naam || '').trim() || 'Onbekend slachtoffer';
   const moment = ontdekt ? new Date(String(ontdekt).replace(' ', 'T').replace(/(\.\d{3})\d+/, '$1') + (/[Z+]/.test(String(ontdekt).slice(10)) ? '' : 'Z')) : null;
   return {
@@ -148,6 +148,8 @@ function ransomwareStuk({ naam, groep, beschrijving, website, ontdekt }) {
     datum: moment && Number.isFinite(moment.getTime()) ? moment.toISOString().slice(0, 10) : null,
     tekst: [beschrijving, website ? `Website: ${website}.` : '', `Geclaimd door ${groep || 'een onbekende groep'} op een lekwebsite; nog niet bevestigd door het slachtoffer.`].filter(Boolean).join(' '),
     afzender: groep || null,
+    // Voor het opzoeken van de vestiging (src/locatie.mjs).
+    slachtoffer: { naam: schoon, website: website || null, beschrijving: beschrijving || null },
   };
 }
 

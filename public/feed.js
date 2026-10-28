@@ -9,8 +9,8 @@ import { archiefFilters, archiefBalkHtml, koppelArchiefBalk, laadBronnen } from 
 
 const STATUSNAAM = { wacht: 'in de wachtrij', downloaden: 'wordt gedownload', transcriberen: 'wordt getranscribeerd', getranscribeerd: 'wordt geanalyseerd', analyseren: 'wordt geanalyseerd', mislukt: 'mislukt' };
 
-const GROEPEN = ['alles', 'nieuws', 'ingekomen', 'woo', 'kamerstuk', 'audio', 'signaal'];
-const GROEPNAAM = { alles: 'Alles', nieuws: 'Gemeentenieuws', ingekomen: 'Ingekomen', woo: 'Woo', kamerstuk: 'Kamerstukken', audio: 'Audio & video', signaal: 'Signalen' };
+const GROEPEN = ['alles', 'nieuws', 'ingekomen', 'woo', 'kamerstuk', 'audio', 'knmi', 'rvs', 'ransomware'];
+const GROEPNAAM = { alles: 'Alles', nieuws: 'Gemeentenieuws', ingekomen: 'Ingekomen', woo: 'Woo', kamerstuk: 'Kamerstukken', audio: 'Audio & video', knmi: 'KNMI', rvs: 'Raad van State', ransomware: 'Ransomware' };
 
 // Filters blijven staan als je even naar een andere pagina gaat.
 const filters = { groep: 'alles', regio: '', ongelezen: false };

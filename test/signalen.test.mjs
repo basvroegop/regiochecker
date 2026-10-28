@@ -93,6 +93,8 @@ test('signalen naar de regio: via de plek, de provincie en plaatsnamen; andere l
   item('raad-van-state:o', 'raad-van-state', { soort: 'uitspraak', titel: 'Raad van State (hoger beroep): besluit van de gemeente Opsterland', tekst: 'Bij besluit heeft de raad van de gemeente Opsterland het omgevingsplan voor een zonnepark bij Gorredijk vastgesteld.' });
   item('ransomware:t', 'ransomware', { soort: 'ransomware', titel: 'Ransomwaregroep x claimt aanval op Thialf', tekst: 'Thialf is an ice skating stadium based in Heerenveen, the Netherlands.' });
   item('landelijk-nieuws:d', 'landelijk-nieuws', { soort: 'nieuws', titel: 'Nieuws uit Drachten', tekst: 'Een bericht over Drachten.' });
+  // De locatiezoeker vond de vestiging (src/locatie.mjs).
+  item('ransomware:g', 'ransomware', { soort: 'ransomware', titel: 'Ransomwaregroep x claimt aanval op Garage Bouma', tekst: 'Garage Bouma', vestiging: { plaats: 'Gorredijk', gemeente: 'Opsterland', postcode: '8401 AB', bron: 'postcode op de contactpagina van garagebouma.nl', zeker: 0.75 } });
 
   const k = maakKader({ opslag });
   const route = (sleutel) => routeerItem(k, opslag.items[sleutel], k.bronnen.get(opslag.items[sleutel].bron)).map((r) => r.regio).sort();
@@ -101,6 +103,7 @@ test('signalen naar de regio: via de plek, de provincie en plaatsnamen; andere l
   assert.deepEqual(route('knmi-waarschuwingen:f'), ['heerenveen', 'ooststellingwerf', 'opsterland', 'smallingerland', 'sudwestfryslan', 'weststellingwerf'], 'alle Friese regio\'s');
   assert.deepEqual(route('raad-van-state:o'), ['opsterland']);
   assert.deepEqual(route('ransomware:t'), ['heerenveen']);
+  assert.deepEqual(route('ransomware:g'), ['opsterland'], 'via de vestiging');
   assert.deepEqual(route('landelijk-nieuws:d'), [], 'een gewone landelijke bron alleen via sleutelwoorden');
 
   // Sleutelwoorden bij een uitspraak alleen in titel en samenvatting: de volledige
@@ -119,8 +122,12 @@ test('signalen naar de regio: via de plek, de provincie en plaatsnamen; andere l
   const sanne = nieuweGebruiker(opslag.instellingen, { naam: 'Sanne', email: 'sanne@lc.nl', regios: ['groningen', 'opsterland'] });
   opslag.gebruikers.push(sanne);
   const feed = bouwFeed(maakKader({ opslag }), sanne, {});
-  assert.deepEqual(feed.items.filter((i) => i.groep === 'signaal').map((i) => i.id).sort(), ['i:knmi-aardbevingen:a', 'i:knmi-waarschuwingen:f', 'i:raad-van-state:o']);
-  assert.equal(feed.tellingen.signaal, 3);
+  assert.deepEqual(feed.items.filter((i) => i.groep === 'knmi').map((i) => i.id).sort(), ['i:knmi-aardbevingen:a', 'i:knmi-waarschuwingen:f'], 'aardbevingen en weer onder KNMI');
+  assert.deepEqual(feed.items.filter((i) => i.groep === 'rvs').map((i) => i.id), ['i:raad-van-state:o']);
+  assert.deepEqual([feed.tellingen.knmi, feed.tellingen.rvs, feed.tellingen.ransomware], [2, 1, 1]);
+  const g = detail(maakKader({ opslag }), sanne, 'i:ransomware:g');
+  assert.match(g.treffers[0].fragment.tekst, /Gevestigd in Gorredijk \(gemeente Opsterland\)/);
+  assert.match(g.meta.find((m) => m.k === 'Vestiging').v, /^Gorredijk, gemeente Opsterland \(8401 AB\) · volgens postcode op de contactpagina/);
   const d = detail(maakKader({ opslag }), sanne, 'i:knmi-aardbevingen:a');
   assert.equal(d.soortNaam, 'Aardbeving');
   assert.deepEqual(d.treffers.map((t) => [t.term, t.regio, t.fragment.tekst]), [['Garmerwolde', 'groningen', 'Garmerwolde, in de gemeente Groningen']]);

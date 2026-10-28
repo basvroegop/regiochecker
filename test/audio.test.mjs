@@ -180,7 +180,7 @@ test('iBabs met babscast, Notubiz onder notubiz.nl, en een gemeentepagina die na
     const m = await mediaVoor(c.items[0]);
     assert.deepEqual(m, {
       adres: `https://vod.babscast.com/hls/${uuid(101)}/video.mp4/master.m3u8`,
-      velden: { titel: 'Raadsvergadering - Begroting', duur: 5400, platform: { agenda: [{ titel: '1 Opening', start: 12.5, eind: 60 }], sprekers: [] } },
+      velden: { titel: 'Raadsvergadering - Begroting', duur: 5400, platform: { agenda: [{ titel: '1 Opening', start: 12.5, eind: 60 }], sprekers: [], versie: 2 } },
       stream: true,
     });
     assert.ok(!JSON.stringify(m).includes('geheim'), 'het spelertoken blijft buiten de Regiochecker');
@@ -426,6 +426,30 @@ test('vergaderplatform: agenda met tijden, en wie had de microfoon', async () =>
     ] },
   ] }), [{ titel: '1 Opening', start: 614, eind: 1034 }, { titel: '4 Kapitaalgoederen', start: 1101, eind: 2059 }], 'ook punten onder een kopje');
 
+  // Notubiz: de spreekmomenten onder de agendapunten op de vergaderpagina.
+  const moment = (id, start, eind, naam) => `<li class="speaker_index js_only" id="si_${start}"
+			data-si_id="${start}" data-speaker_id="${id}"
+			data-start_offset="${start}"
+			data-end_offset="${eind}">
+			<button>
+				<span class="icon-user">spreker: </span>${naam}
+					<span class="item_time"><span class="icon-time" title="Tijdsduur">Tijdsduur:</span><time datetime="PT00H01M14S">00:01:14</time></span>
+			</button>
+				</li>`;
+  const { notubizSprekers } = await import('../src/audio/vergaderingen.mjs');
+  assert.deepEqual(notubizSprekers(`<ul class="speakers_indexations">${[
+    moment(1, 89, 104, 'Vries de, Jannewietske\t\t\t\t(burgemeester)'),
+    moment(2, 104, 121, 'Groot, Jelmer de (BBB)'),
+    moment(1, 14, 88, 'Vries de, Jannewietske (burgemeester)'),
+    moment(1, 14, 88, 'Vries de, Jannewietske (burgemeester)'),
+    moment(3, 130, 160, 'Akker, Petra van den (wethouder)'),
+    moment(4, 0, 0, 'Zonder, Tijd (CDA)'),
+  ].join('')}</ul>`), [
+    { naam: 'Jannewietske de Vries', rol: 'burgemeester', momenten: [[14, 88], [89, 104]] },
+    { naam: 'Jelmer de Groot', rol: 'BBB', momenten: [[104, 121]] },
+    { naam: 'Petra van den Akker', rol: 'wethouder', momenten: [[130, 160]] },
+  ], 'voornaam eerst, ook met het tussenvoegsel achter de voornaam; elk moment één keer');
+
   // Een stem die grotendeels samenvalt met Marcel Bos; een stem die maar half samenvalt niet.
   assert.deepEqual(platformSpreker([[2701, 3020], [3101, 3109]], cwc.sprekers), { naam: 'Marcel Bos', rol: null, deel: 100 });
   assert.equal(platformSpreker([[3501, 3530], [5000, 5100]], cwc.sprekers), null, 'minder dan 60% van de spreektijd');
@@ -466,6 +490,51 @@ test('namen van het vergaderplatform gelden meteen voor de stemmen', metSqlite, 
     assert.equal(a.status, 'klaar');
     assert.ok(opslag.logboek.some((l) => /1 stem genoemd naar het vergaderplatform/.test(l.tekst)));
   } finally {
+    worker.server.close();
+  }
+});
+
+test('een vergadering die al klaar was, krijgt de sprekers van Notubiz alsnog', metSqlite, async () => {
+  const { TRANSCRIPT } = await import('./nep-worker.mjs');
+  const worker = await nepWorker();
+  const net = await nepInternet((u) => {
+    if (u.host === 'sudwestfryslan.raadsinformatie.nl' && u.pathname === '/vergadering/77') {
+      return `<script>media_file = { pubpoint: "rtmp://wowza1.notubiz.nl/nbvod", streamname: "raad.mp4" }; media_files[1] = media_file;</script>
+        <ul class="speakers_indexations"><li class="speaker_index js_only" data-speaker_id="9" data-start_offset="44" data-end_offset="71">
+        <button><span class="icon-user">spreker: </span>Kramer, Jan (wethouder)</button></li></ul>`;
+    }
+    if (u.host === 'api.notubiz.nl' && u.pathname === '/events/meetings/77') {
+      return { meeting: { agenda_items: [{ type_data: { title_prefix: '1', attributes: [{ id: 1, value: 'Iepening' }] }, start_offset: '0', end_offset: '40' }] } };
+    }
+  });
+  try {
+    const { opslag, adb, verwerking } = await opzet();
+    opslag.instellingen.audio = { ...opslag.instellingen.audio, workerUrl: worker.url, workerToken: TOKEN, viaTailnet: false };
+    const bron = { id: 'swf', naam: 'Súdwest-Fryslân · Raad', soort: 'raadsvergadering', bereik: 'regio', regio: 'sudwestfryslan', type: 'audio', url: 'https://sudwestfryslan.raadsinformatie.nl/', audio: { kind: 'notubiz', prioriteit: 0 } };
+    opslag.bronnen.push(bron);
+    const id = 'f'.repeat(32);
+    adb.voegToe(bron, { id, extern: 'ntb:1/77', vorm: 'vergadering', url: 'https://sudwestfryslan.raadsinformatie.nl/vergadering/77', titel: 'Raadsvergadering', gepubliceerdOp: Date.now() / 1000 - 86400 });
+    const { schoonSegmenten } = await import('../src/audio/verwerking.mjs');
+    adb.werkBij(id, { transcript: 'x', segmenten: schoonSegmenten(TRANSCRIPT), status: 'klaar', platform: { agenda: [], sprekers: [] } });
+    assert.equal(verwerking.volgende().length, 0, 'niets in de wachtrij');
+
+    assert.equal(await verwerking.verwerkEen(), true);
+    const a = adb.aflevering(id);
+    assert.deepEqual([a.platform.versie, a.platform.agenda.map((p) => p.titel), a.platform.sprekers.map((p) => p.naam)], [2, ['1 Iepening'], ['Jan Kramer']]);
+    assert.equal(worker.staat.namen.get(STEM.wethouder), 'Jan Kramer', 'de stem heeft zijn naam');
+    assert.equal(a.status, 'klaar');
+    assert.equal(await verwerking.verwerkEen(), false, 'daarna niet nog eens');
+
+    // Een recente vergadering waarbij Notubiz de sprekers nog niet had: een dag later opnieuw kijken.
+    adb.werkBij(id, { platform: { agenda: [], sprekers: [], versie: 2, opgehaald: Date.now() / 1000 - 3600 } });
+    assert.equal(await verwerking.verwerkEen(), false, 'een uur geleden bekeken');
+    adb.werkBij(id, { platform: { agenda: [], sprekers: [], versie: 2, opgehaald: Date.now() / 1000 - 90000 } });
+    verwerking.platformGeprobeerd.clear();
+    assert.equal(await verwerking.verwerkEen(), true, 'gisteren bekeken');
+    assert.equal(adb.aflevering(id).platform.sprekers.length, 1);
+    assert.equal(await verwerking.verwerkEen(), false, 'met sprekers is het klaar');
+  } finally {
+    net.herstel();
     worker.server.close();
   }
 });

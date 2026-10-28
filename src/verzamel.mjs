@@ -11,10 +11,11 @@
 //    site wordt omgebouwd en ineens alle links veranderen. Voor Woo geldt die
 //    grens niet, om de reden hierboven.
 
-import { teVerzamelen } from './register.mjs';
+import { teVerzamelen, alleBronnen } from './register.mjs';
 import { haalBron } from './bronnen/index.mjs';
 import { dagenGeleden } from './datum.mjs';
 import { vulInhoud } from './inhoud.mjs';
+import { vindVestiging } from './locatie.mjs';
 
 const MAX_LEEFTIJD_DAGEN = { nieuws: 21, ingekomen: 21, woo: null };
 const NULMETING_RECENT_DAGEN = 2;
@@ -63,6 +64,7 @@ export function verwerk(opslag, bron, gevonden, nu = new Date()) {
       // Waar het gebeurde, voor de routering naar regio's (src/geo.mjs).
       ...(g.plek ? { plek: g.plek } : {}),
       ...(g.provincies ? { provincies: g.provincies } : {}),
+      ...(g.slachtoffer ? { slachtoffer: g.slachtoffer } : {}),
       eersteGezien: tijd,
       laatstGezien: tijd,
       basislijn: !telAlsNieuw(g, bron.soort, eersteKeer, nu),
@@ -73,11 +75,42 @@ export function verwerk(opslag, bron, gevonden, nu = new Date()) {
   return { nieuw, eersteKeer };
 }
 
+// Voor bronnen met `vestiging` (ransomware): de vestigingsplaats van nieuwe
+// stukken opzoeken. Hooguit 25 per ronde, twee pogingen per stuk; OpenStreetMap
+// wil niet meer dan één verzoek per seconde.
+const VESTIGINGEN_PER_RONDE = 25;
+export async function vulVestigingen(opslag) {
+  const bronnen = new Map(alleBronnen(opslag).filter((b) => b.vestiging).map((b) => [b.id, b]));
+  const wachtrij = Object.values(opslag.items)
+    .filter((i) => bronnen.has(i.bron) && i.slachtoffer && !i.vestiging && (i.vestigingPogingen || 0) < 2)
+    .sort((a, b) => b.eersteGezien.localeCompare(a.eersteGezien))
+    .slice(0, VESTIGINGEN_PER_RONDE);
+  let gevonden = 0;
+  for (const item of wachtrij) {
+    try {
+      const v = await vindVestiging({ ...item.slachtoffer, hint: item.vestigingHint || {} });
+      if (v && !v.onzeker) {
+        item.vestiging = v;
+        gevonden++;
+      } else {
+        item.vestigingPogingen = (item.vestigingPogingen || 0) + 1;
+        if (v?.onzeker) item.vestigingKandidaten = v.kandidaten.map((k) => `${k.plaats || k.gemeente} (${k.bron})`);
+      }
+    } catch {
+      item.vestigingPogingen = (item.vestigingPogingen || 0) + 1;
+    }
+  }
+  return { gezocht: wachtrij.length, gevonden };
+}
+
 function ruimOp(opslag, nu) {
-  const grens = new Date(nu - OPRUIMEN_NA_DAGEN * 86400000).toISOString();
+  const bronnen = new Map(alleBronnen(opslag).map((b) => [b.id, b]));
   for (const [sleutel, item] of Object.entries(opslag.items)) {
     // Alleen opruimen wat een werkende bron niet meer toont. Bij een bron die al
     // weken stuk is blijft alles staan, anders komt het bij herstel terug als nieuw.
+    // Een bron die alleen het nieuwste toont (ransomware, aardbevingen) bewaart
+    // langer: daar is uit beeld raken normaal (`bewaarDagen`).
+    const grens = new Date(nu - (bronnen.get(item.bron)?.bewaarDagen || OPRUIMEN_NA_DAGEN) * 86400000).toISOString();
     if (item.laatstGezien < grens && opslag.status.bronnen[item.bron]?.ok) delete opslag.items[sleutel];
   }
 }
@@ -135,6 +168,8 @@ export function verzamelAlles(opslag, voortgang) {
     ruimOp(opslag, new Date());
     // De inhoud achter de links, voor de samenvatting (src/inhoud.mjs).
     opslag.status.inhoud = { ...(await vulInhoud(opslag, { voortgang })), tijd: new Date().toISOString() };
+    // Waar ransomwareslachtoffers gevestigd zijn (src/locatie.mjs).
+    opslag.status.vestigingen = { ...(await vulVestigingen(opslag)), tijd: new Date().toISOString() };
     opslag.status.laatsteVerzamelronde = new Date().toISOString();
     opslag.bewaar('items', 'status');
     const fouten = resultaten.filter((r) => r.nieuweFout);

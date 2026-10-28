@@ -35,7 +35,8 @@ aantallen, plus **Alleen ongelezen**. Een stuk openen markeert het als gelezen;
   beurt die nu speelt licht op; een tijd aanklikken springt erheen. Een spreker
   zonder naam heeft een ▶ (kort fragment van die stem) en een veld **Naam
   invullen**; zo'n naam geldt voor die stem in alle opnames, ook in Plaud.
-  Weet het vergaderplatform wie wanneer de microfoon had (Company Webcast), dan
+  Weet het vergaderplatform wie wanneer de microfoon had (Company Webcast,
+  Notubiz), dan
   staat bij een stem die daar grotendeels mee samenvalt de naam als voorstel, met
   bij Sprekers een knop om alle voorstellen in één keer over te nemen. Andere
   naamvoorstellen zijn er niet meer: namen die het taalmodel vlak voor een beurt
@@ -182,16 +183,38 @@ audio wordt het transcript doorzocht en staat bij elke treffer de tijd.
 
 ## Signalen
 
-Vier landelijke bronnen uit de checker (`/opt/checker`) zijn overgenomen, onder
-het tabblad **Signalen** (`src/bronnen/signalen.mjs`). Ze hebben een plek, en gaan
-daarmee rechtstreeks naar de goede regio, naast de gewone sleutelwoorden:
+Vier landelijke bronnen uit de checker (`/opt/checker`) zijn overgenomen
+(`src/bronnen/signalen.mjs`), elk onder een eigen tabblad in de feed: **KNMI**
+(aardbevingen en weerwaarschuwingen), **Raad van State** en **Ransomware**. Ze
+hebben een plek, en gaan daarmee rechtstreeks naar de goede regio, naast de
+gewone sleutelwoorden:
 
 | Bron | Waar het vandaan komt | Naar een regio als |
 |---|---|---|
 | KNMI · Aardbevingen | openbare FDSN-dienst `rdsa.knmi.nl` (geen sleutel), vanaf kracht 1,0, de laatste 60 dagen | het epicentrum in de gemeente ligt of tot 5 km erbuiten |
 | KNMI · Weerwaarschuwingen | RSS per provincie, alleen code oranje en rood | de gemeente in die provincie ligt |
 | Raad van State · Uitspraken | de 100 nieuwste uitspraken van de Afdeling bestuursrechtspraak | de gemeente of een plaats erin in de titel of samenvatting staat |
-| Ransomware · Nederlandse slachtoffers | ransomlook.io (de 100 nieuwste wereldwijd, alleen met een `.nl`-website of Nederland in de beschrijving); met `RANSOMWARE_LIVE_API_KEY` ook ransomware.live Pro | de vestigingsplaats in de beschrijving staat |
+| Ransomware · Nederlandse slachtoffers | ransomlook.io (de 100 nieuwste wereldwijd, alleen met een `.nl`-website of Nederland in de beschrijving); met `RANSOMWARE_LIVE_API_KEY` ook ransomware.live Pro | het bedrijf in de gemeente gevestigd is (zie hieronder) |
+
+Aardbevingen, weerwaarschuwingen en ransomware blijven twee jaar bewaard
+(`bewaarDagen` bij de bron), ook als de bron ze niet meer toont: die toont alleen
+het nieuwste.
+
+**Waar een ransomwareslachtoffer gevestigd is** (`src/locatie.mjs`, overgenomen
+uit de locator van de checker): een lekwebsite noemt alleen naam, soms website
+en een beschrijving. Van sterk naar zwak bewijs: een postcode die al bekend is;
+een plaats in de beschrijving ("based in Heerenveen"); OpenStreetMap (Nominatim,
+hooguit één verzoek per seconde) op de bedrijfsnaam, alleen treffers die echt op
+de naam lijken, en met `OPENCORPORATES_API_KEY` ook OpenCorporates; de eigen
+website, de postcode die op de contactpagina of homepage het vaakst staat (live,
+anders via het Internet Archive), of de paginatitel als nieuwe zoeknaam; als
+laatste de plaats die de checker vond. Een postcode gaat via de PDOK
+Locatieserver naar woonplaats en gemeente. Wijzen de kandidaten naar
+verschillende gemeenten (Makro), dan is de vestiging onzeker en gaat het stuk
+naar geen regio. Elke verzamelronde zoekt hooguit 25 nieuwe slachtoffers op,
+twee pogingen per stuk. De vestiging staat bij het stuk, met waar die vandaan
+komt. De 202 slachtoffers die de checker sinds juni 2026 vond, zijn overgenomen
+met `scripts/importeer-checker.mjs`.
 
 Een regio heet naar een gemeente. Welke plekken daarin liggen, staat in
 `src/geo/nl.json`: de gemeentegrenzen (Kadaster, Bestuurlijke Gebieden via PDOK,
@@ -293,10 +316,18 @@ aflevering zonder; de aflevering zelf mislukt daar nooit door.
 **Agenda en sprekers van het vergaderplatform** (`platform` bij de aflevering):
 Company Webcast geeft de agendapunten (topics) en per spreker de spreekmomenten,
 in kloktijd vanaf `actualStart`; Notubiz de agendapunten met `start_offset` in
-seconden (via `api.notubiz.nl/events/meetings/<id>`); babscast de tijdlijn
-(`TimelineEvents` van het soort Topic). GemeenteOplossingen geeft via de open API
-geen agenda met tijden. Ze worden opgehaald bij het downloaden; voor een opname
-die al binnen was, in de stap na het transcript.
+seconden (via `api.notubiz.nl/events/meetings/<id>`) en de spreekmomenten onder
+"Nu aan het woord" op de vergaderpagina (`speaker_index` met `start_offset` en
+`end_offset`; de API geeft die niet; "Vries de, Jannewietske" wordt "Jannewietske
+de Vries"); babscast de tijdlijn (`TimelineEvents` van het soort Topic).
+GemeenteOplossingen geeft via de open API geen agenda met tijden. Ze worden
+opgehaald bij het downloaden; voor een opname die al binnen was, in de stap na
+het transcript. Haalt de Regiochecker meer uit een platform dan eerst
+(`PLATFORM_VERSIE` in `src/audio/vergaderingen.mjs`), dan krijgen afgeronde
+vergaderingen dat alsnog, één tegelijk vóór ander werk (het is maar een
+paginabezoek), met de namen voor de stemmen. Notubiz vult de spreekmomenten vaak
+pas dagen na de vergadering in: ontbreken ze bij een vergadering van de laatste
+dertig dagen, dan kijkt de Regiochecker elke dag opnieuw.
 
 **Namen zoeken met AI** (personen, plaatsen, organisaties via `/v1/entities` van
 de worker) staat standaard uit, bij Instellingen › Audio en video aan te zetten.

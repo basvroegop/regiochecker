@@ -84,12 +84,12 @@ function routeer(k, bronId, zoek) {
 }
 
 export function routeerItem(k, item, bron) {
-  return onthoud(`ri|${item.sleutel}|${tekstVersie(k, item)}|${k.termVersie}`, () => {
+  return onthoud(`ri|${item.sleutel}|${tekstVersie(k, item)}|${item.vestiging?.gemeente || ''}|${k.termVersie}`, () => {
     // `alleenSamenvatting`: de volledige tekst noemt ook wat er niet over gaat
     // (bij een uitspraak: "advocaat in Heerenveen").
     const tekst = bron.alleenSamenvatting ? [item.titel, item.tekst].filter(Boolean).join('\n') : tekstVan(k, item);
     const viaTermen = routeer(k, bron.id, (termen) => vindTermen(tekst, termen));
-    if (!bron.geo && !bron.plaatsen) return viaTermen;
+    if (!bron.geo && !bron.plaatsen && !bron.vestiging) return viaTermen;
     // Eerst de plek, dan de sleutelwoorden; per regio samen.
     const samen = new Map();
     for (const r of [...routeerOpPlek(k, item, bron), ...viaTermen]) {
@@ -124,6 +124,12 @@ function routeerOpPlek(k, item, bron) {
     }
     if (bron.geo && item.provincies?.includes(g.provincie)) {
       gevonden.push({ term: `provincie ${g.provincie}`, aantal: 1, fragment: { tekst: item.titel, treffer: '' } });
+    }
+    // De vestigingsplaats (src/locatie.mjs): de sterkste aanwijzing.
+    const v = bron.vestiging && item.vestiging;
+    if (v?.gemeente === g.naam) {
+      const plaats = v.plaats || v.gemeente;
+      gevonden.push({ term: plaats, aantal: 1, fragment: { tekst: `Gevestigd in ${plaats}${v.plaats && v.plaats !== g.naam ? ` (gemeente ${g.naam})` : ''}${v.postcode ? `, ${v.postcode}` : ''}; volgens ${v.bron}.`, treffer: plaats } });
     }
     const hier = plaatsen.filter((p) => p.gemeenten.includes(g.naam)).map((p) => p.plaats);
     if (hier.length) gevonden.push(...vindTermen(tekst, hier));
@@ -466,6 +472,7 @@ function itemDetail(k, gebruiker, sleutel) {
       meta('Soort stuk', item.soortStuk),
       meta('Advies', item.advies),
       meta('Datum stuk', item.datum),
+      meta('Vestiging', item.vestiging && `${[item.vestiging.plaats, item.vestiging.plaats !== item.vestiging.gemeente && `gemeente ${item.vestiging.gemeente}`, item.vestiging.provincie].filter(Boolean).join(', ')}${item.vestiging.postcode ? ` (${item.vestiging.postcode})` : ''} · volgens ${item.vestiging.bron}`),
       meta('Eerst gezien', item.eersteGezien),
       meta('Regio', regios.map((r) => k.regioMap.get(r)?.naam || r).join(', ')),
     ].filter(Boolean),

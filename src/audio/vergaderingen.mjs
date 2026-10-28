@@ -22,7 +22,7 @@
 
 import { createHash } from 'node:crypto';
 import { haalJsonOpenbaar, haalTekstOpenbaar, UA } from './ophalen.mjs';
-import { ontsnap } from '../html.mjs';
+import { ontsnap, platteTekst } from '../html.mjs';
 
 export const PLATFORMS = { companywebcast: 'Company Webcast', notubiz: 'Notubiz', ibabs: 'iBabs', gemeenteoplossingen: 'GemeenteOplossingen' };
 const COMPANY_WEBCAST = new Set(['channel.royalcast.com', 'channel.companywebcast.com']);
@@ -117,13 +117,15 @@ export function ontdek(bron, { proef = false } = {}) {
 // `velden.platform` is wat het platform zelf over de opname weet, met tijden
 // in seconden vanaf het begin van de opname:
 //   agenda    [{ titel, start, eind }]          Company Webcast, Notubiz, babscast
-//   sprekers  [{ naam, rol, momenten: [[start, eind], …] }]   Company Webcast
+//   sprekers  [{ naam, rol, momenten: [[start, eind], …] }]   Company Webcast, Notubiz
 export async function mediaVoor(af) {
   try {
-    if (af.extern.startsWith('ntb:')) return await notubizMedia(af);
-    if (af.extern.startsWith('go:')) return await goMedia(af);
-    if (af.extern.startsWith('ibabs:')) return await ibabsMedia(af);
-    return await webcastMedia(af);
+    const media = af.extern.startsWith('ntb:') ? await notubizMedia(af)
+      : af.extern.startsWith('go:') ? await goMedia(af)
+        : af.extern.startsWith('ibabs:') ? await ibabsMedia(af)
+          : await webcastMedia(af);
+    if (media.velden?.platform) media.velden.platform.versie = PLATFORM_VERSIE;
+    return media;
   } catch (fout) {
     // Vlak na een vergadering staat de opname er vaak nog niet: dan later
     // nog eens kijken (src/audio/verwerking.mjs), zonder dat als mislukte poging te tellen.
@@ -136,12 +138,19 @@ export async function mediaVoor(af) {
   }
 }
 
+// Gaat omhoog als er meer uit een platform komt dan eerst (2: de sprekers van
+// Notubiz); opnames die al klaar waren, krijgen dat dan alsnog (src/audio/verwerking.mjs).
+export const PLATFORM_VERSIE = 2;
+// Platforms die sprekers kunnen geven. Notubiz vult de spreekmomenten vaak pas
+// dagen na de vergadering in.
+export const PLATFORM_MET_SPREKERS = ['cwc:', 'ntb:'];
+
 // Alleen agenda en sprekers, voor een opname die al binnen is. Geeft
 // { agenda, sprekers } (leeg als het platform niets weet), of null bij een fout.
 export async function platformVoor(af) {
   if (af.vorm !== 'vergadering') return null;
   try {
-    return (await mediaVoor(af)).velden?.platform || { agenda: [], sprekers: [] };
+    return (await mediaVoor(af)).velden?.platform || { agenda: [], sprekers: [], versie: PLATFORM_VERSIE };
   } catch {
     return null;
   }
@@ -353,9 +362,11 @@ async function notubizMedia(af) {
   // De speler kent de volledige naam van deze zaal of vergadering wél.
   const titel = SPELER_TITEL.exec(pagina.slice(Math.max(0, pagina.indexOf('createPlayer'))))?.[1]?.trim();
   const velden = titel ? { titel } : {};
+  let agenda = [];
   try {
-    velden.platform = { agenda: notubizAgenda((await notubiz(`events/meetings/${code.split('/')[1]}`)).meeting), sprekers: [] };
+    agenda = notubizAgenda((await notubiz(`events/meetings/${code.split('/')[1]}`)).meeting);
   } catch { /* zonder agenda gaat het ook */ }
+  velden.platform = { agenda, sprekers: notubizSprekers(pagina) };
   // Een raadsopname is video van gigabytes: alleen het geluid van de stream halen.
   return { adres: stream, velden, stream: true };
 }
@@ -375,6 +386,49 @@ export function notubizAgenda(vergadering) {
   };
   loop(vergadering?.agenda_items);
   return uit.sort((a, b) => a.start - b.start);
+}
+
+// Wie wanneer sprak: de pagina zet onder elk agendapunt de spreekmomenten
+// ("Nu aan het woord"), met tijden in seconden vanaf het begin van de opname:
+//   <li class="speaker_index" data-speaker_id="164999" data-start_offset="14"
+//       data-end_offset="88"> … spreker: Vries de, Jannewietske (burgemeester) …
+// De API geeft die niet.
+const SPREEKMOMENT = /<li\b[^>]*\bclass="speaker_index\b[^"]*"([^>]*)>([\s\S]*?)<\/li>/g;
+const DATA_VELD = (naam) => new RegExp(`\\bdata-${naam}="([^"]*)"`);
+
+export function notubizSprekers(pagina) {
+  const sprekers = new Map();
+  for (const [, attributen, inhoud] of String(pagina).matchAll(SPREEKMOMENT)) {
+    const id = DATA_VELD('speaker_id').exec(attributen)?.[1];
+    const start = Number.parseFloat(DATA_VELD('start_offset').exec(attributen)?.[1]);
+    const eind = Number.parseFloat(DATA_VELD('end_offset').exec(attributen)?.[1]);
+    const tekst = platteTekst(inhoud.replace(/<span class="item_time"[\s\S]*$/, '')).replace(/^spreker:\s*/i, '');
+    const [, naam, rol] = /^(.*?)\s*(?:\(([^()]*)\))?$/.exec(tekst) || [];
+    if (!id || !naam || !Number.isFinite(start) || !(eind > start)) continue;
+    if (!sprekers.has(id)) sprekers.set(id, { naam: notubizNaam(naam), rol: rol?.trim() || null, momenten: [] });
+    const { momenten } = sprekers.get(id);
+    if (!momenten.some(([a, b]) => a === start && b === eind)) momenten.push([start, eind]);
+  }
+  for (const s of sprekers.values()) s.momenten.sort((a, b) => a[0] - b[0]);
+  return [...sprekers.values()];
+}
+
+// Notubiz zet de achternaam voorop, met het tussenvoegsel nu eens achter de
+// achternaam, dan weer achter de voornaam: "Vries de, Jannewietske",
+// "Groot, Jelmer de". Allebei "voornaam tussenvoegsel achternaam".
+const TUSSENVOEGSEL = /^(?:van|de|der|den|het|'t|te|ten|ter|in|op|aan|uit|la|le|du|d'|da|del|dos|von|vom|zu)$/;
+export function notubizNaam(naam) {
+  const delen = String(naam).split(',').map((d) => d.trim().split(/\s+/).filter(Boolean));
+  if (delen.length !== 2 || !delen[0].length || !delen[1].length) return String(naam).trim();
+  const [achter, voor] = delen;
+  const tussen = (d) => {
+    const uit = [];
+    while (d.length > 1 && TUSSENVOEGSEL.test(d.at(-1))) uit.unshift(d.pop());
+    return uit;
+  };
+  const voorTussen = tussen(voor);
+  const achterTussen = tussen(achter);
+  return [...voor, ...voorTussen, ...achterTussen, ...achter].join(' ');
 }
 
 // ---------- iBabs ----------

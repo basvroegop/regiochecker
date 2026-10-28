@@ -22,7 +22,7 @@ import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { worker } from './worker.mjs';
 import { ontdek } from './catalogus.mjs';
-import { mediaVoor, platformVoor } from './vergaderingen.mjs';
+import { mediaVoor, platformVoor, PLATFORM_VERSIE, PLATFORM_MET_SPREKERS } from './vergaderingen.mjs';
 import { downloadAudio, gooiAudioWeg, audioDuur, knipAudio } from './ophalen.mjs';
 import { delen, splits, plaatsNamen } from './namen.mjs';
 import { vindNummers, nummerlijst, contextVenster, namenInBuurt, controleerDuiding } from './telefoon.mjs';
@@ -127,6 +127,7 @@ export class Verwerking {
     this.loopt = false;
     this.wekkers = new Set();
     this.bezigMet = null;
+    this.platformGeprobeerd = new Map();
     for (const v of nummerlijst()) adb.zetVerificatie(v.nummer, v);
   }
 
@@ -273,6 +274,8 @@ export class Verwerking {
     if (!w || !w.heeftToken) return false;
     const nu = Date.now() / 1000;
     const { rijen, groep } = this.kandidaten(nu);
+    // Eerst wat geen GPU kost: platformgegevens van afgeronde vergaderingen bijwerken.
+    if (await this.vernieuwPlatform(w)) return true;
     const volgende = rijen.find((r) => r.klaarVoor);
     if (!volgende) return false;
     // Wacht de lopende aflevering even (op de gedeelde GPU, of een herkansing
@@ -287,6 +290,25 @@ export class Verwerking {
     } finally {
       this.bezigMet = null;
     }
+    return true;
+  }
+
+  // Haalt de Regiochecker meer uit een vergaderplatform dan eerst (zoals de
+  // sprekers van Notubiz), dan krijgen opnames die al klaar waren dat alsnog,
+  // met de namen van de stemmen. Ontbraken de sprekers nog bij een vergadering
+  // van de laatste dertig dagen, dan elke dag opnieuw kijken. Eén per keer, voor
+  // ander werk (het is maar één paginabezoek); lukt het niet, dan een dag later.
+  async vernieuwPlatform(w) {
+    const nu = Date.now() / 1000;
+    const id = this.adb.verouderdPlatform(PLATFORM_VERSIE, { prefixen: PLATFORM_MET_SPREKERS, recent: nu - 30 * 86400, eerder: nu - 86400 })
+      .find((i) => !(this.platformGeprobeerd.get(i) > nu - 86400));
+    if (!id) return false;
+    this.platformGeprobeerd.set(id, nu);
+    const af = this.adb.aflevering(id);
+    const platform = await platformVoor(af);
+    if (!platform) return false;
+    this.adb.werkBij(id, { platform: { ...platform, opgehaald: nu } });
+    if (platform.sprekers.length) await this.neemPlatformNamenOver({ ...af, platform }, w);
     return true;
   }
 
@@ -339,7 +361,7 @@ export class Verwerking {
             if (m.titel) velden.titel = m.titel;
             if (m.auteur) velden.auteur = m.auteur;
             if (m.duur) velden.duur = m.duur;
-            if (m.platform) velden.platform = m.platform;
+            if (m.platform) velden.platform = { ...m.platform, opgehaald: Date.now() / 1000 };
             if (m.gepubliceerd && /^\d{8}$/.test(m.gepubliceerd) && !af.gepubliceerd) {
               Object.assign(velden, { gepubliceerdTekst: m.gepubliceerd, gepubliceerdOp: Date.UTC(+m.gepubliceerd.slice(0, 4), +m.gepubliceerd.slice(4, 6) - 1, +m.gepubliceerd.slice(6, 8)) / 1000 });
             }
@@ -387,7 +409,7 @@ export class Verwerking {
     if (af.vorm === 'vergadering' && !af.platform) {
       const platform = await platformVoor(af);
       if (platform) {
-        werk({ platform });
+        werk({ platform: { ...platform, opgehaald: Date.now() / 1000 } });
         af.platform = platform;
       }
     }
