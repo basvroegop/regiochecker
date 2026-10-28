@@ -133,7 +133,7 @@ function routeerOpPlek(k, item, bron) {
     }
     const hier = plaatsen.filter((p) => p.gemeenten.includes(g.naam)).map((p) => p.plaats);
     if (hier.length) gevonden.push(...vindTermen(tekst, hier));
-    if (gevonden.length) uit.push({ regio: r.id, gevonden });
+    if (gevonden.length) uit.push({ regio: r.id, gevonden: gevonden.map((g) => ({ ...g, plek: true })) });
   }
   return uit;
 }
@@ -472,7 +472,7 @@ function itemDetail(k, gebruiker, sleutel) {
       meta('Soort stuk', item.soortStuk),
       meta('Advies', item.advies),
       meta('Datum stuk', item.datum),
-      meta('Vestiging', item.vestiging && `${[item.vestiging.plaats, item.vestiging.plaats !== item.vestiging.gemeente && `gemeente ${item.vestiging.gemeente}`, item.vestiging.provincie].filter(Boolean).join(', ')}${item.vestiging.postcode ? ` (${item.vestiging.postcode})` : ''} · volgens ${item.vestiging.bron}`),
+      meta('Vestiging', item.vestiging && vestigingTekst(item.vestiging)),
       meta('Eerst gezien', item.eersteGezien),
       meta('Regio', regios.map((r) => k.regioMap.get(r)?.naam || r).join(', ')),
     ].filter(Boolean),
@@ -485,9 +485,13 @@ function itemDetail(k, gebruiker, sleutel) {
       bronId: bron.id,
       regioIds: landelijk ? gebruiker.regios : [],
       route: landelijk ? routeerItem(k, item, bron) : null,
-    }),
+    // Bij ransomware staan vestiging en regio al bij de gegevens van het stuk.
+    }).filter((t) => !(bron.vestiging && t.plek)),
   };
 }
+
+// "Gorredijk (gemeente Opsterland), 8401 AB · volgens …"
+const vestigingTekst = (v) => `${v.plaats || v.gemeente}${v.plaats && v.plaats !== v.gemeente ? ` (gemeente ${v.gemeente})` : ''}${v.postcode ? `, ${v.postcode}` : ''} · volgens ${v.bron}`;
 
 function kamerDetail(k, gebruiker, id) {
   if (!k.kdb) return null;

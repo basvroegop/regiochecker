@@ -11,6 +11,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { nieuweGebruiker } from './gebruikers.mjs';
+import { ransomwareTitel } from './bronnen/signalen.mjs';
 
 export function migreer(opslag, { nieuw, oud }) {
   const gewijzigd = new Set();
@@ -59,6 +60,14 @@ export function migreer(opslag, { nieuw, oud }) {
     m.tijd ||= opslag.instellingen.mailTijd || '07:00';
     delete m.email;
     gewijzigd.add('meldingen');
+  }
+
+  // Tot 28 oktober 2026: "Ransomwaregroep everest claimt aanval op B-accountants".
+  for (const item of Object.values(opslag.items)) {
+    const oudeTitel = item.soort === 'ransomware' && /^Ransomwaregroep (.+?) claimt aanval op (.+)$/.exec(item.titel || '');
+    if (!oudeTitel) continue;
+    item.titel = ransomwareTitel(oudeTitel[2], oudeTitel[1] === 'onbekend' ? null : oudeTitel[1]);
+    gewijzigd.add('items');
   }
 
   return [...gewijzigd];

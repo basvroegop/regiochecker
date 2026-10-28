@@ -138,12 +138,15 @@ export async function haalUitspraken(bron) {
 const NL = /\b(netherlands|nederland)\b/i;
 const isNl = (website, beschrijving) => /\.nl(\/|$)/i.test(String(website || '').trim()) || NL.test(String(beschrijving || ''));
 
+// "Ransomware-aanval: B-accountants (everest)": het slachtoffer voorop, de groep die het claimt erachter.
+export const ransomwareTitel = (slachtoffer, groep) => `Ransomware-aanval: ${slachtoffer}${groep ? ` (${groep})` : ''}`;
+
 export function ransomwareStuk({ naam, groep, beschrijving, website, ontdekt }) {
   const schoon = String(naam || '').trim() || 'Onbekend slachtoffer';
   const moment = ontdekt ? new Date(String(ontdekt).replace(' ', 'T').replace(/(\.\d{3})\d+/, '$1') + (/[Z+]/.test(String(ontdekt).slice(10)) ? '' : 'Z')) : null;
   return {
     sleutel: `${schoon.toLowerCase()}|${String(groep || '').toLowerCase()}`,
-    titel: `Ransomwaregroep ${groep || 'onbekend'} claimt aanval op ${schoon}`,
+    titel: ransomwareTitel(schoon, groep),
     url: groep ? `https://www.ransomlook.io/group/${encodeURIComponent(groep)}` : 'https://www.ransomlook.io/recent',
     datum: moment && Number.isFinite(moment.getTime()) ? moment.toISOString().slice(0, 10) : null,
     tekst: [beschrijving, website ? `Website: ${website}.` : '', `Geclaimd door ${groep || 'een onbekende groep'} op een lekwebsite; nog niet bevestigd door het slachtoffer.`].filter(Boolean).join(' '),

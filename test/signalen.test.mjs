@@ -5,7 +5,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { leesAardbevingen, leesWaarschuwingen, leesUitspraken, leesRansomlook, leesRansomwareLive } from '../src/bronnen/signalen.mjs';
@@ -54,11 +54,23 @@ knmi2026c|2026-10-20T06:30:00.0|50.693|7.171|12.0|||KNMI|knmi2026c|MLs|2.2||Bonn
     { post_title: 'Machelen (Belgium)', group_name: 'rhysida', description: 'Dutch-speaking municipality in Belgium.' },
   ];
   assert.deepEqual(leesRansomlook(lijst).map((r) => [r.titel, r.datum]), [
-    ['Ransomwaregroep thegentlemen claimt aanval op Thialf', '2026-07-23'],
-    ['Ransomwaregroep akira claimt aanval op sportschool.nl', null],
+    ['Ransomware-aanval: Thialf (thegentlemen)', '2026-07-23'],
+    ['Ransomware-aanval: sportschool.nl (akira)', null],
   ], 'Nederlands: een .nl-website of Nederland in de beschrijving; "Dutch" alleen is niet genoeg');
   assert.match(leesRansomlook(lijst)[0].tekst, /nog niet bevestigd door het slachtoffer/);
   assert.equal(leesRansomwareLive({ victims: [{ victim: 'Omrin', group: 'qilin', description: 'Waste company in Leeuwarden.', discovered: '2026-06-29' }] })[0].sleutel, 'omrin|qilin');
+});
+
+test('ransomwarekoppen van vóór 28 oktober krijgen de nieuwe vorm', () => {
+  const map = mkdtempSync(path.join(tmpdir(), 'rc-titels-'));
+  const oud = (sleutel, titel) => ({ sleutel, bron: 'ransomware', soort: 'ransomware', titel, eersteGezien: '2026-10-06T00:00:00Z', laatstGezien: '2026-10-06T00:00:00Z' });
+  writeFileSync(path.join(map, 'items.json'), JSON.stringify({
+    'ransomware:a': oud('ransomware:a', 'Ransomwaregroep everest claimt aanval op B-accountants'),
+    'ransomware:b': oud('ransomware:b', 'Ransomwaregroep onbekend claimt aanval op sra.nl'),
+  }));
+  const opslag = new Opslag(map);
+  assert.deepEqual(Object.values(opslag.items).map((i) => i.titel), ['Ransomware-aanval: B-accountants (everest)', 'Ransomware-aanval: sra.nl']);
+  assert.equal(JSON.parse(readFileSync(path.join(map, 'items.json'), 'utf8'))['ransomware:a'].titel, 'Ransomware-aanval: B-accountants (everest)', 'en bewaard');
 });
 
 test('plaatsen en gemeenten: plaatsnamen in een tekst, grenzen en afstanden', () => {
@@ -91,10 +103,10 @@ test('signalen naar de regio: via de plek, de provincie en plaatsnamen; andere l
   item('knmi-aardbevingen:b', 'knmi-aardbevingen', { soort: 'aardbeving', titel: 'Aardbeving van 2,0 bij Zeerijp', plek: { lat: 53.354, lon: 6.775, naam: 'Zeerijp' } });
   item('knmi-waarschuwingen:f', 'knmi-waarschuwingen', { soort: 'weerwaarschuwing', titel: 'Code oranje voor Friesland: zeer zware windstoten', provincies: ['Fryslân'] });
   item('raad-van-state:o', 'raad-van-state', { soort: 'uitspraak', titel: 'Raad van State (hoger beroep): besluit van de gemeente Opsterland', tekst: 'Bij besluit heeft de raad van de gemeente Opsterland het omgevingsplan voor een zonnepark bij Gorredijk vastgesteld.' });
-  item('ransomware:t', 'ransomware', { soort: 'ransomware', titel: 'Ransomwaregroep x claimt aanval op Thialf', tekst: 'Thialf is an ice skating stadium based in Heerenveen, the Netherlands.' });
+  item('ransomware:t', 'ransomware', { soort: 'ransomware', titel: 'Ransomware-aanval: Thialf (x)', tekst: 'Thialf is an ice skating stadium based in Heerenveen, the Netherlands.' });
   item('landelijk-nieuws:d', 'landelijk-nieuws', { soort: 'nieuws', titel: 'Nieuws uit Drachten', tekst: 'Een bericht over Drachten.' });
   // De locatiezoeker vond de vestiging (src/locatie.mjs).
-  item('ransomware:g', 'ransomware', { soort: 'ransomware', titel: 'Ransomwaregroep x claimt aanval op Garage Bouma', tekst: 'Garage Bouma', vestiging: { plaats: 'Gorredijk', gemeente: 'Opsterland', postcode: '8401 AB', bron: 'postcode op de contactpagina van garagebouma.nl', zeker: 0.75 } });
+  item('ransomware:g', 'ransomware', { soort: 'ransomware', titel: 'Ransomware-aanval: Garage Bouma (x)', tekst: 'Garage Bouma', vestiging: { plaats: 'Gorredijk', gemeente: 'Opsterland', postcode: '8401 AB', bron: 'postcode op de contactpagina van garagebouma.nl', zeker: 0.75 } });
 
   const k = maakKader({ opslag });
   const route = (sleutel) => routeerItem(k, opslag.items[sleutel], k.bronnen.get(opslag.items[sleutel].bron)).map((r) => r.regio).sort();
@@ -126,8 +138,9 @@ test('signalen naar de regio: via de plek, de provincie en plaatsnamen; andere l
   assert.deepEqual(feed.items.filter((i) => i.groep === 'rvs').map((i) => i.id), ['i:raad-van-state:o']);
   assert.deepEqual([feed.tellingen.knmi, feed.tellingen.rvs, feed.tellingen.ransomware], [2, 1, 1]);
   const g = detail(maakKader({ opslag }), sanne, 'i:ransomware:g');
-  assert.match(g.treffers[0].fragment.tekst, /Gevestigd in Gorredijk \(gemeente Opsterland\)/);
-  assert.match(g.meta.find((m) => m.k === 'Vestiging').v, /^Gorredijk, gemeente Opsterland \(8401 AB\) · volgens postcode op de contactpagina/);
+  assert.equal(g.meta.find((m) => m.k === 'Vestiging').v, 'Gorredijk (gemeente Opsterland), 8401 AB · volgens postcode op de contactpagina van garagebouma.nl');
+  assert.deepEqual(g.treffers, [], 'geen "Waarom staat dit in je feed?": de vestiging staat al bij de gegevens');
+  assert.equal(feed.items.find((i) => i.id === 'i:ransomware:g').titel, 'Ransomware-aanval: Garage Bouma (x)');
   const d = detail(maakKader({ opslag }), sanne, 'i:knmi-aardbevingen:a');
   assert.equal(d.soortNaam, 'Aardbeving');
   assert.deepEqual(d.treffers.map((t) => [t.term, t.regio, t.fragment.tekst]), [['Garmerwolde', 'groningen', 'Garmerwolde, in de gemeente Groningen']]);

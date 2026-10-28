@@ -74,7 +74,7 @@ mark { background: var(--color-accent-200); color: var(--color-text); padding: 0
 .kop-link { font-size: 13px; font-weight: 600; color: var(--color-accent-700); text-decoration: none; }
 
 /* ---------- filterbalk ---------- */
-.filterbalk { display: flex; align-items: stretch; height: 48px; border-bottom: 2px solid var(--color-text); }
+.filterbalk { display: flex; align-items: stretch; flex: none; min-height: 48px; border-bottom: 2px solid var(--color-text); }
 .regiochips {
   display: flex; align-items: center; gap: 6px; flex: none; width: 440px; padding: 0 20px;
   border-right: 2px solid var(--color-text); font-size: 13px; overflow-x: auto; scrollbar-width: none; position: relative;
@@ -83,15 +83,17 @@ mark { background: var(--color-accent-200); color: var(--color-text); padding: 0
 .chip.uit { background: transparent; color: var(--color-neutral-700); box-shadow: inset 0 0 0 2px var(--color-neutral-300); }
 .chip-plus { padding: 4px 6px; border: 0; background: none; color: var(--color-neutral-700); font-size: 15px; font-weight: 600; }
 .chip-plus:hover { color: var(--color-text); }
-.soorttabs { display: flex; flex: 1; min-width: 0; }
+/* Past niet alles op één regel, dan lopen de tabbladen door op een tweede. */
+.soorttabs { display: flex; flex-wrap: wrap; flex: 1; min-width: 0; }
 .soorttab {
-  display: flex; align-items: center; gap: 6px; padding: 0 12px; white-space: nowrap;
+  display: flex; align-items: center; gap: 6px; min-height: 46px; padding: 0 12px; white-space: nowrap;
   font-size: 13px; font-weight: 600; border: 0; border-right: 1px solid var(--color-neutral-300); background: none;
+  box-shadow: inset 0 -1px var(--color-neutral-300);
 }
 .soorttab .n { font-weight: 400; color: var(--color-neutral-700); }
 .soorttab[aria-selected="true"] { background: var(--color-surface); }
 .soorttab:hover { background: var(--color-surface); }
-.ongelezen-schakel { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 0 16px; white-space: nowrap; font-size: 13px; color: var(--color-neutral-700); cursor: pointer; }
+.ongelezen-schakel { margin-left: auto; display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 16px; white-space: nowrap; font-size: 13px; color: var(--color-neutral-700); cursor: pointer; }
 .ongelezen-schakel input { position: absolute; opacity: 0; width: 0; height: 0; }
 .vakje { width: 16px; height: 16px; border: 2px solid var(--color-text); display: flex; align-items: center; justify-content: center; flex: none; }
 input:checked + .vakje::after, .vakje.aan::after { content: ''; width: 8px; height: 8px; background: var(--color-text); }
@@ -108,7 +110,9 @@ input:focus-visible + .vakje { outline: 2px solid var(--color-accent); outline-o
 .popover .popover-voet { padding: 8px 16px 0; font-size: 12px; color: var(--color-neutral-700); }
 
 /* ---------- feed: lijst + leespaneel ---------- */
-.feed { display: grid; grid-template-columns: 440px minmax(0, 1fr); height: calc(100vh - 114px); }
+/* De balk erboven kan twee regels hoog zijn: de feed neemt de rest van het scherm. */
+#hoofd:has(> .feed) { display: flex; flex-direction: column; height: calc(100vh - 64px); }
+.feed { display: grid; grid-template-columns: 440px minmax(0, 1fr); flex: 1; min-height: 0; }
 .feed.volledig { grid-template-columns: 0 minmax(0, 1fr); }
 .feed.volledig .lijst { visibility: hidden; border: 0; }
 .lijst { border-right: 2px solid var(--color-text); overflow-y: auto; }
@@ -467,7 +471,7 @@ dialog.formulier h2 { font-size: 25px; margin: 0; }
 /* ---------- audio: beheer en archief ---------- */
 .audiorij { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 110px; align-items: center; }
 .volgorderij { grid-template-columns: 32px minmax(0, 1fr) 200px 260px; align-items: center; }
-.archiefbalk { display: flex; align-items: stretch; height: 48px; border-bottom: 2px solid var(--color-text); }
+.archiefbalk { display: flex; align-items: stretch; flex: none; height: 48px; border-bottom: 2px solid var(--color-text); }
 .archiefbalk .links { display: flex; align-items: center; gap: 8px; width: 440px; flex: none; padding: 0 20px; border-right: 2px solid var(--color-text); }
 .archiefbalk .links .keuzelijst { padding: 4px 8px; font-size: 13px; font-weight: 600; width: auto; max-width: 220px; }
 .archiefbalk .rechts { display: flex; align-items: stretch; flex: 1; min-width: 0; }
