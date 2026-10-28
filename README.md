@@ -245,7 +245,12 @@ leespaneel onder de speler, boven het transcript, met het kopje
 "AI-samenvatting". De worker heeft zelf geen route om samen te vatten. Daarom
 gebeurt dit in de Regiochecker, als derde stap per aflevering: nooit
 tegelijk met een eigen transcriptie, bij Ollama alleen als de GPU van de worker
-vrij is, en het model gaat daarna meteen uit het geheugen (`keep_alive: 0`). Een
+vrij is, en het model gaat daarna meteen uit het geheugen (`keep_alive: 0`).
+Bij Ollama gebruikt dit het **model voor opnames** (Instellingen › Samenvatting,
+`ollama.modelOpnames`), met een contextvenster van hooguit 16k tokens. Een klein
+model dat helemaal op de GPU past, is hier tientallen keren sneller dan een groot
+dat deels op de processor draait: qwen3.5:9b (het model van de worker) deed een
+stuk transcript van 4.000 tokens in 11 seconden, qwen3.6:35b in 277. Een
 transcript dat niet in het contextvenster past, wordt eerst per deel tot
 aantekeningen teruggebracht. Lukt een samenvatting drie keer niet, dan blijft de
 aflevering zonder; de aflevering zelf mislukt daar nooit door.
