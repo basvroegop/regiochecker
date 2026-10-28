@@ -58,7 +58,14 @@ export function maakKader({ opslag, kdb, fdb, adb }) {
   };
 }
 
-const tekstVan = (item) => [item.titel, item.tekst, item.inhoud].filter(Boolean).join('\n');
+// Wat er van een stuk doorzocht wordt (sleutelwoorden, meldingen, zoeken): titel,
+// beschrijving en het hele document; zonder document de korte inhoud. Het
+// document blijft staan zolang het stuk bestaat, de korte inhoud maar vijf weken.
+export function tekstVan(k, item) {
+  const doc = k.fdb?.documentTekst?.(item.sleutel);
+  return [item.titel, item.tekst, doc?.tekst || item.inhoud].filter(Boolean).join('\n');
+}
+const tekstVersie = (k, item) => `${(item.inhoud || '').length}|${k.fdb?.documentTekst?.(item.sleutel)?.versie || ''}`;
 const segmentTekst = (a) => a.segmenten;
 
 // Naar welke regio's gaat een stuk uit een landelijke bron? Per regio de
@@ -76,8 +83,8 @@ function routeer(k, bronId, zoek) {
 }
 
 export function routeerItem(k, item, bron) {
-  return onthoud(`ri|${item.sleutel}|${(item.inhoud || '').length}|${k.termVersie}`,
-    () => routeer(k, bron.id, (termen) => vindTermen(tekstVan(item), termen)));
+  return onthoud(`ri|${item.sleutel}|${tekstVersie(k, item)}|${k.termVersie}`,
+    () => routeer(k, bron.id, (termen) => vindTermen(tekstVan(k, item), termen)));
 }
 
 export function routeerAflevering(k, a) {
@@ -85,8 +92,8 @@ export function routeerAflevering(k, a) {
     () => routeer(k, a.bron, (termen) => vindInSegmenten(segmentTekst(a), termen)));
 }
 
-const zoekInItem = (item, termen) => onthoud(`zi|${item.sleutel}|${(item.inhoud || '').length}|${termen.join('\u0000')}`,
-  () => vindTermen(tekstVan(item), termen));
+const zoekInItem = (k, item, termen) => onthoud(`zi|${item.sleutel}|${tekstVersie(k, item)}|${termen.join('\u0000')}`,
+  () => vindTermen(tekstVan(k, item), termen));
 
 const zoekInAflevering = (a, termen) => onthoud(`za|${a.id}|${a.bijgewerkt}|${termen.join('\u0000')}`,
   () => vindInSegmenten(a.segmenten, termen));
@@ -153,7 +160,7 @@ export function meldingTreffers(k, gebruiker, melding, { sinds, tot }) {
       if (!bron) continue;
       const regios = bron.bereik === 'landelijk' ? routeerItem(k, item, bron).map((r) => r.regio) : [item.regio];
       if (scope && !regios.some((r) => scope.has(r))) continue;
-      const gevonden = zoekInItem(item, termen);
+      const gevonden = zoekInItem(k, item, termen);
       if (gevonden.length) uit.push({ ...itemRegel(item, scope ? regios.filter((r) => scope.has(r)) : regios, match(gevonden[0].term)), gevonden, url: item.url });
     }
   }
@@ -166,9 +173,12 @@ export function meldingTreffers(k, gebruiker, melding, { sinds, tot }) {
         .flatMap(actieveTermen))];
     }
     if (!scope || ookTermen.length) {
-      for (const t of kamerTreffers(k, termen, { sinds, tot, minDatum: minDatum(sinds), ookTermen })) {
+      const kt = kamerTreffers(k, termen, { sinds, tot, minDatum: minDatum(sinds), ookTermen });
+      for (const t of kt) {
         uit.push({ ...kamerRegel(t.stuk, [], match(t.term)), gevonden: [{ term: t.term, fragment: t.fragment }], url: stukUrl(t.stuk), stuk: t.stuk });
       }
+      // Meer dan er in één keer opgehaald worden: hoeveel nog (zie kamer/db.mjs).
+      if (kt.meer) uit.meerKamerstukken = kt.meer;
     }
   }
 
@@ -309,7 +319,7 @@ export function zoekFeed(ctx, gebruiker, vraag) {
     if (item.basislijn) continue;
     const bron = k.bronnen.get(item.bron);
     if (!bron) continue;
-    const t = zoeker(tekstVan(item));
+    const t = zoeker(tekstVan(k, item));
     if (!t) continue;
     const regios = bron.bereik === 'landelijk' ? routeerItem(k, item, bron).map((r) => r.regio) : [item.regio];
     voegToe(lijst, itemRegel(item, regios, { term: t.term, zoek: true }));
@@ -416,7 +426,7 @@ function itemDetail(k, gebruiker, sleutel) {
     verdwenen: item.verdwenen || null,
     // Bij een gemeentelijk stuk tellen alleen de termen van de meldingen; bij een
     // landelijk stuk ook de sleutelwoorden van de gevolgde regio's.
-    treffers: redenen(k, gebruiker, (termen) => vindTermen(tekstVan(item), termen), {
+    treffers: redenen(k, gebruiker, (termen) => vindTermen(tekstVan(k, item), termen), {
       bronId: bron.id,
       regioIds: landelijk ? gebruiker.regios : [],
     }),

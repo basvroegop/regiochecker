@@ -14,6 +14,9 @@ import { htmlBlokken, tekstBlokken, platVan, begrens } from '../src/document.mjs
 import { Opslag } from '../src/opslag.mjs';
 import { hoofdHtml } from '../src/html.mjs';
 
+// Nagebootste servers draaien op 127.0.0.1; dat is normaal niet toegestaan (src/netwerk.mjs).
+process.env.REGIOCHECKER_PRIVE_ADRESSEN = '1';
+
 const sqlite = await import('node:sqlite').catch(() => null);
 const metSqlite = { skip: sqlite ? false : 'node:sqlite niet beschikbaar (Node 22+ nodig)' };
 
@@ -206,6 +209,41 @@ test('het hele document: bewaard na een verzamelronde, en op verzoek voor een ou
     await assert.rejects(documentOpVraag(opslag, 'weggehaald', { nu }), /HTTP 404/);
     assert.equal(opslag.items.weggehaald.verdwenen, nu.toISOString(), 'ook bij openen in het leespaneel');
   } finally {
+    nep.server.close();
+  }
+});
+
+test('alleen openbare adressen: geen interne diensten via een link of een doorverwijzing', async () => {
+  const { controleerUrl, zetOpenbaarDispatcher, _voorTests } = await import('../src/netwerk.mjs');
+  const { haalTekst } = await import('../src/ophalen.mjs');
+  const { MockAgent } = await import('undici');
+  const nep = await nepServer();
+  delete process.env.REGIOCHECKER_PRIVE_ADRESSEN;
+  try {
+    // Een link in een feed naar een interne server: niet ophalen.
+    await assert.rejects(inhoudVoor({ url: `${nep.basis}/artikel` }, { type: 'rss' }), /geen openbaar internetadres/);
+    assert.equal(nep.opgevraagd.length, 0, 'de interne server kreeg geen verzoek');
+    for (const url of ['http://10.0.0.5/', 'http://[::1]:3000/', 'http://localhost:8080/', 'http://169.254.169.254/latest/meta-data', 'http://[::ffff:127.0.0.1]/', 'file:///etc/passwd']) {
+      assert.throws(() => controleerUrl(url), /openbare/, url);
+    }
+    assert.equal(controleerUrl('https://www.opsterland.nl/nieuws'), 'https://www.opsterland.nl/nieuws');
+
+    // Een openbaar adres dat doorstuurt naar binnen: de doorverwijzing niet volgen.
+    const internet = new MockAgent();
+    internet.disableNetConnect();
+    internet.get('https://voorbeeld.nl').intercept({ path: '/los', method: 'GET' }).reply(302, '', { headers: { location: 'http://127.0.0.1:9/geheim' } });
+    const vorige = zetOpenbaarDispatcher(internet);
+    try {
+      await assert.rejects(haalTekst('https://voorbeeld.nl/los'), /127\.0\.0\.1:9\/geheim is geen openbaar internetadres/);
+    } finally {
+      zetOpenbaarDispatcher(vorige);
+    }
+
+    // Een naam die bij het verbinden naar binnen wijst (zo werkt DNS-rebinding).
+    const fout = await new Promise((klaar) => _voorTests.veiligOpzoeken('localhost', {}, (f) => klaar(f)));
+    assert.equal(fout?.code, 'ENIETOPENBAAR');
+  } finally {
+    process.env.REGIOCHECKER_PRIVE_ADRESSEN = '1';
     nep.server.close();
   }
 });

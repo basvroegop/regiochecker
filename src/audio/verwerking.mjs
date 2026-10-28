@@ -28,6 +28,7 @@ import { delen, splits, plaatsNamen } from './namen.mjs';
 import { vindNummers, nummerlijst, contextVenster, namenInBuurt, controleerDuiding } from './telefoon.mjs';
 import { vatKortSamen } from '../vergadering.mjs';
 import { samenvattingAanbieder } from '../samenvatting.mjs';
+import { sprekersVan } from '../feed.mjs';
 
 const BRON_INTERVAL_MS = 60 * 60_000;
 const DAG_MS = 86400_000;
@@ -390,6 +391,7 @@ export class Verwerking {
         af.platform = platform;
       }
     }
+    if (af.platform?.sprekers?.length && await this.neemPlatformNamenOver(af, w)) af = this.adb.aflevering(af.id);
 
     if (af.entiteiten || !this.namenZoeken()) {
       await this.samenvat(af, w, werk);
@@ -417,6 +419,34 @@ export class Verwerking {
     const samenvatting = samenvattingAanbieder(this.opslag).klaar;
     werk({ entiteiten: plaatsNamen(klaar.flat(), af.segmenten), status: samenvatting ? 'getranscribeerd' : 'klaar', stap: samenvatting ? 'Namen klaar · samenvatting volgt' : 'Klaar', fout: null, pogingen: 0 });
     this.wek();
+  }
+
+  // Wie had de microfoon (Company Webcast): die naam geldt meteen voor de stem
+  // die daar grotendeels mee samenvalt (src/feed.mjs, platformSpreker), net
+  // als "Overnemen" in het leespaneel. Een stem die al een naam heeft, hier of
+  // bij de worker (ook uit Plaud), blijft ongemoeid. Geeft het aantal namen.
+  async neemPlatformNamenOver(af, w) {
+    const voorstellen = sprekersVan(af).filter((sp) => sp.id && !sp.heeftNaam && sp.suggestie?.bron === 'platform');
+    if (!voorstellen.length) return 0;
+    let bekend;
+    try {
+      bekend = new Map((await w.sprekers()).map((p) => [p.profile_id, String(p.name || '').trim()]));
+    } catch {
+      return 0;
+    }
+    let n = 0;
+    for (const sp of voorstellen) {
+      if (bekend.get(sp.id)) continue;
+      try {
+        const profiel = await w.noemSpreker(sp.id, sp.suggestie.naam);
+        this.adb.hernoemSpreker(sp.id, profiel.display_name || sp.suggestie.naam);
+        n++;
+      } catch {
+        // Blijft een voorstel in het leespaneel.
+      }
+    }
+    if (n) this.opslag.log({ soort: 'spreker', tekst: `${af.titel}: ${n} ${n === 1 ? 'stem' : 'stemmen'} genoemd naar het vergaderplatform` });
+    return n;
   }
 
   // De AI-samenvatting van de hele opname (hooguit 100 woorden), door de

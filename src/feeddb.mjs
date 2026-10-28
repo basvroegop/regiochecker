@@ -42,6 +42,8 @@ export async function openFeedDb(pad) {
   return new FeedDb(db);
 }
 
+import { platVan } from './document.mjs';
+
 const json = (t, leeg) => {
   try { return t ? JSON.parse(t) : leeg; } catch { return leeg; }
 };
@@ -49,6 +51,9 @@ const json = (t, leeg) => {
 class FeedDb {
   constructor(db) {
     this.db = db;
+    // De platte tekst van elk document, voor zoeken en sleutelwoorden
+    // (src/feed.mjs). Een paar tientallen MB bij duizend stukken.
+    this.teksten = new Map();
   }
 
   // ---------- documenten ----------
@@ -56,6 +61,15 @@ class FeedDb {
   document(sleutel) {
     const r = this.db.prepare('SELECT blokken, volledig FROM document WHERE item = ?').get(sleutel);
     return r ? { blokken: json(r.blokken, []), volledig: Boolean(r.volledig) } : null;
+  }
+
+  // { tekst, versie } van het hele document, of null. Uit het geheugen als het kan.
+  documentTekst(sleutel) {
+    if (this.teksten.has(sleutel)) return this.teksten.get(sleutel);
+    const r = this.db.prepare('SELECT blokken, opgehaald FROM document WHERE item = ?').get(sleutel);
+    const uit = r ? { tekst: platVan(json(r.blokken, [])), versie: r.opgehaald } : null;
+    this.teksten.set(sleutel, uit);
+    return uit;
   }
 
   heeftDocument(sleutel) {
@@ -66,13 +80,17 @@ class FeedDb {
     this.db.prepare(`INSERT INTO document (item, blokken, volledig, opgehaald) VALUES (?, ?, ?, ?)
       ON CONFLICT(item) DO UPDATE SET blokken = excluded.blokken, volledig = excluded.volledig, opgehaald = excluded.opgehaald`)
       .run(sleutel, JSON.stringify(blokken || []), volledig === false ? 0 : 1, nu.toISOString());
+    this.teksten.delete(sleutel);
   }
 
   // Documenten van items die niet meer bestaan, weg.
   ruimDocumentenOp(bestaand) {
     const weg = this.db.prepare('SELECT item FROM document').all().map((r) => r.item).filter((s) => !bestaand.has(s));
     const verwijder = this.db.prepare('DELETE FROM document WHERE item = ?');
-    for (const s of weg) verwijder.run(s);
+    for (const s of weg) {
+      verwijder.run(s);
+      this.teksten.delete(s);
+    }
     return weg.length;
   }
 

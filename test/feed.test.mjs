@@ -225,3 +225,22 @@ test('meldingen: bereik en bronnen, één mail met alles wat nieuw is, daarna ni
     smtp.server.close();
   }
 });
+
+test('het hele document doorzoeken: zoeken, sleutelwoorden en meldingen, ook na vijf weken', metSqlite, async () => {
+  const { zoekFeed, routeerItem, meldingTreffers, maakKader } = await import('../src/feed.mjs');
+  const { ctx, opslag, fdb, sanne } = await opzet();
+  // Een landelijk bericht waarvan de korte inhoud niets regionaals heeft; diep in het document staat Thialf.
+  const item = opslag.items['rijk:e'];
+  item.inhoud = 'Over het weer.';
+  const lang = 'Een lange alinea over het landelijke weerbeeld en de vooruitzichten voor de komende weken. '.repeat(120);
+  fdb.zetDocument('rijk:e', { blokken: [['p', lang], ['d', 'Bijlage'], ['p', 'De schaatsbaan Thialf krijgt een nieuwe koelinstallatie.']], volledig: true });
+  let k = maakKader(ctx);
+  assert.ok(zoekFeed(k, sanne, 'koelinstallatie').items.some((i) => i.id === 'i:rijk:e'), 'zoeken vindt het, ook voorbij 6000 tekens');
+  assert.deepEqual(routeerItem(k, item, k.bronnen.get('rijk')).map((r) => r.regio), ['heerenveen'], 'het sleutelwoord van Heerenveen ook');
+  const melding = { id: 'm9', gebruiker: sanne.id, termen: ['koelinstallatie'], bereik: 'overal', bronnen: 'gemeente' };
+  assert.equal(meldingTreffers(k, sanne, melding, { sinds: '2000-01-01T00:00:00Z' }).length, 1, 'en een melding');
+  // Na vijf weken gaat de korte inhoud weg; het document blijft doorzoekbaar.
+  delete item.inhoud;
+  k = maakKader(ctx);
+  assert.ok(zoekFeed(k, sanne, 'koelinstallatie').items.some((i) => i.id === 'i:rijk:e'));
+});

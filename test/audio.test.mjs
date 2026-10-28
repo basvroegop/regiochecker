@@ -64,18 +64,28 @@ test('catalogi: podcastfeed, YouTube-adressen, Notubiz-stream en de Anubis-puzze
 
 // Een nagebootst internet voor platforms die we op hun eigen domeinnaam
 // herkennen: fetch beantwoordt alleen deze adressen.
-function nepInternet(routes) {
-  const echt = globalThis.fetch;
+// Een nagebootst internet voor platforms die we op hun eigen domeinnaam
+// herkennen: de bewaakte verbinding (src/netwerk.mjs) wordt een undici
+// MockAgent die alleen deze routes beantwoordt. Een route geeft een string
+// (HTML), een object (JSON), { status, body }, of niets (404).
+async function nepInternet(routes) {
+  const { MockAgent } = await import('undici');
+  const { zetOpenbaarDispatcher } = await import('../src/netwerk.mjs');
+  const nep = new MockAgent();
+  nep.disableNetConnect();
   const bezocht = [];
-  globalThis.fetch = async (adres) => {
-    const u = new URL(adres);
+  nep.get(() => true).intercept({ path: () => true, method: () => true }).reply(({ origin, path }) => {
+    const u = new URL(path, origin);
     bezocht.push(`${u.host}${u.pathname}`);
     const r = routes(u);
-    if (r === undefined) return new Response('niet gevonden', { status: 404 });
-    if (r instanceof Response) return r;
-    return typeof r === 'string' ? new Response(r, { headers: { 'Content-Type': 'text/html' } }) : Response.json(r);
-  };
-  return { bezocht, herstel: () => { globalThis.fetch = echt; } };
+    if (r === undefined) return { statusCode: 404, data: 'niet gevonden' };
+    if (r?.status) return { statusCode: r.status, data: r.body, responseOptions: { headers: { 'content-type': 'application/json' } } };
+    return typeof r === 'string'
+      ? { statusCode: 200, data: r, responseOptions: { headers: { 'content-type': 'text/html' } } }
+      : { statusCode: 200, data: JSON.stringify(r), responseOptions: { headers: { 'content-type': 'application/json' } } };
+  }).persist();
+  const vorige = zetOpenbaarDispatcher(nep);
+  return { bezocht, herstel: () => zetOpenbaarDispatcher(vorige) };
 }
 
 test('iBabs met babscast, Notubiz onder notubiz.nl, en een gemeentepagina die naar haar archief linkt', async () => {
@@ -99,7 +109,7 @@ test('iBabs met babscast, Notubiz onder notubiz.nl, en een gemeentepagina die na
     ...[40, 47, 54, 61, 68].map((d, i) => ({ id: uuid(10 + i), title: 'Openbaarmaking collegevergadering', soort: 2, start: op(d) })),
   ];
   const blok = (v) => (v.event ? `<div class="cwc" data-video-type="iBabsStream" data-video-id="${v.id}" data-video-url="https://player.babscast.com/${v.event}" data-video-base-url="https://player.babscast.com/" data-title="${v.title}">` : '');
-  const net = nepInternet((u) => {
+  const net = await nepInternet((u) => {
     if (u.host === 'gemeente.bestuurlijkeinformatie.nl') {
       if (u.pathname === '/Calendar/GetAgendasForCalendar') {
         const van = Date.parse(u.searchParams.get('start'));
@@ -117,7 +127,7 @@ test('iBabs met babscast, Notubiz onder notubiz.nl, en een gemeentepagina die na
     }
     if (u.host === 'player.babscast.com') {
       const v = vergaderingen.find((x) => u.pathname === `/audience/v1/events/${x.event}`);
-      if (v?.besloten) return new Response('{"Title":"Forbidden","Status":403}', { status: 403 });
+      if (v?.besloten) return { status: 403, body: '{"Title":"Forbidden","Status":403}' };
       if (v) {
         return {
           UniqueId: v.event, Title: `${v.title} - Begroting`, ClientName: 'Gemeente', IsPrivate: false, EventStatus: v.status,
@@ -430,6 +440,34 @@ test('vergaderplatform: agenda met tijden, en wie had de microfoon', async () =>
   assert.equal(sp[1].suggestie, undefined, 'een stem met een naam krijgt geen voorstel');
   assert.match(agendaTekst(a), /Agenda \(met de tijd waarop het punt begint\):\n- \[0:11\] 1 Opening\n- \[12:08\] 12 Advies recreatiepark Elsweg/);
   assert.equal(agendaTekst({}), '');
+});
+
+test('namen van het vergaderplatform gelden meteen voor de stemmen', metSqlite, async () => {
+  const { TRANSCRIPT } = await import('./nep-worker.mjs');
+  const worker = await nepWorker();
+  try {
+    const { opslag, adb, verwerking } = await opzet();
+    opslag.instellingen.audio = { ...opslag.instellingen.audio, workerUrl: worker.url, workerToken: TOKEN, viaTailnet: false };
+    const bron = { id: 'west', naam: 'Weststellingwerf · Raad', soort: 'raadsvergadering', bereik: 'regio', regio: 'weststellingwerf', type: 'audio', url: 'https://channel.royalcast.com/gemeenteweststellingwerf/', audio: { kind: 'companywebcast', prioriteit: 0 } };
+    opslag.bronnen.push(bron);
+    const id = 'e'.repeat(32);
+    adb.voegToe(bron, { id, extern: 'cwc:gemeenteweststellingwerf/20261019_1', vorm: 'vergadering', url: 'https://channel.royalcast.com/gemeenteweststellingwerf/#!/gemeenteweststellingwerf/20261019_1', titel: 'Raadsvergadering', gepubliceerdOp: Date.now() / 1000 - 86400 });
+    const { schoonSegmenten } = await import('../src/audio/verwerking.mjs');
+    adb.werkBij(id, {
+      transcript: 'x', segmenten: schoonSegmenten(TRANSCRIPT), status: 'getranscribeerd',
+      // Kramer had de microfoon toen SPEAKER_02 sprak; bij Anke Postma noteert het platform iemand anders.
+      platform: { agenda: [], sprekers: [{ naam: 'Wethouder Kramer', rol: null, momenten: [[44, 71]] }, { naam: 'Iemand Anders', rol: null, momenten: [[15, 38]] }] },
+    });
+    await verwerking.verwerkEen();
+    const a = adb.aflevering(id);
+    assert.equal(worker.staat.namen.get(STEM.wethouder), 'Wethouder Kramer', 'de naam staat bij de worker');
+    assert.equal(a.segmenten.find((s) => s.speaker_id === STEM.wethouder).speaker, 'Wethouder Kramer', 'en in het transcript');
+    assert.equal(worker.staat.namen.get(STEM.postma), 'Anke Postma', 'een stem met een naam blijft ongemoeid');
+    assert.equal(a.status, 'klaar');
+    assert.ok(opslag.logboek.some((l) => /1 stem genoemd naar het vergaderplatform/.test(l.tekst)));
+  } finally {
+    worker.server.close();
+  }
 });
 
 test('lange opnames in delen naar de worker, met tussenstand', metAlles, async () => {

@@ -4,8 +4,9 @@
 // uitnodiging: de beheerder vult het e-mailadres in, en bij de eerste keer
 // inloggen koppelen we de inlognaam eraan.
 //
-// Is er nog geen beheerder met een inlognaam, dan wordt de eerste die inlogt
-// beheerder. Daarna nodigt alleen een beheerder anderen uit; wie niet is
+// Bij een verse installatie (nog nooit een beheerder) wordt de eerste die
+// inlogt beheerder; dat gaat daarna nooit meer open (status.beheerGestart).
+// Daarna nodigt alleen een beheerder anderen uit; wie niet is
 // uitgenodigd, krijgt een nette weigering (Authelia laat diegene wel door, de
 // Regiochecker niet). Een gebruiker zonder inlognaam kan alleen mail krijgen.
 //
@@ -67,7 +68,14 @@ export function herken(opslag, { login, email, naam }, nu = new Date()) {
       gewijzigd = true;
     }
   }
-  if (!g && !opslag.gebruikers.some((x) => x.login && isBeheerder(x))) {
+  // Een installatie waar al eens een beheerder was, gaat nooit meer open voor
+  // "de eerste die inlogt": ook niet als de beheerders later wegvallen (een
+  // lege inlognaam, een kapot bestand). Herstellen kan dan alleen op de server.
+  if (opslag.gebruikers.some((x) => x.login && isBeheerder(x)) && !opslag.status.beheerGestart) {
+    opslag.status.beheerGestart = nu.toISOString();
+    opslag.bewaar('status');
+  }
+  if (!g && !opslag.status.beheerGestart && !opslag.gebruikers.some((x) => isBeheerder(x))) {
     // De eerste die inlogt, wordt beheerder. Staat diegene al als ontvanger in
     // de lijst (zonder inlognaam), dan nemen we die over.
     g = opslag.gebruikers.find((x) => !x.login && mail && x.email === mail);
@@ -78,6 +86,8 @@ export function herken(opslag, { login, email, naam }, nu = new Date()) {
     g.login = inlog;
     g.rol = 'admin';
     gewijzigd = true;
+    opslag.status.beheerGestart = nu.toISOString();
+    opslag.bewaar('status');
   }
   if (!g) return null;
   if (!g.naam && naam) {
@@ -134,6 +144,9 @@ export function werkGebruikerBij(opslag, g, invoer, { beheer = false, regioIds }
     if (invoer.login !== undefined) {
       const login = String(invoer.login || '').trim().toLowerCase() || null;
       if (login && opslag.gebruikers.some((x) => x.id !== g.id && x.login === login)) throw new InvoerFout(`Inlognaam ${login} is al in gebruik`);
+      if (!login && g.login && isBeheerder(g) && !opslag.gebruikers.some((x) => x.id !== g.id && isBeheerder(x) && x.login)) {
+        throw new InvoerFout('Er moet minstens één beheerder met een inlognaam overblijven');
+      }
       nieuw.login = login;
     }
     if (invoer.rol !== undefined) {

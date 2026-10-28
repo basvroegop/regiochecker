@@ -13,6 +13,9 @@ import { Opslag } from '../src/opslag.mjs';
 import { herken, nieuweGebruiker } from '../src/gebruikers.mjs';
 import { roep } from './api-hulp.mjs';
 
+// Nagebootste servers draaien op 127.0.0.1; dat is normaal niet toegestaan (src/netwerk.mjs).
+process.env.REGIOCHECKER_PRIVE_ADRESSEN = '1';
+
 const sqlite = await import('node:sqlite').catch(() => null);
 const metSqlite = { skip: sqlite ? false : 'node:sqlite niet beschikbaar (Node 22+ nodig)' };
 const tijdelijk = () => mkdtempSync(path.join(tmpdir(), 'rc-api-'));
@@ -167,6 +170,14 @@ test('beheer: bron toevoegen met proefronde, landelijk via sleutelwoorden', metS
     const bron = opslag.bronnen[0];
     verwerk(opslag, bron, await haalBron(bron));
     assert.ok(Object.values(opslag.items).filter((i) => i.bron === bron.id).every((i) => i.regio === null));
+
+    // Naar een regio verplaatsen: wat de bron al opleverde, verhuist mee (en terug naar landelijk ook).
+    r = await roep(ctx, jan, 'PUT', `/api/beheer/bronnen/${bron.id}`, { bereik: 'regio', regio: 'heerenveen' });
+    assert.equal(r.status, 200);
+    const vanBron = () => Object.values(opslag.items).filter((i) => i.bron === bron.id);
+    assert.ok(vanBron().length && vanBron().every((i) => i.regio === 'heerenveen'));
+    r = await roep(ctx, jan, 'PUT', `/api/beheer/bronnen/${bron.id}`, { bereik: 'landelijk' });
+    assert.ok(vanBron().every((i) => i.regio === null));
   } finally {
     server.close();
   }

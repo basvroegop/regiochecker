@@ -92,12 +92,14 @@ class KamerDb {
       this.db.prepare(`INSERT INTO stukken (id, nummer, soort, titel, onderwerp, datum, vergaderjaar, dossier, dossiertitel, zaak, afzender, contenttype, gewijzigd)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(s.id, s.nummer, s.soort, s.titel, s.onderwerp, s.datum, s.vergaderjaar, s.dossier, s.dossiertitel, s.zaak, s.afzender, s.contenttype, s.gewijzigd);
+      this.#gewijzigd();
       return 'nieuw';
     }
     const andereVersie = oud.gewijzigd !== s.gewijzigd;
     this.db.prepare(`UPDATE stukken SET nummer = ?, soort = ?, titel = ?, onderwerp = ?, datum = ?, vergaderjaar = ?, dossier = ?, dossiertitel = ?, zaak = ?, afzender = ?, contenttype = ?, gewijzigd = ?
       ${andereVersie ? ', tekststatus = NULL, pogingen = 0' : ''} WHERE nr = ?`)
       .run(s.nummer, s.soort, s.titel, s.onderwerp, s.datum, s.vergaderjaar, s.dossier, s.dossiertitel, s.zaak, s.afzender, s.contenttype, s.gewijzigd, oud.nr);
+    this.#gewijzigd();
     return 'bijgewerkt';
   }
 
@@ -106,6 +108,7 @@ class KamerDb {
     if (!oud) return false;
     this.db.prepare('DELETE FROM stuk_fts WHERE rowid = ?').run(oud.nr);
     this.db.prepare('DELETE FROM stukken WHERE nr = ?').run(oud.nr);
+    this.#gewijzigd();
     return true;
   }
 
@@ -121,6 +124,7 @@ class KamerDb {
     this.db.prepare('INSERT INTO stuk_fts (rowid, titel, onderwerp, tekst) VALUES (?, ?, ?, ?)').run(nr, s.titel || '', s.onderwerp || '', tekst || '');
     this.db.prepare('UPDATE stukken SET tekststatus = ?, tekstfout = NULL, lengte = ?, binnen = COALESCE(binnen, ?) WHERE nr = ?')
       .run(tekst === null ? 'geen' : 'ok', tekst ? tekst.length : 0, nu.toISOString(), nr);
+    this.#gewijzigd();
   }
 
   tekstMislukt(nr, fout) {
@@ -185,6 +189,7 @@ class KamerDb {
   // Stukken die sinds `sinds` binnenkwamen en een van de termen bevatten, met
   // per stuk de gevonden termen en een fragment. `minDatum` houdt stukken buiten
   // die we pas laat binnenhaalden maar al oud zijn (de eerste keer inhalen).
+  // Passen er meer dan `max`, dan staat in `.meer` hoeveel er (ongeveer) nog zijn.
   treffers(termen, { sinds, tot = new Date().toISOString(), minDatum, max = 100 }) {
     const fts = ftsVoorTermen(termen);
     if (!fts) return [];
@@ -197,16 +202,31 @@ class KamerDb {
       const gevonden = vindTermen(`${stuk.titel || ''}\n${stuk.onderwerp || ''}\n${this.tekst(stuk.nr)}`, termen);
       if (gevonden.length) uit.push({ stuk, gevonden });
     }
+    uit.meer = rijen.length < max ? 0 : Math.max(0, this.#tel(fts, sinds, tot, minDatum) - rijen.length);
     return uit;
+  }
+
+  // Hoeveel kandidaten FTS in totaal vindt: een bovengrens, want de exacte
+  // controle op hele woorden komt daarna nog. Voor "en nog zo'n N" in een mail.
+  #tel(fts, sinds, tot, minDatum) {
+    return this.db.prepare(`SELECT count(*) n FROM stuk_fts JOIN stukken s ON s.nr = stuk_fts.rowid
+      WHERE stuk_fts MATCH ? AND s.binnen > ? AND s.binnen <= ? AND s.datum >= ?`).get(fts, sinds, tot, minDatum || '0000').n;
   }
 
   stuk(id) {
     return this.db.prepare('SELECT * FROM stukken WHERE id = ?').get(id) || null;
   }
 
-  // Verandert zodra er een stuk met tekst bijkomt; voor caches in de feed.
+  // Verandert bij elke wijziging aan stukken of teksten; voor caches in de
+  // feed. Alleen het aantal en de laatste binnenkomst was niet genoeg: een
+  // nieuwe tekstversie van een bestaand stuk verandert die geen van beide.
   versie() {
-    return this.db.prepare('SELECT max(binnen) v, count(*) n FROM stukken').get();
+    // w: wijzigingen via deze verbinding; d: via een andere (een losse ronde).
+    return { ...this.db.prepare('SELECT max(binnen) v, count(*) n FROM stukken').get(), w: this.wijzigingen || 0, d: this.db.prepare('PRAGMA data_version').get().data_version };
+  }
+
+  #gewijzigd() {
+    this.wijzigingen = (this.wijzigingen || 0) + 1;
   }
 
   // Voor de feed: stukken die sinds `sinds` binnenkwamen met een van de termen,
@@ -227,7 +247,7 @@ class KamerDb {
       WHERE stuk_fts MATCH ? AND s.binnen > ? AND s.binnen <= ? AND s.datum >= ?
       ORDER BY s.datum DESC, s.nr DESC LIMIT ?`).all(fts, sinds, tot, minDatum || '0000', max);
     const genormaliseerd = termen.map((t) => [t, normaliseer(t).split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(' ')]);
-    return rijen.map((stuk) => {
+    const uit = rijen.map((stuk) => {
       const begin = stuk.fragment.indexOf(MARK_BEGIN);
       const eind = stuk.fragment.indexOf(MARK_EIND, begin);
       const gemarkeerd = begin >= 0 && eind > begin ? stuk.fragment.slice(begin + 1, eind) : '';
@@ -238,6 +258,8 @@ class KamerDb {
       const tekst = stuk.fragment.replaceAll(MARK_BEGIN, '').replaceAll(MARK_EIND, '').replace(/\s+/g, ' ').trim();
       return { stuk, term, fragment: { tekst, treffer: gemarkeerd } };
     });
+    uit.meer = rijen.length < max ? 0 : Math.max(0, this.#tel(fts, sinds, tot, minDatum) - rijen.length);
+    return uit;
   }
 
   // Hoeveel stukken (op datum van het stuk, sinds `vanaf`) bevatten een van de termen?

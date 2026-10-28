@@ -8,7 +8,8 @@
 
 import { spawn } from 'node:child_process';
 import { lookup } from 'node:dns/promises';
-import net from 'node:net';
+import { fetch } from 'undici';
+import { prive, openbaarDispatcher } from '../netwerk.mjs';
 import { createWriteStream, existsSync } from 'node:fs';
 import { mkdir, rename, rm, stat, readFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
@@ -17,18 +18,6 @@ import { Readable, Transform } from 'node:stream';
 
 export const MAX_BYTES = 2 * 1024 ** 3;
 export const UA = 'Regiochecker/1.0 (audio; https://github.com/basvroegop/regiochecker)';
-
-const PRIVE = new net.BlockList();
-for (const [adres, prefix] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12],
-  ['192.0.0.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15], ['224.0.0.0', 4], ['240.0.0.0', 4]]) PRIVE.addSubnet(adres, prefix, 'ipv4');
-// Geen ::ffff:0:0/96 hier: BlockList zou dan elk IPv4-adres afwijzen. Zo'n
-// adres (IPv4 in IPv6-vorm) controleren we hieronder als het IPv4-adres zelf.
-for (const [adres, prefix] of [['::', 128], ['::1', 128], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8]]) PRIVE.addSubnet(adres, prefix, 'ipv6');
-
-function prive(adres, familie) {
-  const v4 = familie === 6 && /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(adres)?.[1];
-  return v4 ? PRIVE.check(v4, 'ipv4') : PRIVE.check(adres, familie === 6 ? 'ipv6' : 'ipv4');
-}
 
 // Alleen voor de tests: nagebootste platforms draaien op 127.0.0.1.
 const priveToegestaan = () => process.env.REGIOCHECKER_PRIVE_ADRESSEN === '1';
@@ -66,6 +55,8 @@ export async function haalOpenbaar(url, { naar, maxBytes = 10 * 1024 ** 2, ua = 
     const host = new URL(adres).host;
     const antwoord = await fetch(adres, {
       redirect: 'manual',
+      // Ook bij het verbinden zelf: geen privéadres (src/netwerk.mjs).
+      dispatcher: openbaarDispatcher,
       headers: { 'User-Agent': ua, ...(cookies?.get(host) ? { Cookie: cookies.get(host) } : {}), ...headers },
       signal: AbortSignal.timeout(naar ? 4 * 3600_000 : tijd),
     });

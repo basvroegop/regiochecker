@@ -503,9 +503,18 @@ De Tailscale-identiteit van de sidecar staat apart in `./tailscale`.
   browser zelf meestuurt (ook `Remote-Email` en `Remote-Name`). Journalisten zien
   alleen hun eigen meldingen, notities en bewaarde stukken; Beheer is alleen
   voor admins.
-- Adressen die een beheerder als audiobron invult, en elke doorverwijzing van
-  een mediaserver, moeten openbare internetadressen zijn: nooit iets in het eigen
-  netwerk. ffmpeg leest een stream alleen via HTTPS-HLS zonder doorverwijzingen.
+- Alles wat de Regiochecker zelf ophaalt (bronnen, de links in een feed, bijlagen,
+  opnames) gaat alleen naar openbare internetadressen, nooit naar iets in het eigen
+  netwerk (`src/netwerk.mjs`). Dat wordt gecontroleerd in de URL, bij elke
+  doorverwijzing, en bij het verbinden zelf (de DNS-uitkomst), zodat ook een naam
+  die naar binnen wijst niet werkt. ffmpeg leest een stream alleen via HTTPS-HLS
+  zonder doorverwijzingen. Alleen de tests mogen naar 127.0.0.1
+  (`REGIOCHECKER_PRIVE_ADRESSEN=1`).
+- "De eerste die inlogt, wordt beheerder" geldt alleen bij een verse installatie.
+  Zodra er een beheerder is geweest (`beheerGestart` in `data/status.json`), gaat
+  die deur niet meer open, ook niet als de beheerders wegvallen; de inlognaam van
+  de laatste beheerder kan niet leeg. Herstellen kan dan alleen op de server, in
+  `data/gebruikers.json`.
 - De Tailscale-proxy staat op een eigen Docker-netwerk (`regiochecker-intern`),
   niet op het gedeelde `traefik`-netwerk.
 - Schrijfacties accepteren alleen `application/json`, wat formulieren van andere

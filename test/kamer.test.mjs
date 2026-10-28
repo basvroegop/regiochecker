@@ -12,6 +12,9 @@ import path from 'node:path';
 import { docxXmlNaarTekst, stukNaarTekst } from '../src/kamer/tekst.mjs';
 import { Opslag } from '../src/opslag.mjs';
 
+// Nagebootste servers draaien op 127.0.0.1; dat is normaal niet toegestaan (src/netwerk.mjs).
+process.env.REGIOCHECKER_PRIVE_ADRESSEN = '1';
+
 const sqlite = await import('node:sqlite').catch(() => null);
 const metSqlite = { skip: sqlite ? false : 'node:sqlite niet beschikbaar (Node 22+ nodig)' };
 
@@ -43,6 +46,11 @@ test('database: zoeken zonder accenten, fragmenten, termen alleen als heel woord
   kdb.bewaarTekst(b.nr, 'Geen nieuws over de Wadden. Wel over de tegenhoudharen.', new Date('2026-10-21T10:00:00Z'));
   kdb.bewaarTekst(c.nr, null, new Date('2026-10-21T10:00:00Z'));
   assert.equal(kdb.wachtrij(10, 3).length, 0);
+  // Een nieuwe tekstversie van een bestaand stuk: andere versie, dus geen verouderde feed.
+  const voor = JSON.stringify(kdb.versie());
+  kdb.bewaarTekst(c.nr, 'Nu wel tekst, over Drachten.', new Date('2026-10-21T10:00:00Z'));
+  assert.notEqual(JSON.stringify(kdb.versie()), voor);
+  kdb.bewaarTekst(c.nr, null, new Date('2026-10-21T10:00:00Z'));
 
   const r = kdb.zoek({ vraag: 'fryslan' });
   assert.equal(r.totaal, 1);
@@ -181,6 +189,24 @@ test('bijhouden, meldingen en het kopje in de regiomail', metSqlite, async () =>
     assert.equal((await verwerkMeldingen(ctx, { nu: morgen(8) }))[0].verstuurd, true);
     assert.equal((await verwerkMeldingen(ctx, { nu: morgen(9) })).length, 0);
 
+    // Een mailfout bij een dagelijkse melding: dezelfde dag opnieuw proberen.
+    opslag.meldingen = [melding('m4', 'g3', ['Lunchwijs'], { frequentie: 'dagelijks' })];
+    const goedeSmtp = opslag.instellingen.smtp;
+    opslag.instellingen.smtp = { ...goedeSmtp, port: 9 };
+    const mislukt = await verwerkMeldingen(ctx, { nu: morgen(8) });
+    assert.deepEqual([mislukt[0].verstuurd, Boolean(mislukt[0].fout)], [false, true]);
+    opslag.instellingen.smtp = goedeSmtp;
+    assert.equal((await verwerkMeldingen(ctx, { nu: morgen(10) }))[0].verstuurd, true, 'herkansing dezelfde dag');
+
+    // Meer kamerstukken dan er in één keer opgehaald worden: zeggen hoeveel nog.
+    const twee = kdb.treffers(['ziekenhuis', 'Lunchwijs'], { sinds: '2026-01-01', max: 1 });
+    assert.deepEqual([twee.length, twee.meer], [1, 1]);
+    assert.equal(kdb.treffers(['ziekenhuis', 'Lunchwijs'], { sinds: '2026-01-01' }).meer, 0);
+    assert.equal(kdb.feedTreffers(['ziekenhuis', 'Lunchwijs'], { sinds: '2026-01-01', max: 1 }).meer, 1);
+    const { stelMeldingSamen } = await import('../src/meldingen.mjs');
+    const metMeer = stelMeldingSamen(melding('m5', 'g1', ['ziekenhuis']), [], new Date(), { meer: 3 });
+    assert.equal(metMeer.html.includes("nog zo'n 3 kamerstukken"), false, 'zonder kamerstukken geen kopje');
+
     // Regiomail: Opsterland heeft "ziekenhuis" als sleutelwoord en krijgt een kopje Kamerstukken.
     opslag.regios = { opsterland: { sleutelwoorden: [{ term: 'ziekenhuis', actief: true }] } };
     const mail = await stelMailSamen(opslag, { email: 'v@example.nl', regios: ['opsterland', 'heerenveen'], laatsteMail: '2026-10-01T00:00:00Z' }, { samenvatting: false });
@@ -191,10 +217,52 @@ test('bijhouden, meldingen en het kopje in de regiomail', metSqlite, async () =>
     assert.match(opsterland, /<strong style="background:#fff3b0;">ziekenhuis<\/strong>/);
     assert.ok(!mail.html.slice(mail.html.indexOf('>Heerenveen</h2>'), mail.html.indexOf('>Opsterland</h2>')).includes('Kamerstukken'), 'zonder termen geen kopje');
     assert.match(mail.tekst, /-- Kamerstukken \(1\) --/);
+    // Passen ze niet allemaal in de mail, dan staat erbij hoeveel er nog zijn.
+    opslag.kamer = new Proxy(kdb, {
+      get: (doel, naam) => (naam === 'treffers' ? (...args) => Object.assign(doel.treffers(...args), { meer: 7 }) : typeof doel[naam] === 'function' ? doel[naam].bind(doel) : doel[naam]),
+    });
+    const vol = await stelMailSamen(opslag, { email: 'v@example.nl', regios: ['opsterland'], laatsteMail: '2026-10-01T00:00:00Z' }, { samenvatting: false });
+    assert.match(vol.html, /En nog zo&#39;n 7 kamerstukken met deze termen|En nog zo'n 7 kamerstukken met deze termen/);
+    assert.match(vol.tekst, /En nog zo'n 7 kamerstukken met deze termen/);
+    opslag.kamer = kdb;
     kdb.sluit();
   } finally {
     delete process.env.KAMERSTUKKEN_API;
     kamer.server.close();
     smtp.server.close();
+  }
+});
+
+test('bijhouden: op een paginagrens valt niets weg, ook niet bij gelijke tijdstempels', metSqlite, async () => {
+  // Een API die filter, volgorde, $skip en $top echt toepast. Tien stukken met
+  // precies dezelfde tijdstempel: meer dan er in één ronde (2 × 2) passen.
+  const docs = [
+    ...Array.from({ length: 10 }, (_, i) => ({ Id: `s${String(i).padStart(2, '0')}`, Titel: `Stuk ${i}`, Datum: '2026-10-07T00:00:00+02:00', ApiGewijzigdOp: '2026-10-27T13:08:00Z', Verwijderd: false })),
+    { Id: 'z', Titel: 'Later', Datum: '2026-10-07T00:00:00+02:00', ApiGewijzigdOp: '2026-10-27T13:09:00.5Z', Verwijderd: false },
+  ];
+  const server = http.createServer((req, res) => {
+    const q = new URL(req.url, 'http://x').searchParams;
+    const na = Date.parse(/ApiGewijzigdOp gt (\S+)/.exec(q.get('$filter'))[1]);
+    const lijst = docs.filter((d) => Date.parse(d.ApiGewijzigdOp) > na)
+      .sort((a, b) => Date.parse(a.ApiGewijzigdOp) - Date.parse(b.ApiGewijzigdOp) || a.Id.localeCompare(b.Id));
+    const skip = Number(q.get('$skip'));
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ value: lijst.slice(skip, skip + Number(q.get('$top'))) }));
+  });
+  await new Promise((klaar) => server.listen(0, '127.0.0.1', klaar));
+  Object.assign(process.env, { KAMERSTUKKEN_API: `http://127.0.0.1:${server.address().port}`, KAMERSTUKKEN_PAGINA: '2', KAMERSTUKKEN_MAX_PAGINAS: '2' });
+  try {
+    const { openKamerDb } = await import('../src/kamer/db.mjs');
+    const { synchroniseer } = await import('../src/kamer/ophalen.mjs');
+    const kdb = await openKamerDb(path.join(tijdelijk(), 'k.sqlite'));
+    const rondes = [];
+    for (let i = 0; i < 5; i++) rondes.push(await synchroniseer(kdb));
+    assert.deepEqual(rondes.map((r) => [r.nieuw, r.klaar]), [[4, false], [4, false], [3, true], [0, true], [0, true]]);
+    assert.equal(kdb.db.prepare('SELECT count(*) n FROM stukken').get().n, 11, 'alle elf binnen');
+    assert.equal(kdb.staat('synchronisatiepunt'), '2026-10-27T13:09:00.5Z');
+    kdb.sluit();
+  } finally {
+    for (const k of ['KAMERSTUKKEN_API', 'KAMERSTUKKEN_PAGINA', 'KAMERSTUKKEN_MAX_PAGINAS']) delete process.env[k];
+    server.close();
   }
 });

@@ -9,7 +9,7 @@ import {
 } from './register.mjs';
 import { haalBron } from './bronnen/index.mjs';
 import { schoneTermen, vindTermen, vindInSegmenten } from './termen.mjs';
-import { maakKader, routeerItem, routeerAflevering } from './feed.mjs';
+import { maakKader, routeerItem, routeerAflevering, tekstVan } from './feed.mjs';
 import { herkenBron, ontdek as ontdekCatalogus, YOUTUBE_SOORTEN } from './audio/catalogus.mjs';
 import { PLATFORMS } from './audio/vergaderingen.mjs';
 import { worker as audioWorker } from './audio/worker.mjs';
@@ -117,7 +117,7 @@ function telTerm(k, term, regio, dagen = 30) {
     if (item.regio || item.basislijn || item.eersteGezien <= grens) continue;
     const bron = k.bronnen.get(item.bron);
     if (bron?.bereik !== 'landelijk' || (regio && !geldtVoor(regio, bron.id))) continue;
-    if (vindTermen([item.titel, item.tekst, item.inhoud].filter(Boolean).join('\n'), [term]).length) n++;
+    if (vindTermen(tekstVan(k, item), [term]).length) n++;
   }
   if (k.adb) {
     for (const a of k.adb.metTranscriptSinds(grens)) {
@@ -364,6 +364,18 @@ function werkBronBij(k, id, invoer) {
     if (bereik === 'regio' && !regio) throw new InvoerFout('Kies de regio');
     bron.bereik = bereik;
     if (regio) bron.regio = regio.id; else delete bron.regio;
+    // Wat de bron al opleverde, verhuist mee: een stuk bewaart zijn regio zelf.
+    // Landelijk: geen vaste regio meer, dan routeren de sleutelwoorden.
+    let verhuisd = 0;
+    for (const item of Object.values(k.opslag.items)) {
+      if (item.bron !== bron.id) continue;
+      const nieuw = regio ? regio.id : null;
+      if (item.regio !== nieuw) {
+        item.regio = nieuw;
+        verhuisd++;
+      }
+    }
+    if (verhuisd) k.opslag.bewaar('items');
   }
   if (invoer.label !== undefined) {
     const label = String(invoer.label).trim().slice(0, 120);

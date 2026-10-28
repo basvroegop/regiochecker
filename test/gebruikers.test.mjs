@@ -96,6 +96,15 @@ test('inloggen: de eerste wordt beheerder, een uitnodiging koppelt op e-mail, de
   assert.deepEqual(sanne.weekmail, { aan: true, dagen: [2, 5], tijd: '06:45', ookLeeg: false });
   assert.notEqual(sanne.weekmailVanaf, '2000-01-01T00:00:00.000Z');
   assert.throws(() => werkGebruikerBij(opslag, sanne, { weekmail: { tijd: '25:00' } }, { regioIds }), /UU:MM/);
+
+  // De inlognaam van de laatste beheerder leegmaken mag niet: dan zou de
+  // eerstvolgende onbekende die door Authelia komt beheerder worden.
+  assert.throws(() => werkGebruikerBij(opslag, jan, { login: '' }, { beheer: true, regioIds }), /minstens één beheerder met een inlognaam/);
+  assert.equal(jan.login, 'jan');
+  // En verdwijnen de beheerders toch (een bewerkt bestand), dan gaat die deur niet meer open.
+  assert.ok(opslag.status.beheerGestart);
+  opslag.gebruikers = opslag.gebruikers.filter((x) => x.id !== jan.id);
+  assert.equal(herken(opslag, { login: 'onbekend', email: 'iemand@example.nl' }), null, 'geen automatische beheerder meer');
 });
 
 test('weekmail: iedere gebruiker op eigen dagen en tijd', () => {

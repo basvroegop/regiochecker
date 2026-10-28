@@ -13,7 +13,7 @@
 // keer inhalen geen stortvloed. Het zoeken zelf staat in src/feed.mjs, zodat
 // de feed en de mail precies dezelfde stukken vinden.
 
-import { verstuur } from './mail.mjs';
+import { verstuur, meerKamerstukken } from './mail.mjs';
 import { html } from './html.mjs';
 import { lokaleDatum, korteDatum } from './datum.mjs';
 import { ENKELVOUD } from './regios.mjs';
@@ -73,7 +73,7 @@ const GROEPEN = [
 ];
 const groepVanRegel = (r) => (r.soort === 'kamerstuk' ? 'kamerstuk' : r.id.startsWith('a:') ? 'audio' : 'gemeente');
 
-export function stelMeldingSamen(melding, treffers, nu = new Date()) {
+export function stelMeldingSamen(melding, treffers, nu = new Date(), { meer = 0 } = {}) {
   const gevonden = new Set(treffers.flatMap((t) => t.gevonden.map((g) => g.term)));
   const termen = melding.termen.filter((t) => gevonden.has(t));
   const onderwerp = `Melding: ${treffers.length} nieuw${treffers.length === 1 ? ' stuk' : 'e stukken'} met ${termen.slice(0, 3).join(', ')}${termen.length > 3 ? ' …' : ''} (${korteDatum(lokaleDatum(nu))})`;
@@ -87,6 +87,11 @@ export function stelMeldingSamen(melding, treffers, nu = new Date()) {
     inhoud += `<h3 style="font-size:19px;margin:18px 0 10px;padding-bottom:4px;border-bottom:1px solid #e3e1da;">${kop} <span style="font-weight:normal;color:#6b6b66;">(${lijst.length})</span></h3>`;
     inhoud += lijst.map((t) => (t.stuk ? trefferHtml({ stuk: t.stuk, gevonden: t.gevonden }) : regelHtml(t))).join('');
     tekst.push(`-- ${kop} (${lijst.length}) --`, ...lijst.map((t) => (t.stuk ? trefferTekst({ stuk: t.stuk, gevonden: t.gevonden }) : regelTekst(t))), '');
+    if (groep === 'kamerstuk' && meer) {
+      const zoek = site ? `${site}/#/zoeken?q=${encodeURIComponent(zoekvraagTekst(melding.termen))}` : '';
+      inhoud += `<p style="${KLEIN}">${html(meerKamerstukken(meer))}${zoek ? ` <a href="${html(zoek)}" style="color:#6b6b66;">Bekijk ze in de Regiochecker</a>.` : ''}</p>`;
+      tekst.splice(tekst.length - 1, 0, meerKamerstukken(meer) + (zoek ? ` ${zoek}` : ''));
+    }
   }
   tekst.push(voet);
   const htmlMail = `<!doctype html><html lang="nl"><head><meta charset="utf-8"></head>
@@ -121,24 +126,27 @@ async function verwerk(ctx, { nu = new Date() } = {}) {
   for (const melding of opslag.meldingen.filter((m) => m.actief !== false && m.termen?.length)) {
     const gebruiker = opslag.gebruikers.find((g) => g.id === melding.gebruiker);
     if (!gebruiker?.email) continue;
-    if (melding.frequentie === 'dagelijks') {
-      if (nu < moment(nu, melding.tijd) || melding.laatsteDagronde === vandaag) continue;
-      melding.laatsteDagronde = vandaag;
-    }
+    // Een dagelijkse melding één keer per dag; als afgehandeld pas als de mail
+    // weg is (of er niets te melden was), zodat een mailfout dezelfde dag herkanst.
+    const dagelijks = melding.frequentie === 'dagelijks';
+    if (dagelijks && (nu < moment(nu, melding.tijd) || melding.laatsteDagronde === vandaag)) continue;
     const sinds = melding.laatsteMelding || melding.aangemaakt;
     const tot = nu.toISOString();
-    const treffers = meldingTreffers(k, gebruiker, melding, { sinds, tot })
+    const gevonden = meldingTreffers(k, gebruiker, melding, { sinds, tot });
+    const treffers = gevonden
       .map((t) => ({ ...t, regioNaam: t.regios.map((r) => k.regioMap.get(r)?.naam).filter(Boolean).join(', ') }))
       .sort((a, b) => b.tijd.localeCompare(a.tijd));
     if (!treffers.length) {
+      if (dagelijks) melding.laatsteDagronde = vandaag;
       resultaten.push({ id: melding.id, verstuurd: false });
       continue;
     }
     try {
-      const mail = stelMeldingSamen(melding, treffers, nu);
+      const mail = stelMeldingSamen(melding, treffers, nu, { meer: gevonden.meerKamerstukken || 0 });
       await verstuur(opslag, { aan: gebruiker.email, ...mail });
       melding.laatsteMelding = tot;
       melding.laatsteFout = null;
+      if (dagelijks) melding.laatsteDagronde = vandaag;
       opslag.log({ soort: 'melding', aan: gebruiker.email, tekst: mail.onderwerp });
       resultaten.push({ id: melding.id, verstuurd: true, aantal: treffers.length });
     } catch (fout) {

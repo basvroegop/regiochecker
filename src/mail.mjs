@@ -25,6 +25,9 @@ import { minDatum } from './kamer/db.mjs';
 import { trefferHtml, trefferTekst, fragmentHtml } from './kamer/weergave.mjs';
 import { weekmailNodig } from './planning.mjs';
 
+// Meer kamerstukken dan in een mail passen: dat zeggen, niet stilzwijgend weglaten.
+export const meerKamerstukken = (n) => `En nog zo'n ${n} ${n === 1 ? 'kamerstuk' : 'kamerstukken'} met deze termen, die niet meer in deze mail passen.`;
+
 const SOORT_VOLGORDE = ['nieuws', 'ingekomen', 'woo'];
 const DAG_MS = 86400000;
 const EERSTE_MAIL_DAGEN = 7;
@@ -120,6 +123,7 @@ function regioHtml(blok, opslag) {
     uit += n
       ? blok.kamerstukken.map(trefferHtml).join('')
       : `<p style="${STIJL.item};color:#6b6b66;">Geen nieuwe kamerstukken met ${html(blok.kamerTermen.join(', '))}.</p>`;
+    if (blok.kamerstukken.meer) uit += `<p style="${STIJL.item};color:#6b6b66;">${html(meerKamerstukken(blok.kamerstukken.meer))}${process.env.REGIOCHECKER_SITE_URL ? ` <a href="${html(process.env.REGIOCHECKER_SITE_URL)}/#/feed?groep=kamerstuk" style="color:#6b6b66;">Bekijk ze in de Regiochecker</a>.` : ''}</p>`;
   }
   if (blok.audio.length) {
     uit += `<h3 style="${STIJL.h3}">Raadsvergaderingen, audio en video <span style="font-weight:normal;color:#6b6b66;">(${blok.audio.length})</span></h3>`;
@@ -181,6 +185,7 @@ function regioTekst(blok, opslag) {
     r.push(`-- Kamerstukken${blok.kamerstukken.length ? ` (${blok.kamerstukken.length})` : ''} --`);
     if (blok.kamerstukken.length) r.push(...blok.kamerstukken.map(trefferTekst));
     else r.push(`Geen nieuwe kamerstukken met ${blok.kamerTermen.join(', ')}.`);
+    if (blok.kamerstukken.meer) r.push(meerKamerstukken(blok.kamerstukken.meer) + (process.env.REGIOCHECKER_SITE_URL ? ` ${process.env.REGIOCHECKER_SITE_URL}/#/feed?groep=kamerstuk` : ''));
     r.push('');
   }
   if (blok.audio.length) {
