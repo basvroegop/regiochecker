@@ -247,15 +247,15 @@ test('verwerking: van podcastfeed tot transcript, namen, stemmen en telefoonnumm
   const feed = await nepPodcast({ n: 5 });
   try {
     const { opslag, fdb, adb, verwerking, beschikbaar } = await opzet();
-    const bas = herkenGebruiker(opslag, { login: 'bas', email: 'bas@example.nl' });
+    const jan = herkenGebruiker(opslag, { login: 'jan', email: 'jan@example.nl' });
     const ctx = { opslag, kdb: null, fdb, adb };
     const PODCAST = { bereik: 'regio', regio: 'smallingerland', lezer: 'audio', soort: 'podcast', url: feed.url, eersteImport: 2 };
 
-    let r = await roep(ctx, bas, 'POST', '/api/beheer/bronnen/proef', PODCAST);
+    let r = await roep(ctx, jan, 'POST', '/api/beheer/bronnen/proef', PODCAST);
     assert.match(r.data.tekst, /5 afleveringen gevonden\. De nieuwste: "Aflevering 5: Drachten en de N31"/);
     assert.match(r.data.tekst, /de 2 nieuwste afleveringen gedownload en getranscribeerd/);
     assert.match(r.data.tekst, /Whisper-worker is nog niet ingesteld/);
-    r = await roep(ctx, bas, 'POST', '/api/beheer/bronnen', PODCAST);
+    r = await roep(ctx, jan, 'POST', '/api/beheer/bronnen', PODCAST);
     assert.equal(r.status, 201);
     assert.deepEqual([r.data.naam, r.data.lezer, r.data.audio.kind, r.data.audio.eersteImport], ['Smallingerland · Podcast', 'Podcast-RSS', 'rss', 2]);
     const bron = opslag.bronnen[0];
@@ -370,10 +370,58 @@ test('verwerking: van podcastfeed tot transcript, namen, stemmen en telefoonnumm
     adb.zetStaat('gepauzeerd', '1');
     assert.equal(await verwerking.verwerkEen(), false);
     adb.zetStaat('gepauzeerd', '0');
-    r = await roep({ ...ctx, verwerking }, bas, 'GET', '/api/beheer/audio');
+    r = await roep({ ...ctx, verwerking }, jan, 'GET', '/api/beheer/audio');
     assert.deepEqual([r.data.worker.bereikbaar, r.data.worker.model, r.data.inWachtrij, r.data.bronnen.length], [true, 'large-v3', 1, 1]);
     assert.equal(r.data.wachtrij[0].titel, 'Aflevering 5: Drachten en de N31', 'de namen opnieuw');
   } finally {
+    worker.server.close();
+    feed.server.close();
+  }
+});
+
+test('lange opnames in delen naar de worker, met tussenstand', metAlles, async () => {
+  const { voegDelenSamen } = await import('../src/audio/verwerking.mjs');
+  const X = 'ab'.repeat(16);
+  const samen = voegDelenSamen([
+    { start: 0, language: 'nl', segments: [{ start: 0, end: 10, text: ' Een', speaker: 'SPEAKER_00' }, { start: 10, end: 2702, text: ' Twee', speaker: 'SPEAKER_01', speaker_id: X }] },
+    { start: 2700, language: 'nl', segments: [{ start: 0, end: 2, text: ' Twee nog eens', speaker: 'SPEAKER_00' }, { start: 3, end: 20, text: ' Drie', speaker: 'SPEAKER_00' }, { start: 20, end: 30, text: ' Vier', speaker: 'SPEAKER_01', speaker_id: X }] },
+  ]);
+  assert.equal(samen.text, 'Een Twee Drie Vier', 'de overlap niet dubbel');
+  assert.deepEqual(samen.segments.map((s) => [s.start, s.end, s.speaker, s.speaker_id || null]), [
+    [0, 10, 'SPEAKER_0', null], [10, 2702, 'SPEAKER_1', X], [2703, 2720, 'SPEAKER_100', null], [2720, 2730, 'SPEAKER_101', X],
+  ], 'tijden vanaf het begin; een stem zonder profiel per deel apart, een profiel overal hetzelfde');
+  assert.equal(samen.language, 'nl');
+
+  // Een opname van twee seconden met delen van één seconde: twee keer naar de worker.
+  process.env.AUDIO_DEEL_S = '1';
+  const worker = await nepWorker();
+  const feed = await nepPodcast({ n: 2 });
+  try {
+    const { opslag, adb, verwerking } = await opzet();
+    opslag.instellingen.audio = { ...opslag.instellingen.audio, workerUrl: worker.url, workerToken: TOKEN, viaTailnet: false };
+    const bron = { id: 'p', naam: 'p', soort: 'podcast', bereik: 'landelijk', type: 'audio', url: feed.url, aangemaakt: '2026-10-01', audio: { kind: 'rss', eersteImport: 0, actief: true, geinitialiseerd: true, prioriteit: 0 } };
+    opslag.bronnen.push(bron);
+    const basis = feed.url.replace(/\/feed\.xml$/, '');
+    for (const n of [1, 2]) adb.voegToe(bron, { extern: `rss:${n}`, vorm: 'rss', url: `${basis}/afl/${n}`, mediaUrl: `${basis}/audio/${n}.wav`, titel: `Aflevering ${n}`, gepubliceerdOp: Date.now() / 1000 - n * 86400 });
+    const uploads = () => worker.staat.verzoeken.filter((v) => v === 'POST /v1/media/transcriptions').length;
+
+    assert.equal(await verwerking.verwerkEen(), true);
+    const a = adb.aflevering(adb.lijst({ bron: 'p' }).find((x) => x.titel === 'Aflevering 1').id);
+    assert.equal(uploads(), 2);
+    assert.equal(worker.staat.laatsteUpload.opname, `regiochecker:${a.id}-2`);
+    assert.equal(a.status, 'getranscribeerd');
+    assert.deepEqual(a.transcriptDelen, [], 'de tussenstand is opgeruimd');
+    assert.deepEqual(a.segmenten.map((s) => s.speaker), ['Voorzitter Bos', 'Anke Postma', 'Spreker 1', 'Spreker 2']);
+    assert.ok(a.duur > 1.5 && a.duur < 2.5, 'de lengte van de hele opname');
+
+    // Na een storing: verder bij het deel dat nog ontbreekt.
+    const tweede = adb.lijst({ bron: 'p' }).find((x) => x.titel === 'Aflevering 2');
+    adb.werkBij(tweede.id, { transcriptDelen: [{ start: 0, text: 'Al klaar.', segments: [{ start: 0, end: 1, text: ' Al klaar.' }], language: 'nl' }] });
+    assert.equal(await verwerking.verwerkEen(), true);
+    assert.equal(uploads(), 3, 'alleen het tweede deel');
+    assert.match(adb.aflevering(tweede.id).transcript, /^Al klaar\. Dan gaan we naar agendapunt 6/);
+  } finally {
+    delete process.env.AUDIO_DEEL_S;
     worker.server.close();
     feed.server.close();
   }

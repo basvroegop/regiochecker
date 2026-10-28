@@ -206,6 +206,22 @@ export async function downloadAudio(af, { map, vergadering, metadata }) {
   return doel;
 }
 
+// De lengte van een audiobestand in seconden (ffprobe), of null.
+export async function audioDuur(pad) {
+  try {
+    const uit = await draai(process.env.FFPROBE || 'ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', pad], { tijd: 60_000 });
+    const s = Number.parseFloat(uit);
+    return Number.isFinite(s) && s > 0 ? s : null;
+  } catch {
+    return null;
+  }
+}
+
+// Een stuk uit een mp3, zonder opnieuw te coderen (de mp3 heeft een vaste bitrate).
+export async function knipAudio(pad, doel, start, lengte) {
+  await draai(process.env.FFMPEG || 'ffmpeg', ['-nostdin', '-y', '-v', 'error', '-ss', String(start), '-t', String(lengte), '-i', pad, '-c', 'copy', doel], { tijd: 10 * 60_000 });
+}
+
 // Alleen bestanden binnen data/audio weggooien.
 export async function gooiAudioWeg(map, pad) {
   if (!pad) return false;

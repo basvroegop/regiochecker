@@ -18,10 +18,12 @@
 // om het opnieuw te proberen.
 
 import { existsSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
+import path from 'node:path';
 import { worker } from './worker.mjs';
 import { ontdek } from './catalogus.mjs';
 import { mediaVoor } from './vergaderingen.mjs';
-import { downloadAudio, gooiAudioWeg } from './ophalen.mjs';
+import { downloadAudio, gooiAudioWeg, audioDuur, knipAudio } from './ophalen.mjs';
 import { delen, splits, plaatsNamen } from './namen.mjs';
 import { vindNummers, nummerlijst, contextVenster, namenInBuurt, controleerDuiding } from './telefoon.mjs';
 
@@ -29,6 +31,42 @@ const BRON_INTERVAL_MS = 60 * 60_000;
 const DAG_MS = 86400_000;
 
 export const isAudio = (b) => b?.type === 'audio' && b.audio;
+
+// Een lange opname gaat in delen naar de worker. Een vergadering van ruim drie
+// uur in één keer liet de worker crashen (een harde stop in CTranslate2,
+// oktober 2026); in delen blijft elke GPU-taak kort, en komen Plaud en
+// Storyteller tussendoor aan de beurt. Elk deel wordt meteen bewaard: na een
+// storing gaat het verder bij het volgende deel. De delen overlappen een paar
+// seconden, zodat er bij de knip geen woorden wegvallen.
+const deelSeconden = () => Number(process.env.AUDIO_DEEL_S) || 45 * 60;
+const OVERLAP_S = 4;
+
+// De delen weer tot één transcript, met tijden vanaf het begin van de opname.
+// Wat in de overlap al in het vorige deel stond, gaat eruit. Een stem zonder
+// profiel ("SPEAKER_00") geldt alleen binnen zijn deel, dus die krijgt per
+// deel een eigen nummer; een stemprofiel (speaker_id) geldt overal.
+export function voegDelenSamen(delen) {
+  const segments = [];
+  let eind = 0;
+  delen.forEach((d, i) => {
+    for (const s of d.segments || []) {
+      const start = Number(s.start || 0) + d.start;
+      const stop = Number(s.end || 0) + d.start;
+      if (i && start < eind - 0.25) continue;
+      const lokaal = /^SPEAKER_(\d+)$/.exec(s.speaker || '');
+      segments.push({ ...s, start, end: stop, ...(lokaal ? { speaker: `SPEAKER_${i * 100 + Number(lokaal[1])}` } : {}) });
+      eind = Math.max(eind, stop);
+    }
+  });
+  const talen = delen.map((d) => d.language).filter(Boolean);
+  const taal = talen.sort((a, b) => talen.filter((t) => t === b).length - talen.filter((t) => t === a).length)[0] || null;
+  return {
+    text: segments.map((s) => String(s.text || '').trim()).filter(Boolean).join(' '),
+    segments,
+    language: taal,
+    diarization_error: delen.map((d) => d.diarization_error).find(Boolean) || null,
+  };
+}
 
 const tijdelijkeFout = (fout) => {
   if (fout?.tijdelijk) return true;
@@ -186,6 +224,36 @@ export class Verwerking {
     return true;
   }
 
+  // Geeft het samengevoegde antwoord van de worker, of null als de verwerking
+  // intussen gepauzeerd is (de delen die klaar zijn, blijven bewaard).
+  async transcribeerInDelen(af, pad, lengte, w, werk) {
+    const deel = deelSeconden();
+    // Het laatste deel neemt de rest mee, zodat er geen staartje van een paar seconden overblijft.
+    const n = Math.max(1, Math.ceil(lengte / deel - 0.25));
+    let klaar = this.adb.aflevering(af.id).transcriptDelen || [];
+    // Een tussenstand geldt alleen bij dezelfde indeling.
+    if (klaar.some((d, i) => d.start !== i * deel)) klaar = [];
+    const wat = af.sprekersGevraagd ? 'Stemmen herkennen' : 'Transcriberen met Whisper';
+    for (let i = klaar.length; i < n; i++) {
+      if (this.adb.gepauzeerd()) {
+        werk({ status: 'wacht', stap: `Gepauzeerd · ${i} van ${n} delen klaar` });
+        return null;
+      }
+      werk({ status: 'transcriberen', stap: `${wat} · deel ${i + 1} van ${n}` });
+      const start = i * deel;
+      const deelPad = path.join(path.dirname(pad), `deel-${i + 1}.mp3`);
+      try {
+        await knipAudio(pad, deelPad, start, i === n - 1 ? lengte - start + 1 : Math.min(deel + OVERLAP_S, lengte - start));
+        const r = await w.transcribeer(deelPad, `${af.id}-${i + 1}`);
+        klaar.push({ start, text: String(r.text || ''), segments: r.segments || [], language: r.language || null, diarization_error: r.diarization_error || null });
+      } finally {
+        await rm(deelPad, { force: true });
+      }
+      werk({ transcriptDelen: klaar });
+    }
+    return voegDelenSamen(klaar);
+  }
+
   bewaarAudio(af) {
     const keuze = this.opslag.instellingen.audio?.bewaarAudio || 'vergaderingen';
     return keuze === 'alles' || (keuze === 'vergaderingen' && af.soort === 'raadsvergadering');
@@ -217,15 +285,23 @@ export class Verwerking {
         werk({ status: 'wacht', stap: 'Gepauzeerd · audio klaar' });
         return;
       }
-      werk({ status: 'transcriberen', stap: af.sprekersGevraagd ? 'Stemmen herkennen · Whisper en stemherkenning' : 'Transcriberen met Whisper · wacht zo nodig op de gedeelde GPU' });
-      const r = await w.transcribeer(pad, af.id);
+      const lengte = (await audioDuur(pad)) || af.duur || null;
+      let r;
+      if (lengte && lengte > deelSeconden() * 1.25) {
+        r = await this.transcribeerInDelen(af, pad, lengte, w, werk);
+        if (!r) return;
+        r.duration = lengte;
+      } else {
+        werk({ status: 'transcriberen', stap: af.sprekersGevraagd ? 'Stemmen herkennen · Whisper en stemherkenning' : 'Transcriberen met Whisper · wacht zo nodig op de gedeelde GPU' });
+        r = await w.transcribeer(pad, af.id);
+      }
       const tekst = String(r.text || '').trim();
       if (!tekst) throw new Error('Whisper heeft geen gesproken tekst gevonden.');
       const segmenten = schoonSegmenten(r.segments?.length ? r.segments : [{ start: 0, end: r.duration || 0, text: tekst }]);
       const verder = this.adb.aflevering(af.id);
       werk({
         transcript: tekst, segmenten, taal: r.language || null, duur: r.duration ?? verder.duur, sprekerFout: r.diarization_error || null,
-        sprekersGevraagd: false, entiteiten: null, entiteitDelen: null, pogingen: 0,
+        sprekersGevraagd: false, entiteiten: null, entiteitDelen: null, transcriptDelen: null, pogingen: 0,
         // De eerste import (nulmeting) op de eigen datum, de rest op nu.
         eersteGezien: verder.eersteGezien || (verder.nulmeting && verder.gepubliceerd ? verder.gepubliceerd : new Date().toISOString()),
       });

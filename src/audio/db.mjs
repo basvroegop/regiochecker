@@ -44,6 +44,7 @@ const SCHEMA = `
     taal TEXT,
     entiteiten TEXT,
     entiteit_delen TEXT,
+    transcript_delen TEXT,
     sprekers_gevraagd INTEGER NOT NULL DEFAULT 0,
     spreker_fout TEXT,
     nulmeting INTEGER NOT NULL DEFAULT 0,
@@ -127,6 +128,7 @@ function aflevering(r, { licht = false } = {}) {
       segmenten: json(r.segmenten, []),
       entiteiten: json(r.entiteiten, null),
       entiteitDelen: json(r.entiteit_delen, []),
+      transcriptDelen: json(r.transcript_delen, []),
     }),
   };
 }
@@ -138,10 +140,10 @@ const LICHT = `id, bron, extern, soort, vorm, titel, url, media_url, auteur, gep
 const VELDEN = {
   titel: 'titel', url: 'url', mediaUrl: 'media_url', auteur: 'auteur', gepubliceerdTekst: 'gepubliceerd', gepubliceerdOp: 'gepubliceerd_op',
   duur: 'duur', afbeelding: 'afbeelding', status: 'status', stap: 'stap', pogingen: 'pogingen', opnieuwOp: 'opnieuw_op', fout: 'fout',
-  audioPad: 'audio_pad', transcript: 'transcript', segmenten: 'segmenten', taal: 'taal', entiteiten: 'entiteiten', entiteitDelen: 'entiteit_delen',
+  audioPad: 'audio_pad', transcript: 'transcript', segmenten: 'segmenten', taal: 'taal', entiteiten: 'entiteiten', entiteitDelen: 'entiteit_delen', transcriptDelen: 'transcript_delen',
   sprekersGevraagd: 'sprekers_gevraagd', sprekerFout: 'spreker_fout', eersteGezien: 'eerst_gezien', nulmeting: 'nulmeting',
 };
-const ALS_JSON = new Set(['segmenten', 'entiteiten', 'entiteitDelen']);
+const ALS_JSON = new Set(['segmenten', 'entiteiten', 'entiteitDelen', 'transcriptDelen']);
 
 export class AudioDb {
   constructor(db) {
@@ -151,6 +153,9 @@ export class AudioDb {
     const kolommen = db.prepare("SELECT name FROM pragma_table_info('afleveringen')").all().map((r) => r.name);
     if (kolommen.length && !kolommen.includes('extern')) db.exec('DROP TABLE afleveringen');
     db.exec(SCHEMA);
+    // Later bijgekomen kolommen.
+    const nu = db.prepare("SELECT name FROM pragma_table_info('afleveringen')").all().map((r) => r.name);
+    if (!nu.includes('transcript_delen')) db.exec('ALTER TABLE afleveringen ADD COLUMN transcript_delen TEXT');
     // Na een herstart: wat bezig was, gaat terug in de wachtrij.
     db.prepare("UPDATE afleveringen SET status = CASE WHEN transcript IS NULL OR sprekers_gevraagd = 1 THEN 'wacht' ELSE 'getranscribeerd' END, stap = 'Hervatten na herstart' WHERE status IN ('downloaden', 'transcriberen', 'analyseren')").run();
     db.prepare("UPDATE telefoon_context SET status = 'wacht' WHERE status = 'bezig'").run();
