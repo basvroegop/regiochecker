@@ -114,6 +114,10 @@ export function ontdek(bron, { proef = false } = {}) {
 
 // Het actuele media-adres van één vergadering: { adres, velden, stream }.
 // Elk platform bouwt die link per bezoek opnieuw, dus niet bewaren.
+// `velden.platform` is wat het platform zelf over de opname weet, met tijden
+// in seconden vanaf het begin van de opname:
+//   agenda    [{ titel, start, eind }]          Company Webcast, Notubiz, babscast
+//   sprekers  [{ naam, rol, momenten: [[start, eind], …] }]   Company Webcast
 export async function mediaVoor(af) {
   try {
     if (af.extern.startsWith('ntb:')) return await notubizMedia(af);
@@ -129,6 +133,17 @@ export async function mediaVoor(af) {
       fout.message = `${fout.message} Misschien komt die nog: nieuwe poging over ${OPNAME_OPNIEUW_S / 3600} uur.`;
     }
     throw fout;
+  }
+}
+
+// Alleen agenda en sprekers, voor een opname die al binnen is. Geeft
+// { agenda, sprekers } (leeg als het platform niets weet), of null bij een fout.
+export async function platformVoor(af) {
+  if (af.vorm !== 'vergadering') return null;
+  try {
+    return (await mediaVoor(af)).velden?.platform || { agenda: [], sprekers: [] };
+  } catch {
+    return null;
   }
 }
 
@@ -194,10 +209,30 @@ async function webcastMedia(af) {
   if (!gekozen) throw geenOpname('Deze vergadering biedt geen downloadbare opname aan.');
   const begin = moment(d.actualStart);
   const eind = moment(d.actualEnd);
-  const velden = {};
+  const velden = { platform: webcastPlatform(d, begin) };
   if (String(d.title || '').trim()) velden.titel = d.title.trim();
   if (begin && eind && eind > begin) velden.duur = (eind - begin) / 1000;
   return { adres: gekozen.location, velden, stream: false };
+}
+
+// Agendapunten (topics) en sprekers met hun spreekmomenten. Company Webcast
+// geeft kloktijden; de opname begint bij actualStart.
+export function webcastPlatform(d, begin = moment(d.actualStart)) {
+  if (!begin) return { agenda: [], sprekers: [] };
+  const sec = (waarde) => {
+    const t = moment(waarde);
+    return t ? Math.max(0, Math.round((t - begin) / 100) / 10) : null;
+  };
+  const agenda = (d.topics || []).map((t) => {
+    const ev = (t.events || []).find((e) => e.start);
+    return { titel: String(t.title || '').trim(), start: ev ? sec(ev.start) : null, eind: ev ? sec(ev.end) : null };
+  }).filter((t) => t.titel && t.start !== null).sort((a, b) => a.start - b.start);
+  const sprekers = (d.speakers || []).map((s) => ({
+    naam: [s.name?.title, s.name?.first, s.name?.middle, s.name?.last].map((x) => String(x || '').trim()).filter(Boolean).join(' '),
+    rol: String(s.role || s.category || '').trim() || null,
+    momenten: (s.events || []).map((e) => [sec(e.start), sec(e.end)]).filter(([a, b]) => a !== null && b !== null && b > a),
+  })).filter((s) => s.naam && s.momenten.length);
+  return { agenda, sprekers };
 }
 
 // ---------- Notubiz ----------
@@ -317,8 +352,29 @@ async function notubizMedia(af) {
   const stream = notubizStream(pagina);
   // De speler kent de volledige naam van deze zaal of vergadering wél.
   const titel = SPELER_TITEL.exec(pagina.slice(Math.max(0, pagina.indexOf('createPlayer'))))?.[1]?.trim();
+  const velden = titel ? { titel } : {};
+  try {
+    velden.platform = { agenda: notubizAgenda((await notubiz(`events/meetings/${code.split('/')[1]}`)).meeting), sprekers: [] };
+  } catch { /* zonder agenda gaat het ook */ }
   // Een raadsopname is video van gigabytes: alleen het geluid van de stream halen.
-  return { adres: stream, velden: titel ? { titel } : {}, stream: true };
+  return { adres: stream, velden, stream: true };
+}
+
+// Agendapunten met hun tijd in de opname (start_offset in seconden), ook de
+// punten onder een kopje. "4 Kapitaalgoederen Smallingerland 2027-2030".
+export function notubizAgenda(vergadering) {
+  const uit = [];
+  const loop = (punten) => {
+    for (const p of punten || []) {
+      const titel = [p.type_data?.title_prefix, notubizAttribuut(p.type_data || {})].map((x) => String(x || '').trim()).filter(Boolean).join(' ');
+      const start = Number.parseFloat(p.start_offset);
+      const eind = Number.parseFloat(p.end_offset);
+      if (titel && Number.isFinite(start)) uit.push({ titel, start, eind: Number.isFinite(eind) && eind > start ? eind : null });
+      loop(p.agenda_items);
+    }
+  };
+  loop(vergadering?.agenda_items);
+  return uit.sort((a, b) => a.start - b.start);
 }
 
 // ---------- iBabs ----------
@@ -448,7 +504,16 @@ async function babscastEvent(event) {
     begin: tijd(d.ActualStart),
     eind: tijd(d.ActualEnd),
     afspeellijst: String(m.PlayListUrl || ''),
+    // De tijdlijn: agendapunten met hun tijd in de opname ("00:58:24.8650000").
+    agenda: (d.TimelineEvents || []).filter((t) => t.EventType === 'Topic' && t.TextRepresentation).map((t) => ({
+      titel: String(t.TextRepresentation).trim(), start: duurTijd(t.StartOffset), eind: duurTijd(t.EndOffset),
+    })).filter((t) => t.start !== null).sort((a, b) => a.start - b.start),
   };
+}
+
+function duurTijd(tekst) {
+  const m = /^(\d+):(\d{2}):(\d{2}(?:\.\d+)?)$/.exec(String(tekst || ''));
+  return m ? Math.round((Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3])) * 10) / 10 : null;
 }
 
 // Raads- en commissievergaderingen eerst: die worden het vaakst uitgezonden.
@@ -536,7 +601,7 @@ async function ibabsMedia(af) {
   if (ev.status !== 'Archived' || !ev.afspeellijst) throw geenOpname('De opname van deze vergadering is nog niet beschikbaar.');
   const adres = new URL(ev.afspeellijst);
   if (adres.protocol !== 'https:' || !BABSCAST_MEDIA.test(adres.hostname)) throw new Error('Deze vergadering verwijst naar een onbekende mediaserver.');
-  const velden = {};
+  const velden = { platform: { agenda: ev.agenda, sprekers: [] } };
   if (ev.titel) velden.titel = ev.titel;
   if (ev.begin && ev.eind && ev.eind > ev.begin) velden.duur = (ev.eind - ev.begin) / 1000;
   // Video in HLS: alleen het geluid van de stream halen.

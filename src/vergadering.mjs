@@ -80,8 +80,15 @@ export async function vatVergaderingSamen({ opslag, aflevering, regioNaam, clien
   return bezig;
 }
 
+// De agenda van het vergaderplatform, als die er is: helpt het model de
+// onderwerpen te herkennen en goed te schrijven.
+export function agendaTekst(a) {
+  const punten = a.platform?.agenda || [];
+  return punten.length ? `\nAgenda (met de tijd waarop het punt begint):\n${punten.map((p) => `- [${tijdcode(p.start)}] ${p.titel}`).join('\n')}\n` : '';
+}
+
 async function maak(opslag, a, regioNaam, aanbieder, client, sleutel) {
-  const kop = `Gemeente: ${regioNaam}\nVergadering: ${a.titel}${a.gepubliceerd ? `\nDatum: ${String(a.gepubliceerd).slice(0, 10)}` : ''}\n\nTranscript:\n`;
+  const kop = `Gemeente: ${regioNaam}\nVergadering: ${a.titel}${a.gepubliceerd ? `\nDatum: ${String(a.gepubliceerd).slice(0, 10)}` : ''}\n${agendaTekst(a)}\nTranscript:\n`;
   let json;
   if (aanbieder.via === 'ollama') {
     const { url, model, maxContext } = opslag.instellingen.ollama;
@@ -182,7 +189,7 @@ function stukkenVan(segmenten, max) {
 export async function vatKortSamen({ opslag, aflevering: a, bronNaam = '', client, voortgang }) {
   const aanbieder = client ? { via: 'claude', klaar: true, model: opslag.instellingen.claude.model } : samenvattingAanbieder(opslag);
   if (!aanbieder.klaar || !a.segmenten?.length) return null;
-  const kop = `${bronNaam ? `Bron: ${bronNaam}\n` : ''}Titel: ${a.titel}${a.gepubliceerd ? `\nDatum: ${String(a.gepubliceerd).slice(0, 10)}` : ''}\n\n`;
+  const kop = `${bronNaam ? `Bron: ${bronNaam}\n` : ''}Titel: ${a.titel}${a.gepubliceerd ? `\nDatum: ${String(a.gepubliceerd).slice(0, 10)}` : ''}\n${agendaTekst(a)}\n`;
   const vraag = (systeem, tekst, schema) => {
     if (aanbieder.via !== 'ollama') return vraagClaude(opslag, { systeem, vraag: tekst, schema }, client);
     const { url, model, maxContext } = opslag.instellingen.ollama;

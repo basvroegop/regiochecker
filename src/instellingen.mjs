@@ -86,6 +86,7 @@ export function werkInstellingenBij(opslag, invoer) {
     if (a.workerToken) i.audio.workerToken = String(a.workerToken).trim();
     if (a.wisToken) i.audio.workerToken = '';
     if (a.viaTailnet !== undefined) i.audio.viaTailnet = Boolean(a.viaTailnet);
+    if (a.namenZoeken !== undefined) i.audio.namenZoeken = Boolean(a.namenZoeken);
     if (a.bewaarAudio !== undefined) {
       if (!['vergaderingen', 'alles', 'niets'].includes(a.bewaarAudio)) throw new InvoerFout('Kies welke audio bewaard blijft');
       i.audio.bewaarAudio = a.bewaarAudio;

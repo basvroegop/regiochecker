@@ -22,7 +22,7 @@ import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { worker } from './worker.mjs';
 import { ontdek } from './catalogus.mjs';
-import { mediaVoor } from './vergaderingen.mjs';
+import { mediaVoor, platformVoor } from './vergaderingen.mjs';
 import { downloadAudio, gooiAudioWeg, audioDuur, knipAudio } from './ophalen.mjs';
 import { delen, splits, plaatsNamen } from './namen.mjs';
 import { vindNummers, nummerlijst, contextVenster, namenInBuurt, controleerDuiding } from './telefoon.mjs';
@@ -231,8 +231,13 @@ export class Verwerking {
   // volgende, in de volgorde van de bronnen en het nieuwste eerst. Afleveringen
   // die al klaar waren en alleen nog een samenvatting missen (een overgenomen
   // archief, of een samenvatting die mislukte), komen als laatste.
-  static fase(r) {
-    return r.zonder_transcript || r.sprekers_gevraagd ? 0 : r.zonder_entiteiten ? 1 : 2;
+  static fase(r, namen = true) {
+    return r.zonder_transcript || r.sprekers_gevraagd ? 0 : namen && r.zonder_entiteiten ? 1 : 2;
+  }
+
+  // Namen zoeken met het taalmodel van de worker (Instellingen › Audio en video).
+  namenZoeken() {
+    return Boolean(this.opslag.instellingen.audio?.namenZoeken);
   }
 
   static lopend(r) {
@@ -242,7 +247,9 @@ export class Verwerking {
   kandidaten(nu = Date.now() / 1000) {
     const volgorde = new Map(this.bronVolgorde().map((b, i) => [b.id, i]));
     const samenvatten = samenvattingAanbieder(this.opslag).klaar;
-    const { fase, lopend } = Verwerking;
+    const namen = this.namenZoeken();
+    const fase = (r) => Verwerking.fase(r, namen);
+    const { lopend } = Verwerking;
     const rijen = this.adb.wachtrij(nu).filter((r) => volgorde.has(r.bron) && ['wacht', 'getranscribeerd', 'klaar'].includes(r.status)
       // Een samenvatting alleen als er een taalmodel is; staat hij nog op
       // "getranscribeerd" (herstart, of het taalmodel ging uit), dan rondt de stap hem af.
@@ -331,6 +338,7 @@ export class Verwerking {
             if (m.titel) velden.titel = m.titel;
             if (m.auteur) velden.auteur = m.auteur;
             if (m.duur) velden.duur = m.duur;
+            if (m.platform) velden.platform = m.platform;
             if (m.gepubliceerd && /^\d{8}$/.test(m.gepubliceerd) && !af.gepubliceerd) {
               Object.assign(velden, { gepubliceerdTekst: m.gepubliceerd, gepubliceerdOp: Date.UTC(+m.gepubliceerd.slice(0, 4), +m.gepubliceerd.slice(4, 6) - 1, +m.gepubliceerd.slice(6, 8)) / 1000 });
             }
@@ -368,12 +376,22 @@ export class Verwerking {
         await gooiAudioWeg(this.map, pad);
         werk({ audioPad: null });
       }
-      werk({ status: 'getranscribeerd', stap: 'Transcript klaar · namen volgen', fout: null });
+      werk({ status: 'getranscribeerd', stap: this.namenZoeken() ? 'Transcript klaar · namen volgen' : 'Transcript klaar · samenvatting volgt', fout: null });
       this.bijBeschikbaar?.(this.adb.aflevering(af.id));
       return;
     }
 
-    if (af.entiteiten) {
+    // Agenda en sprekers van het vergaderplatform, voor een opname die al
+    // binnen was voordat de Regiochecker die ophaalde.
+    if (af.vorm === 'vergadering' && !af.platform) {
+      const platform = await platformVoor(af);
+      if (platform) {
+        werk({ platform });
+        af.platform = platform;
+      }
+    }
+
+    if (af.entiteiten || !this.namenZoeken()) {
       await this.samenvat(af, w, werk);
       return;
     }

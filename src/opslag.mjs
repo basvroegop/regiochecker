@@ -49,7 +49,10 @@ export const STANDAARD_INSTELLINGEN = {
   // viaTailnet aan staat. Het token mag ook in WORKER_TOKEN, het adres in WORKER_URL.
   // bewaarAudio: 'vergaderingen' (om terug te luisteren), 'alles' of 'niets';
   // bewaarDagen: daarna gaat ook bewaarde audio weg (het transcript blijft).
-  audio: { workerUrl: '', workerToken: '', viaTailnet: true, bewaarAudio: 'vergaderingen', bewaarDagen: 180 },
+  // namenZoeken: personen, plaatsen en organisaties laten zoeken door het
+  // taalmodel van de worker. Standaard uit: het kost veel GPU-tijd, en namen van
+  // sprekers komen uit de gegevens van het vergaderplatform.
+  audio: { workerUrl: '', workerToken: '', viaTailnet: true, bewaarAudio: 'vergaderingen', bewaarDagen: 180, namenZoeken: false },
 };
 
 const BESTANDEN = {

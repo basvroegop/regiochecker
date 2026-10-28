@@ -123,6 +123,7 @@ test('iBabs met babscast, Notubiz onder notubiz.nl, en een gemeentepagina die na
           UniqueId: v.event, Title: `${v.title} - Begroting`, ClientName: 'Gemeente', IsPrivate: false, EventStatus: v.status,
           ActualStart: new Date(v.start).toISOString(), ActualEnd: new Date(v.start.getTime() + 5400_000).toISOString(),
           EventMetadata: { PlayListUrl: `https://vod.babscast.com/hls/${v.event}/video.mp4/master.m3u8`, Auth: 'Bearer geheim' },
+          TimelineEvents: [{ EventType: 'Topic', TextRepresentation: '1 Opening', StartOffset: '00:00:12.5000000', EndOffset: '00:01:00.0000000' }, { EventType: 'Thumbnail', StartOffset: '00:00:04' }],
         };
       }
     }
@@ -167,7 +168,11 @@ test('iBabs met babscast, Notubiz onder notubiz.nl, en een gemeentepagina die na
     await assert.rejects(mediaVoor({ ...bezigAf, gepubliceerd: new Date(nu - 20 * dag).toISOString() }), (f) => !f.later);
 
     const m = await mediaVoor(c.items[0]);
-    assert.deepEqual(m, { adres: `https://vod.babscast.com/hls/${uuid(101)}/video.mp4/master.m3u8`, velden: { titel: 'Raadsvergadering - Begroting', duur: 5400 }, stream: true });
+    assert.deepEqual(m, {
+      adres: `https://vod.babscast.com/hls/${uuid(101)}/video.mp4/master.m3u8`,
+      velden: { titel: 'Raadsvergadering - Begroting', duur: 5400, platform: { agenda: [{ titel: '1 Opening', start: 12.5, eind: 60 }], sprekers: [] } },
+      stream: true,
+    });
     assert.ok(!JSON.stringify(m).includes('geheim'), 'het spelertoken blijft buiten de Regiochecker');
   } finally {
     net.herstel();
@@ -262,7 +267,7 @@ test('verwerking: van podcastfeed tot transcript, namen, stemmen en telefoonnumm
 
     // Zonder worker: niets te doen.
     assert.equal(await verwerking.verwerkEen(), false);
-    opslag.instellingen.audio = { ...opslag.instellingen.audio, workerUrl: worker.url, workerToken: TOKEN, viaTailnet: false };
+    opslag.instellingen.audio = { ...opslag.instellingen.audio, workerUrl: worker.url, workerToken: TOKEN, viaTailnet: false, namenZoeken: true };
 
     // De eerste keer: de twee nieuwste in de wachtrij, de rest telt als gezien.
     assert.deepEqual(await verwerking.synchroniseer(bron), { ok: true, nieuw: 2, aantal: 5 });
@@ -336,7 +341,7 @@ test('verwerking: van podcastfeed tot transcript, namen, stemmen en telefoonnumm
     r = await roep(ctx, sanne, 'GET', '/api/feed?groep=audio');
     assert.deepEqual(r.data.items.map((i) => i.titel), ['Aflevering 5: Drachten en de N31', 'Aflevering 4: Drachten en de N31']);
     r = await roep(ctx, sanne, 'GET', `/api/stuk?id=a%3A${nieuwste.id}`);
-    assert.deepEqual(r.data.sprekers.map((s) => [s.label, s.heeftNaam, s.suggestie?.naam ?? null]), [['Voorzitter Bos', true, null], ['Anke Postma', true, null], ['Spreker 1', false, null], ['Spreker 2', false, 'wethouder Kramer']]);
+    assert.deepEqual(r.data.sprekers.map((s) => [s.label, s.heeftNaam, s.suggestie?.naam ?? null]), [['Voorzitter Bos', true, null], ['Anke Postma', true, null], ['Spreker 1', false, null], ['Spreker 2', false, null]], 'geen voorstellen uit namen van het taalmodel');
     assert.deepEqual(r.data.namen.map((n) => n.naam), ['Drachten', 'programmabegroting 2027', 'wethouder Kramer']);
     assert.deepEqual(r.data.nummers.map((n) => [n.weergave, n.start]), [['06 1234 5678', 15]]);
     assert.match(r.data.speler, /\/audio\/5\.wav$/, 'podcast: afspelen bij de bron (de eigen kopie is weg)');
@@ -385,6 +390,46 @@ test('verwerking: van podcastfeed tot transcript, namen, stemmen en telefoonnumm
     worker.server.close();
     feed.server.close();
   }
+});
+
+test('vergaderplatform: agenda met tijden, en wie had de microfoon', async () => {
+  const { webcastPlatform, notubizAgenda } = await import('../src/audio/vergaderingen.mjs');
+  const { platformSpreker, sprekersVan } = await import('../src/feed.mjs');
+  const { agendaTekst } = await import('../src/vergadering.mjs');
+  const t = (s) => `/Date(${1792431023000 + s * 1000})/`;
+  const cwc = webcastPlatform({
+    actualStart: t(0),
+    topics: [{ title: '12 Advies recreatiepark Elsweg', events: [{ start: t(728), end: t(4393) }] }, { title: '1 Opening', events: [{ start: t(11), end: t(64) }] }, { title: 'Zonder tijd', events: [] }],
+    speakers: [
+      { name: { first: 'Marcel ', last: 'Bos ' }, role: null, events: [{ start: t(2700), end: t(3027) }, { start: t(3100), end: t(3110) }] },
+      { name: { first: 'Anne', last: 'Schelhaas' }, events: [{ start: t(3501), end: t(3560) }] },
+      { name: { first: 'Stil', last: 'Lid' }, events: [] },
+    ],
+  });
+  assert.deepEqual(cwc.agenda, [{ titel: '1 Opening', start: 11, eind: 64 }, { titel: '12 Advies recreatiepark Elsweg', start: 728, eind: 4393 }], 'op volgorde, vanaf het begin van de opname');
+  assert.deepEqual(cwc.sprekers.map((s) => [s.naam, s.momenten]), [['Marcel Bos', [[2700, 3027], [3100, 3110]]], ['Anne Schelhaas', [[3501, 3560]]]]);
+
+  assert.deepEqual(notubizAgenda({ agenda_items: [
+    { type_data: { title_prefix: '1', attributes: [{ id: 1, value: 'Opening' }] }, start_offset: '614', end_offset: '1034' },
+    { type_data: { heading: true, title_prefix: 'A', attributes: [{ id: 1, value: 'Bespreekstukken' }] }, start_offset: null, agenda_items: [
+      { type_data: { title_prefix: '4', attributes: [{ id: 1, value: 'Kapitaalgoederen' }] }, start_offset: '1101', end_offset: '2059' },
+    ] },
+  ] }), [{ titel: '1 Opening', start: 614, eind: 1034 }, { titel: '4 Kapitaalgoederen', start: 1101, eind: 2059 }], 'ook punten onder een kopje');
+
+  // Een stem die grotendeels samenvalt met Marcel Bos; een stem die maar half samenvalt niet.
+  assert.deepEqual(platformSpreker([[2701, 3020], [3101, 3109]], cwc.sprekers), { naam: 'Marcel Bos', rol: null, deel: 100 });
+  assert.equal(platformSpreker([[3501, 3530], [5000, 5100]], cwc.sprekers), null, 'minder dan 60% van de spreektijd');
+  assert.equal(platformSpreker([[3501, 3510]], cwc.sprekers), null, 'minder dan 20 seconden');
+
+  const a = {
+    titel: 'Raadsvergadering', platform: cwc,
+    segmenten: [{ start: 2701, end: 3020, text: 'Voorzitter, dank u wel.', speaker: 'Spreker 1019', speaker_id: 'p1' }, { start: 3502, end: 3558, text: 'Wij steunen het voorstel.', speaker: 'Anne Schelhaas', speaker_id: 'p2' }],
+  };
+  const sp = sprekersVan(a);
+  assert.deepEqual(sp[0].suggestie, { naam: 'Marcel Bos', bron: 'platform', deel: 100 });
+  assert.equal(sp[1].suggestie, undefined, 'een stem met een naam krijgt geen voorstel');
+  assert.match(agendaTekst(a), /Agenda \(met de tijd waarop het punt begint\):\n- \[0:11\] 1 Opening\n- \[12:08\] 12 Advies recreatiepark Elsweg/);
+  assert.equal(agendaTekst({}), '');
 });
 
 test('lange opnames in delen naar de worker, met tussenstand', metAlles, async () => {
@@ -437,10 +482,13 @@ test('lange opnames in delen naar de worker, met tussenstand', metAlles, async (
     assert.deepEqual(a.segmenten.map((s) => [s.speaker, s.start]), [['Voorzitter Bos', 2], ['Anke Postma', 15], ['Spreker 1', 39], ['Spreker 2', 45], ['Spreker 3', 46]]);
     assert.ok(a.duur > 1.5 && a.duur < 2.5, 'de lengte van de hele opname');
 
-    // Eerst deze aflevering afmaken (namen), dan de volgende.
+    // Eerst deze aflevering afmaken, dan de volgende. Namen zoeken staat
+    // standaard uit: geen verzoek om namen naar de worker.
     assert.equal(await verwerking.verwerkEen(), true);
     assert.equal(adb.aflevering(a.id).status, 'klaar');
     assert.equal(uploads(), 2);
+    assert.ok(!worker.staat.verzoeken.includes('POST /v1/entities'));
+    assert.equal(adb.aflevering(a.id).entiteiten, null);
 
     // Na een storing: verder bij het deel dat nog ontbreekt.
     const tweede = adb.lijst({ bron: 'p' }).find((x) => x.titel === 'Aflevering 2');
@@ -485,6 +533,7 @@ test('AI-samenvatting: de hele opname in hooguit 100 woorden, als laatste stap',
   try {
     const { opslag, adb, fdb, verwerking } = await opzet();
     opslag.instellingen.audio = { ...opslag.instellingen.audio, workerUrl: worker.url, workerToken: TOKEN, viaTailnet: false };
+    opslag.instellingen.audio.namenZoeken = true;
     opslag.instellingen.samenvattingVia = 'ollama';
     opslag.instellingen.ollama = { url: `http://127.0.0.1:${ollama.address().port}`, model: 'qwen3:14b', maxContext: 4096 };
     const bron = { id: 'raad', naam: 'Smallingerland · Raad', soort: 'raadsvergadering', bereik: 'regio', regio: 'smallingerland', type: 'audio', url: 'https://smallingerland.raadsinformatie.nl/', audio: { kind: 'notubiz', prioriteit: 0 } };

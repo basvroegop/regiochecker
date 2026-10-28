@@ -677,6 +677,8 @@ export async function toonInstellingen(hoofd) {
             ${[['vergaderingen', 'Alleen raadsvergaderingen'], ['alles', 'Alles'], ['niets', 'Niets (alleen het transcript)']].map(([w, t]) => `<option value="${w}" ${i.audio.bewaarAudio === w ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
           <label class="veld"><span>Hoe lang (dagen)</span><input class="invoer smal" type="number" name="bewaarDagen" min="1" max="3650" value="${esc(i.audio.bewaarDagen)}"></label></div>
           <p class="uitleg-klein">Een uur audio is zo'n 29 MB. YouTube speelt altijd af bij YouTube zelf; een podcast bij de bron.</p>
+          <label class="vinkregel"><input type="checkbox" name="namenZoeken" ${i.audio.namenZoeken ? 'checked' : ''}><span class="vakje"></span>Namen zoeken met AI (personen, plaatsen, organisaties)</label>
+          <p class="uitleg-klein">Kost bij een lange vergadering een kwartier GPU-tijd op de worker. Namen van sprekers komen uit de gegevens van het vergaderplatform, ook als dit uit staat.</p>
           <div class="knoppenrij"><button class="knop inkt klein">Bewaren</button><button type="button" class="knop klein" id="worker-test">Verbinding testen</button>${i.audio.heeftToken && !i.audio.tokenUitOmgeving ? '<button type="button" class="knop zacht klein" id="wis-token">Token wissen</button>' : ''}<span class="statusregel" id="worker-status"></span></div>
         </form>`)}
     </div></div>`;
@@ -708,7 +710,7 @@ export async function toonInstellingen(hoofd) {
       if (f.ollamaUrl) w.ollama = { url: f.ollamaUrl.value, model: f.ollamaModel.value, maxContext: Number(f.maxContext.value) };
       bewaar(knop, w);
     }
-    if (f.id === 'form-audio') bewaar(knop, { audio: { workerUrl: f.workerUrl.value, workerToken: f.workerToken.value || undefined, viaTailnet: f.viaTailnet.checked, bewaarAudio: f.bewaarAudio.value, bewaarDagen: Number(f.bewaarDagen.value) } });
+    if (f.id === 'form-audio') bewaar(knop, { audio: { workerUrl: f.workerUrl.value, workerToken: f.workerToken.value || undefined, viaTailnet: f.viaTailnet.checked, bewaarAudio: f.bewaarAudio.value, bewaarDagen: Number(f.bewaarDagen.value), namenZoeken: f.namenZoeken.checked } });
   }, { signal: stop.signal });
 
   hoofd.addEventListener('click', async (e) => {

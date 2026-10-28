@@ -461,33 +461,47 @@ function kamerDetail(k, gebruiker, id) {
   };
 }
 
+// Wie is deze stem volgens het vergaderplatform? Company Webcast noteert per
+// spreker wanneer de microfoon aan stond. Een stem hoort bij de persoon met wie
+// de beurten het meest samenvallen, als dat het grootste deel van de
+// spreektijd van die stem is (60%) en minstens 20 seconden.
+export function platformSpreker(beurten, sprekers) {
+  const totaal = beurten.reduce((n, [a, b]) => n + Math.max(0, b - a), 0);
+  if (!totaal || !sprekers?.length) return null;
+  let beste = null;
+  for (const p of sprekers) {
+    let samen = 0;
+    for (const [a, b] of beurten) for (const [c, d] of p.momenten) samen += Math.max(0, Math.min(b, d) - Math.max(a, c));
+    if (!beste || samen > beste.samen) beste = { p, samen };
+  }
+  if (!beste || beste.samen < 20 || beste.samen / totaal < 0.6) return null;
+  return { naam: beste.p.naam, rol: beste.p.rol, deel: Math.round((beste.samen / totaal) * 100) };
+}
+
 // Sprekers in een transcript: per stem het aantal beurten, de eerste beurt en,
-// als er nog geen naam is, een suggestie uit de personen die vlak daarvoor
-// genoemd worden ("het woord is aan wethouder Kramer").
+// als er nog geen naam is, een voorstel van het vergaderplatform (wie had de
+// microfoon). Alleen dat: namen die het taalmodel vlak voor een beurt vond,
+// klopten te vaak niet (oktober 2026).
 export function sprekersVan(a) {
   const sprekers = new Map();
   a.segmenten.forEach((s, i) => {
     if (!s.speaker && !s.speaker_id) return;
     const sleutel = s.speaker_id || s.speaker;
-    const sp = sprekers.get(sleutel) || { id: s.speaker_id || null, label: s.speaker || 'Spreker', beurten: 0, eerste: i, duur: 0, langste: null };
+    const sp = sprekers.get(sleutel) || { id: s.speaker_id || null, label: s.speaker || 'Spreker', beurten: 0, eerste: i, duur: 0, langste: null, tijden: [] };
     sp.beurten++;
+    sp.tijden.push([Number(s.start) || 0, Number(s.end) || 0]);
     const lengte = (Number(s.end) || 0) - (Number(s.start) || 0);
     sp.duur += Math.max(0, lengte);
     if (!sp.langste || lengte > sp.langste.lengte) sp.langste = { start: s.start, lengte };
     sprekers.set(sleutel, sp);
   });
-  const personen = (a.entiteiten || []).filter((e) => e.type === 'person');
   for (const sp of sprekers.values()) {
     // "Spreker 3", "SPEAKER_02" en dergelijke zijn geen namen.
     sp.heeftNaam = !/^(spreker|speaker)[\s_]*\d+$/i.test(sp.label);
+    const platform = sp.id ? platformSpreker(sp.tijden, a.platform?.sprekers) : null;
+    delete sp.tijden;
     if (sp.heeftNaam) continue;
-    for (const p of personen) {
-      const vlakVoor = (p.occurrences || []).find((o) => typeof o.segment === 'number' && o.segment < sp.eerste && o.segment >= sp.eerste - 2);
-      if (vlakVoor) {
-        sp.suggestie = { naam: p.name, tijd: vlakVoor.start ?? a.segmenten[vlakVoor.segment]?.start ?? 0 };
-        break;
-      }
-    }
+    if (platform) sp.suggestie = { naam: platform.naam, bron: 'platform', deel: platform.deel };
   }
   return [...sprekers.values()].sort((x, y) => x.eerste - y.eerste);
 }
@@ -560,6 +574,9 @@ function audioDetail(k, gebruiker, id) {
     ].filter(Boolean),
     segmenten: a.segmenten.map((s) => ({ start: s.start, eind: s.end, tekst: s.text, spreker: s.speaker || null, sprekerId: s.speaker_id || null })),
     sprekers: sprekersVan(a),
+    // De agenda van het vergaderplatform, met de tijd waarop elk punt begint.
+    agenda: a.platform?.agenda || [],
+    namenUit: !a.entiteiten && !k.opslag.instellingen.audio?.namenZoeken,
     stemmenHerkend: a.segmenten.some((s) => s.speaker_id),
     namen: namenVan(a),
     nummers: nummersVan(k, a),

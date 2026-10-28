@@ -420,6 +420,12 @@ function beurten(d) {
   return uit;
 }
 
+// Een voorstel voor de naam van een stem, van het vergaderplatform (wie had de microfoon).
+function voorstelHtml(sp) {
+  const s = sp.suggestie;
+  return `<span class="suggestie">Volgens het vergaderplatform is dit ${esc(aanhalen(s.naam))} (${s.deel}% van de spreektijd).</span><button class="overnemen" data-profiel="${esc(sp.id)}" data-naam="${esc(s.naam)}">Overnemen</button>`;
+}
+
 function sprekerHtml(d, b, eerste) {
   if (!b.sleutel) return '<div class="spreker"></div>';
   const sp = sprekerInfo(d).get(b.sleutel) || { label: b.spreker, heeftNaam: Boolean(b.spreker) };
@@ -427,9 +433,7 @@ function sprekerHtml(d, b, eerste) {
   let html = `<div class="spreker"><span class="spreker-label">${esc(sp.label || 'Onbekende spreker')}</span>`;
   if (sp.id) {
     html += `<div class="spreker-invoer"><button class="fragmentknop" data-fragment="${esc(sp.id)}" title="Fragment van deze spreker beluisteren">${icoon('play', 12)}</button><input class="naamveld" data-profiel="${esc(sp.id)}" placeholder="Naam invullen" aria-label="Naam van ${esc(sp.label)}"></div>`;
-    if (eerste && sp.suggestie) {
-      html += `<span class="suggestie">Is dit ${esc(aanhalen(sp.suggestie.naam))}? Die naam valt op ${tijdcode(sp.suggestie.tijd)}.</span><button class="overnemen" data-profiel="${esc(sp.id)}" data-naam="${esc(sp.suggestie.naam)}">Overnemen</button>`;
-    }
+    if (eerste && sp.suggestie) html += voorstelHtml(sp);
   }
   return `${html}</div>`;
 }
@@ -442,10 +446,16 @@ function transcriptHtml(d) {
   const termen = uniek((d.treffers || []).map((t) => t.term));
   const zoek = audioTab.zoek.trim();
   const gezien = new Set();
+  // Agendapunten als tussenkopjes, op de plek waar ze beginnen (niet bij zoeken).
+  const agenda = zoek ? [] : [...(d.agenda || [])];
   let html = '';
   for (const [n, b] of lijst.entries()) {
     const eerste = b.sleutel && !gezien.has(b.sleutel);
     if (b.sleutel) gezien.add(b.sleutel);
+    while (agenda.length && agenda[0].start <= b.start + 1) {
+      const p = agenda.shift();
+      html += `<div class="agendakop">${tijdLink(d, p.start, tijdcode(p.start), 'beurt-tijd')}<span>${esc(p.titel)}</span></div>`;
+    }
     if (zoek && !zonderAccenten(b.tekst).includes(zonderAccenten(zoek))) continue;
     html += `<div class="beurt" data-beurt="${n}" data-start="${b.start}">
       ${tijdLink(d, b.start, tijdcode(b.start), 'beurt-tijd')}
@@ -466,11 +476,15 @@ function sprekersHtml(d) {
   }
   const rijen = (d.sprekers || []).map((sp) => `<div class="beurt">
       <div class="spreker">${sp.heeftNaam ? `<span class="spreker-naam">${esc(sp.label)}</span>` : `<span class="spreker-label">${esc(sp.label)}</span>`}
-        ${!sp.heeftNaam && sp.suggestie ? `<span class="suggestie">Is dit ${esc(aanhalen(sp.suggestie.naam))}? Die naam valt op ${tijdcode(sp.suggestie.tijd)}.</span><button class="overnemen" data-profiel="${esc(sp.id)}" data-naam="${esc(sp.suggestie.naam)}">Overnemen</button>` : ''}</div>
+        ${!sp.heeftNaam && sp.suggestie ? voorstelHtml(sp) : ''}</div>
       <span class="zacht klein">${sp.beurten} ${sp.beurten === 1 ? 'beurt' : 'beurten'}</span>
       <div class="spreker-invoer">${sp.id ? `<button class="fragmentknop" data-fragment="${esc(sp.id)}" title="Fragment beluisteren">${icoon('play', 12)}</button><input class="naamveld" data-profiel="${esc(sp.id)}" placeholder="${sp.heeftNaam ? 'Naam wijzigen' : 'Naam invullen'}" value="">` : ''}</div>
     </div>`).join('');
-  return `<div class="transcript sprekerlijst">${rijen || '<p class="leeg">Geen sprekers gevonden.</p>'}
+  const platform = (d.sprekers || []).filter((sp) => sp.id && !sp.heeftNaam && sp.suggestie?.bron === 'platform');
+  const alle = platform.length > 1
+    ? `<div class="knoppenrij" style="padding:12px 0"><button class="knop" data-actie="alle-namen" title="Geldt voor deze stemmen in alle opnames, ook in Plaud">Alle ${platform.length} namen van het vergaderplatform overnemen</button></div>`
+    : '';
+  return `<div class="transcript sprekerlijst">${alle}${rijen || '<p class="leeg">Geen sprekers gevonden.</p>'}
     <span class="transcript-voet">Een naam die je invult, geldt voor deze stem in alle vergaderingen en is zichtbaar voor de hele redactie.</span></div>`;
 }
 
@@ -480,6 +494,7 @@ function namenHtml(d) {
   const namen = d.namen || [];
   const nummers = d.nummers || [];
   if (!namen.length && !nummers.length) {
+    if (d.namenUit) return '<p class="leeg">Namen zoeken met AI staat uit (Beheer › Instellingen › Audio en video). Zoek in het transcript, of kijk bij Sprekers.</p>';
     return `<p class="leeg">${['getranscribeerd', 'analyseren'].includes(d.verwerking?.status) ? 'De namen worden nog gezocht.' : 'Geen namen gevonden.'}</p>`;
   }
   const groepen = Object.entries(NAAMSOORTEN).map(([soort, titel]) => [titel, namen.filter((n) => n.soort === soort)]).filter(([, lijst]) => lijst.length);
@@ -490,9 +505,20 @@ function namenHtml(d) {
   </div>`;
 }
 
+// De agenda van het vergaderplatform; een tijd springt naar dat punt.
+function agendaHtml(d) {
+  if (!d.agenda?.length) return '<p class="leeg">Het vergaderplatform geeft bij deze vergadering geen agenda met tijden mee. Zoek in het transcript op een agendapunt, of open de vergadering bij de bron.</p>';
+  return `<div class="transcript agendalijst">${d.agenda.map((p) => `<div class="beurt agendapunt">
+      ${tijdLink(d, p.start, tijdcode(p.start), 'beurt-tijd')}
+      <span class="agenda-titel">${esc(p.titel)}</span>
+      <span class="zacht klein">${p.eind > p.start ? duurTekst(p.eind - p.start) : ''}</span>
+    </div>`).join('')}
+    <span class="transcript-voet">Agenda en tijden van het vergaderplatform.</span></div>`;
+}
+
 function tabInhoud(d) {
   if (audioTab.tab === 'sprekers') return sprekersHtml(d);
-  if (audioTab.tab === 'agenda') return '<p class="leeg">De agenda van deze vergadering komt (nog) niet mee van het vergaderplatform. Zoek in het transcript op een agendapunt, of open de vergadering bij de bron.</p>';
+  if (audioTab.tab === 'agenda') return agendaHtml(d);
   if (audioTab.tab === 'namen') return namenHtml(d);
   if (audioTab.tab === 'notitie') return notitieHtml(d);
   return transcriptHtml(d);
@@ -700,7 +726,7 @@ async function speelFragment(knop) {
   try { await fragmentSpeler.play(); } catch { /* onerror vangt het */ }
 }
 
-async function noemSpreker(profiel, naam) {
+async function noemSpreker(profiel, naam, { stil = false } = {}) {
   const schoon = naam.trim();
   if (!schoon) return;
   try {
@@ -710,10 +736,23 @@ async function noemSpreker(profiel, naam) {
     for (const sp of d.sprekers) if (sp.id === profiel) Object.assign(sp, { label: r.naam, heeftNaam: true, suggestie: null });
     if (staat.speler) staat.speler.namen = beurten(d).map((b) => sprekerInfo(d).get(b.sleutel)?.label || b.spreker || '');
     tekenTab();
-    toast(`${aanhalen(r.naam)} geldt nu voor deze stem, in alle vergaderingen.`);
+    if (!stil) toast(`${aanhalen(r.naam)} geldt nu voor deze stem, in alle vergaderingen.`);
+    return true;
   } catch (fout) {
     toast(fout.message, 'fout');
+    return false;
   }
+}
+
+// Alle voorstellen van het vergaderplatform in één keer.
+async function alleNamen(knop) {
+  const d = staat.detail;
+  const lijst = (d.sprekers || []).filter((sp) => sp.id && !sp.heeftNaam && sp.suggestie?.bron === 'platform');
+  await bezig(knop, async () => {
+    let n = 0;
+    for (const sp of lijst) if (await noemSpreker(sp.id, sp.suggestie.naam, { stil: true })) n++;
+    toast(`${n} ${n === 1 ? 'naam' : 'namen'} overgenomen; die gelden voor deze stemmen in alle vergaderingen.`);
+  }, 'Overnemen…');
 }
 
 // ---------- paneel tekenen en koppelen ----------
@@ -783,6 +822,8 @@ function koppelPaneel(paneel) {
       staat.volledig = !staat.volledig;
       $('#feed').classList.toggle('volledig', staat.volledig);
       tekenActies();
+    } else if (knop.dataset.actie === 'alle-namen') {
+      await alleNamen(knop);
     } else if (knop.dataset.actie === 'stemmen') {
       await bezig(knop, async () => {
         await vraag('POST', `/api/audio/afleveringen/${encodeURIComponent(d.episode)}/sprekers`);

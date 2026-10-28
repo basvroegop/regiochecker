@@ -136,7 +136,7 @@ async function toonStemmen(inhoud) {
       <div class="tabelkop stemrij"><span>Stem</span><span>Te horen</span><span>Naam</span></div>
       ${d.stemmen.length ? d.stemmen.map((s) => `<div class="tabelrij stemrij">
         <span class="naamcel"><strong>${esc(s.naam || s.weergave)}</strong>
-          <small>${s.eerste ? `Eerst in <a href="${stukLink(s.eerste.aflevering, s.eerste.start)}">${esc(s.eerste.titel)}</a>` : ''}${s.voorstel && !s.naam ? ` · voorstel: ${esc(s.voorstel)}` : ''}</small>
+          <small>${s.eerste ? `Eerst in <a href="${stukLink(s.eerste.aflevering, s.eerste.start)}">${esc(s.eerste.titel)}</a>` : ''}</small>
           ${s.namen.length ? `<span class="chips">${s.namen.map((n) => `<span title="${n.aantal}× genoemd tijdens deze stem">${esc(n.naam)}</span>`).join('')}</span>` : ''}</span>
         <span class="klein">${s.beurten} beurten<br><span class="zacht">${Math.round(s.seconden / 60)} min · ${s.afleveringen} ${s.afleveringen === 1 ? 'aflevering' : 'afleveringen'}</span></span>
         <span class="spreker-invoer"><button class="fragmentknop" data-fragment="${esc(s.profiel)}" title="Fragment beluisteren">${icoon('play', 12)}</button><input class="naamveld" data-profiel="${esc(s.profiel)}" placeholder="${s.naam ? 'Naam wijzigen' : 'Naam invullen'}" value=""></span>

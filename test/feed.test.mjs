@@ -141,8 +141,7 @@ test('leespaneel: waarom staat het erin, sprekers, speler; gelezen, bewaard en n
   assert.equal(r.speler, `/api/audio/afleveringen/${E1}/audio`);
   assert.equal(r.openenBij, 'Notubiz');
   assert.deepEqual(r.treffers.map((t) => [t.term, t.aantal, t.tijd]), [['Drachten', 1, 10], ['huisartsenpost', 1, 10]], 'ook sleutelwoorden van de eigen regio');
-  assert.deepEqual(r.sprekers.map((s) => [s.label, s.heeftNaam, s.suggestie?.naam]), [['Spreker 1', false, undefined], ['Spreker 2', false, 'wethouder Kramer'], ['Anke Postma', true, undefined]]);
-  assert.equal(r.sprekers[1].suggestie.tijd, 4);
+  assert.deepEqual(r.sprekers.map((s) => [s.label, s.heeftNaam, s.suggestie?.naam]), [['Spreker 1', false, undefined], ['Spreker 2', false, undefined], ['Anke Postma', true, undefined]], 'geen voorstellen uit namen van het taalmodel');
   const p = detail(ctx, sanne, `a:${E2}`);
   assert.equal(p.speler, 'https://x/212.mp3', 'podcast: het oorspronkelijke bestand');
   assert.equal(p.treffers[0].tijd, 20);

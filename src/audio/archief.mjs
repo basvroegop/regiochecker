@@ -109,7 +109,6 @@ export function stemmen(adb, profielen = [], { bron = '' } = {}) {
       profiel: st.profiel,
       naam: p.name || '',
       weergave: p.display_name || st.opgeslagenNaam,
-      voorstel: p.suggested_name || '',
       fragment: p.sample_available !== false,
       beurten: st.beurten,
       seconden: Math.round(st.seconden),
