@@ -34,10 +34,15 @@ aantallen, plus **Alleen ongelezen**. Een stuk openen markeert het als gelezen;
   is), de treffers als streepjes op de tijdbalk, en het transcript per beurt. De
   beurt die nu speelt licht op; een tijd aanklikken springt erheen. Een spreker
   zonder naam heeft een ▶ (kort fragment van die stem) en een veld **Naam
-  invullen**; zo'n naam geldt voor die stem in alle opnames, ook in Plaud. Valt
-  vlak voor de eerste beurt een naam ("het woord is aan wethouder Kramer"), dan
-  staat die erbij als suggestie. Tabblad **Namen** toont de genoemde personen,
-  organisaties en plaatsen en de telefoonnummers.
+  invullen**; zo'n naam geldt voor die stem in alle opnames, ook in Plaud.
+  Weet het vergaderplatform wie wanneer de microfoon had (Company Webcast), dan
+  staat bij een stem die daar grotendeels mee samenvalt de naam als voorstel, met
+  bij Sprekers een knop om alle voorstellen in één keer over te nemen. Andere
+  naamvoorstellen zijn er niet meer: namen die het taalmodel vlak voor een beurt
+  vond, klopten te vaak niet. Onder de speler staat de **AI-samenvatting**.
+  Tabblad **Agenda** toont de agendapunten van het platform met hun tijd (ook als
+  tussenkopjes in het transcript); tabblad **Namen** de telefoonnummers, en de
+  genoemde personen, organisaties en plaatsen als namen zoeken aanstaat.
 - **Bewaren** (ster) zet het stuk onder Bewaard; een **notitie** bij een stuk is
   alleen voor jou zichtbaar.
 
@@ -221,7 +226,8 @@ De eerste keer gaan alleen de nieuwste paar afleveringen in de wachtrij (bij het
 toevoegen te kiezen, of "alle beschikbare"); de rest van de catalogus telt als
 gezien. Daarna, één aflevering tegelijk (één gedeelde GPU): downloaden en omzetten
 naar een mono-mp3 (64 kbit/s, zo'n 29 MB per uur), transcriberen met
-stemherkenning, namen zoeken in delen van het transcript, en de AI-samenvatting.
+stemherkenning, namen zoeken in delen van het transcript (alleen als dat aanstaat,
+zie hieronder), en de AI-samenvatting.
 Die drie gebeuren per aflevering direct na elkaar: een begonnen aflevering wordt
 eerst helemaal afgemaakt, daarna komt de volgende, in de volgorde van de bronnen
 (in te stellen bij Beheer › Audio) en het nieuwste eerst. Namen zoeken en
@@ -243,6 +249,19 @@ vrij is, en het model gaat daarna meteen uit het geheugen (`keep_alive: 0`). Een
 transcript dat niet in het contextvenster past, wordt eerst per deel tot
 aantekeningen teruggebracht. Lukt een samenvatting drie keer niet, dan blijft de
 aflevering zonder; de aflevering zelf mislukt daar nooit door.
+
+**Agenda en sprekers van het vergaderplatform** (`platform` bij de aflevering):
+Company Webcast geeft de agendapunten (topics) en per spreker de spreekmomenten,
+in kloktijd vanaf `actualStart`; Notubiz de agendapunten met `start_offset` in
+seconden (via `api.notubiz.nl/events/meetings/<id>`); babscast de tijdlijn
+(`TimelineEvents` van het soort Topic). GemeenteOplossingen geeft via de open API
+geen agenda met tijden. Ze worden opgehaald bij het downloaden; voor een opname
+die al binnen was, in de stap na het transcript.
+
+**Namen zoeken met AI** (personen, plaatsen, organisaties via `/v1/entities` van
+de worker) staat standaard uit, bij Instellingen › Audio en video aan te zetten.
+Het kost bij een lange vergadering een kwartier GPU-tijd, en de namen van
+sprekers komen uit de gegevens van het vergaderplatform.
 
 **Nieuw na de eerste import** is alleen wat niet ouder is dan de oudste
 aflevering uit die eerste catalogus (`audio.ondergrens` bij de bron). Een

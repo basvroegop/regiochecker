@@ -43,7 +43,10 @@ export const STANDAARD_INSTELLINGEN = {
   claude: { apiKey: '', model: 'claude-opus-5-5' },
   // Eigen Ollama-installatie, bereikbaar via Tailscale (zie src/ollama.mjs).
   // maxContext: grootste contextvenster (tokens) dat we het model laten openen.
-  ollama: { url: '', model: '', maxContext: 32768 },
+  // modelOpnames: voor de samenvattingen van opnames (lange transcripten). Een
+  // klein model dat helemaal op de GPU past, is daar tientallen keren sneller
+  // dan een groot dat deels op de processor draait. Leeg: hetzelfde als `model`.
+  ollama: { url: '', model: '', maxContext: 32768, modelOpnames: '' },
   // Audio en video (src/audio/): de Whisper-worker in het thuisnetwerk doet
   // transcriptie, stemmen en namen; bereikbaar via de Tailscale-proxy als
   // viaTailnet aan staat. Het token mag ook in WORKER_TOKEN, het adres in WORKER_URL.

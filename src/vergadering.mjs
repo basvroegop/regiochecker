@@ -72,7 +72,9 @@ export async function vatVergaderingSamen({ opslag, aflevering, regioNaam, clien
   if (!aanbieder.klaar || !aflevering.segmenten?.length) return null;
   // Per versie van het transcript (ook een nieuwe sprekersnaam telt): dan een nieuwe samenvatting.
   const versie = createHash('sha1').update(JSON.stringify(aflevering.segmenten.map((s) => [s.speaker || '', s.text]))).digest('hex').slice(0, 16);
-  const sleutel = `vergadering|${aanbieder.model}|${aflevering.id}|${versie}`;
+  const o = opslag.instellingen.ollama;
+  const model = aanbieder.via === 'ollama' ? `ollama:${o.modelOpnames || o.model}` : aanbieder.model;
+  const sleutel = `vergadering|${model}|${aflevering.id}|${versie}`;
   if (opslag.samenvattingen[sleutel]) return opslag.samenvattingen[sleutel].resultaat;
   if (lopend.has(sleutel)) return lopend.get(sleutel);
   const bezig = maak(opslag, aflevering, regioNaam, aanbieder, client, sleutel).finally(() => lopend.delete(sleutel));
@@ -91,7 +93,9 @@ async function maak(opslag, a, regioNaam, aanbieder, client, sleutel) {
   const kop = `Gemeente: ${regioNaam}\nVergadering: ${a.titel}${a.gepubliceerd ? `\nDatum: ${String(a.gepubliceerd).slice(0, 10)}` : ''}\n${agendaTekst(a)}\nTranscript:\n`;
   let json;
   if (aanbieder.via === 'ollama') {
-    const { url, model, maxContext } = opslag.instellingen.ollama;
+    const { url, model: hoofdmodel, maxContext, modelOpnames } = opslag.instellingen.ollama;
+    // Een heel transcript: het model voor opnames (zie vatKortSamen).
+    const model = modelOpnames || hoofdmodel;
     const ruimte = Number(maxContext) || 32768;
     // Zo'n 3 tekens per token; wat niet past, valt aan het eind weg.
     const max = Math.max(4000, (ruimte - ANTWOORD_RUIMTE - Math.ceil(SYSTEEM.length / 3)) * 3 - kop.length);
@@ -118,6 +122,7 @@ async function maak(opslag, a, regioNaam, aanbieder, client, sleutel) {
 // ---------- de AI-samenvatting in het leespaneel ----------
 
 export const MAX_WOORDEN = 100;
+const OPNAME_CONTEXT = 16384;
 
 const KORT_SCHEMA = {
   type: 'object',
@@ -190,13 +195,15 @@ export async function vatKortSamen({ opslag, aflevering: a, bronNaam = '', clien
   const aanbieder = client ? { via: 'claude', klaar: true, model: opslag.instellingen.claude.model } : samenvattingAanbieder(opslag);
   if (!aanbieder.klaar || !a.segmenten?.length) return null;
   const kop = `${bronNaam ? `Bron: ${bronNaam}\n` : ''}Titel: ${a.titel}${a.gepubliceerd ? `\nDatum: ${String(a.gepubliceerd).slice(0, 10)}` : ''}\n${agendaTekst(a)}\n`;
+  // Bij Ollama het model voor opnames, met een contextvenster dat naast Whisper op de GPU past.
+  const o = opslag.instellingen.ollama;
+  const context = Math.min(Number(o.maxContext) || 32768, OPNAME_CONTEXT);
   const vraag = (systeem, tekst, schema) => {
     if (aanbieder.via !== 'ollama') return vraagClaude(opslag, { systeem, vraag: tekst, schema }, client);
-    const { url, model, maxContext } = opslag.instellingen.ollama;
-    return ollamaJson({ url, model, systeem, vraag: tekst, schema, context: Number(maxContext) || 32768, vrijgeven: true });
+    return ollamaJson({ url: o.url, model: o.modelOpnames || o.model, systeem, vraag: tekst, schema, context, vrijgeven: true });
   };
   const max = aanbieder.via === 'ollama'
-    ? Math.max(4000, ((Number(opslag.instellingen.ollama.maxContext) || 32768) - ANTWOORD_RUIMTE - Math.ceil(kortSysteem(a.soort).length / 3)) * 3 - kop.length)
+    ? Math.max(4000, (context - ANTWOORD_RUIMTE - Math.ceil(kortSysteem(a.soort).length / 3)) * 3 - kop.length)
     : MAX_CLAUDE;
   const stukken = stukkenVan(a.segmenten, max);
   let invoer;

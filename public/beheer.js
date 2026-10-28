@@ -663,7 +663,9 @@ export async function toonInstellingen(hoofd) {
             <div class="twee"><label class="veld"><span>URL</span><input class="invoer" name="ollamaUrl" value="${esc(i.ollama.url)}" placeholder="http://naam-van-machine:11434"></label>
             <div class="veld"><span>&nbsp;</span><div class="knoppenrij"><button type="button" class="knop klein" id="ollama-test">Verbinding testen</button><span class="statusregel" id="ollama-status"></span></div></div></div>
             <div class="twee"><label class="veld"><span>Model</span><input class="invoer" name="ollamaModel" list="ollama-modellen" value="${esc(i.ollama.model)}" placeholder="bijvoorbeeld qwen3:14b"><datalist id="ollama-modellen"></datalist></label>
-            <label class="veld"><span>Grootste contextvenster (tokens)</span><input class="invoer" name="maxContext" type="number" min="4096" max="262144" step="1024" value="${esc(i.ollama.maxContext)}"></label></div>` : ''}
+            <label class="veld"><span>Grootste contextvenster (tokens)</span><input class="invoer" name="maxContext" type="number" min="4096" max="262144" step="1024" value="${esc(i.ollama.maxContext)}"></label></div>
+            <div class="twee"><label class="veld"><span>Model voor opnames</span><input class="invoer" name="modelOpnames" list="ollama-modellen" value="${esc(i.ollama.modelOpnames || '')}" placeholder="leeg: hetzelfde model"></label>
+            <p class="uitleg-klein" style="align-self:end">Voor de AI-samenvatting van vergaderingen en podcasts. Een klein model dat helemaal op de GPU past (zoals dat van de Whisper-worker) is daar veel sneller en laat Whisper de ruimte.</p></div>` : ''}
           <p class="statusregel${i.samenvatting.klaar || via === 'uit' ? '' : ' fout'}">${i.samenvatting.klaar ? `Klaar: ${esc(i.samenvatting.model)}` : esc(i.samenvatting.reden || '')}</p>
           <div class="knoppenrij"><button class="knop inkt klein">Bewaren</button>${via === 'claude' && i.claude.heeftSleutel && !i.claude.sleutelUitOmgeving ? '<button type="button" class="knop zacht klein" id="wis-sleutel">Sleutel wissen</button>' : ''}</div>
         </form>`)}
@@ -707,7 +709,7 @@ export async function toonInstellingen(hoofd) {
     if (f.id === 'form-samenvatting') {
       const w = { samenvattingVia: i.samenvattingVia };
       if (f.apiKey || f.claudeModel) w.claude = { apiKey: f.apiKey?.value || undefined, model: f.claudeModel?.value || undefined };
-      if (f.ollamaUrl) w.ollama = { url: f.ollamaUrl.value, model: f.ollamaModel.value, maxContext: Number(f.maxContext.value) };
+      if (f.ollamaUrl) w.ollama = { url: f.ollamaUrl.value, model: f.ollamaModel.value, maxContext: Number(f.maxContext.value), modelOpnames: f.modelOpnames.value };
       bewaar(knop, w);
     }
     if (f.id === 'form-audio') bewaar(knop, { audio: { workerUrl: f.workerUrl.value, workerToken: f.workerToken.value || undefined, viaTailnet: f.viaTailnet.checked, bewaarAudio: f.bewaarAudio.value, bewaarDagen: Number(f.bewaarDagen.value), namenZoeken: f.namenZoeken.checked } });

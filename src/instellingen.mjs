@@ -69,6 +69,7 @@ export function werkInstellingenBij(opslag, invoer) {
       i.ollama.url = url;
     }
     if (o.model !== undefined) i.ollama.model = String(o.model).trim();
+    if (o.modelOpnames !== undefined) i.ollama.modelOpnames = String(o.modelOpnames).trim();
     if (o.maxContext !== undefined) {
       const n = Number(o.maxContext);
       if (!(n >= 4096 && n <= 262144)) throw new InvoerFout('Contextvenster moet tussen 4096 en 262144 tokens liggen');

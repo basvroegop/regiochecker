@@ -435,6 +435,9 @@ export class Verwerking {
       return;
     }
     const vorige = af.samenvatting || {};
+    // Een nieuwe aflevering blijft bij een herkansing "lopend" (eerst afmaken);
+    // een samenvatting die achteraf bij een oude aflevering komt, blijft achteraan.
+    const lopend = af.status !== 'klaar';
     werk({ status: 'analyseren', stap: 'AI-samenvatting maken', fout: null });
     const bron = this.bronnen().find((b) => b.id === af.bron);
     try {
@@ -448,8 +451,8 @@ export class Verwerking {
       const storingen = (vorige.storingen || 0) + (storing ? 1 : 0);
       const wacht = storing ? Math.min(1800, 60 * 2 ** Math.min(storingen - 1, 5)) : 60 * pogingen;
       werk({
-        status: 'klaar',
-        stap: pogingen >= 3 ? 'Klaar · geen samenvatting' : `Klaar · samenvatting over ${Math.max(1, Math.round(wacht / 60))} min opnieuw`,
+        status: pogingen >= 3 || !lopend ? 'klaar' : 'getranscribeerd',
+        stap: pogingen >= 3 ? 'Klaar · geen samenvatting' : `Samenvatting over ${Math.max(1, Math.round(wacht / 60))} min opnieuw`,
         samenvatting: { fout: String(fout.message).slice(0, 500), pogingen, storingen },
         opnieuwOp: Date.now() / 1000 + wacht,
       });

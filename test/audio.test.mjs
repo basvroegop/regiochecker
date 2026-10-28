@@ -535,7 +535,8 @@ test('AI-samenvatting: de hele opname in hooguit 100 woorden, als laatste stap',
     opslag.instellingen.audio = { ...opslag.instellingen.audio, workerUrl: worker.url, workerToken: TOKEN, viaTailnet: false };
     opslag.instellingen.audio.namenZoeken = true;
     opslag.instellingen.samenvattingVia = 'ollama';
-    opslag.instellingen.ollama = { url: `http://127.0.0.1:${ollama.address().port}`, model: 'qwen3:14b', maxContext: 4096 };
+    // Een klein model voor opnames, naast het grote voor de weekmail.
+    opslag.instellingen.ollama = { url: `http://127.0.0.1:${ollama.address().port}`, model: 'qwen3:14b', modelOpnames: 'klein:4b', maxContext: 4096 };
     const bron = { id: 'raad', naam: 'Smallingerland · Raad', soort: 'raadsvergadering', bereik: 'regio', regio: 'smallingerland', type: 'audio', url: 'https://smallingerland.raadsinformatie.nl/', audio: { kind: 'notubiz', prioriteit: 0 } };
     opslag.bronnen.push(bron);
     const voeg = (id, segmenten) => {
@@ -562,7 +563,8 @@ test('AI-samenvatting: de hele opname in hooguit 100 woorden, als laatste stap',
     assert.equal(kort.status, 'klaar');
     assert.equal(kort.samenvatting.tekst.split(' ').length <= 100, true, 'hooguit 100 woorden');
     assert.match(kort.samenvatting.tekst, /^De raad besprak de huisartsenpost in Drachten\./);
-    assert.equal(kort.samenvatting.model, 'qwen3:14b');
+    assert.equal(kort.samenvatting.model, 'klein:4b');
+    assert.ok(chats.every((c) => c.model === 'klein:4b' && c.options.num_ctx <= 16384), 'het model voor opnames, met een beperkt contextvenster');
     const lang = adb.aflevering(LANG);
     const delen = chats.filter((c) => c.format?.properties?.punten);
     assert.ok(delen.length >= 2, 'een lang transcript eerst in delen');
@@ -574,7 +576,7 @@ test('AI-samenvatting: de hele opname in hooguit 100 woorden, als laatste stap',
     // In het leespaneel, boven het transcript.
     const jan = herkenGebruiker(opslag, { login: 'jan', email: 'jan@example.nl' });
     const r = await roep({ opslag, kdb: null, fdb, adb }, jan, 'GET', `/api/stuk?id=a:${KORT}`);
-    assert.deepEqual([r.data.samenvatting.tekst, r.data.samenvatting.model], [kort.samenvatting.tekst, 'qwen3:14b']);
+    assert.deepEqual([r.data.samenvatting.tekst, r.data.samenvatting.model], [kort.samenvatting.tekst, 'klein:4b']);
 
     // Een nieuwe aflevering: namen en samenvatting direct na elkaar, vóór achterstand.
     const NIEUW = 'c'.repeat(32);
@@ -601,6 +603,10 @@ test('AI-samenvatting: de hele opname in hooguit 100 woorden, als laatste stap',
     adb.db.prepare('UPDATE afleveringen SET opnieuw_op = 0').run();
     assert.equal(verwerking.volgende().length, 0);
     assert.equal((await roep({ opslag, kdb: null, fdb, adb }, jan, 'GET', `/api/stuk?id=a:${KORT}`)).data.samenvatting, null);
+    // Een nieuwe aflevering blijft bij een herkansing lopend; pas na drie keer klaar.
+    adb.werkBij(NIEUW, { samenvatting: null, status: 'getranscribeerd', opnieuwOp: 0 });
+    await verwerking.verwerkEen();
+    assert.deepEqual([adb.aflevering(NIEUW).status, adb.aflevering(NIEUW).stap], ['getranscribeerd', 'Samenvatting over 1 min opnieuw']);
   } finally {
     if (proxy) process.env.REGIOCHECKER_TAILNET_PROXY = proxy;
     ollama.close();

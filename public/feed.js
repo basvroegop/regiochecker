@@ -446,14 +446,24 @@ function transcriptHtml(d) {
   const termen = uniek((d.treffers || []).map((t) => t.term));
   const zoek = audioTab.zoek.trim();
   const gezien = new Set();
-  // Agendapunten als tussenkopjes, op de plek waar ze beginnen (niet bij zoeken).
-  const agenda = zoek ? [] : [...(d.agenda || [])];
+  // Agendapunten als tussenkopjes (niet bij zoeken), vóór de beurt die het
+  // dichtst bij het begin van het punt begint: een beurt is soms minuten lang.
+  const kopjes = new Map();
+  let vanaf = 0;
+  for (const p of zoek ? [] : d.agenda || []) {
+    let beste = vanaf;
+    for (let i = vanaf; i < lijst.length && lijst[i].start <= p.start + 600; i++) {
+      if (Math.abs(lijst[i].start - p.start) < Math.abs(lijst[beste].start - p.start)) beste = i;
+    }
+    if (!kopjes.has(beste)) kopjes.set(beste, []);
+    kopjes.get(beste).push(p);
+    vanaf = beste;
+  }
   let html = '';
   for (const [n, b] of lijst.entries()) {
     const eerste = b.sleutel && !gezien.has(b.sleutel);
     if (b.sleutel) gezien.add(b.sleutel);
-    while (agenda.length && agenda[0].start <= b.start + 1) {
-      const p = agenda.shift();
+    for (const p of kopjes.get(n) || []) {
       html += `<div class="agendakop">${tijdLink(d, p.start, tijdcode(p.start), 'beurt-tijd')}<span>${esc(p.titel)}</span></div>`;
     }
     if (zoek && !zonderAccenten(b.tekst).includes(zonderAccenten(zoek))) continue;
@@ -511,7 +521,7 @@ function agendaHtml(d) {
   return `<div class="transcript agendalijst">${d.agenda.map((p) => `<div class="beurt agendapunt">
       ${tijdLink(d, p.start, tijdcode(p.start), 'beurt-tijd')}
       <span class="agenda-titel">${esc(p.titel)}</span>
-      <span class="zacht klein">${p.eind > p.start ? duurTekst(p.eind - p.start) : ''}</span>
+      <span class="zacht klein">${p.eind > p.start ? (p.eind - p.start < 60 ? '< 1 min' : duurTekst(p.eind - p.start)) : ''}</span>
     </div>`).join('')}
     <span class="transcript-voet">Agenda en tijden van het vergaderplatform.</span></div>`;
 }
