@@ -17,6 +17,7 @@ import { haalBron } from './bronnen/index.mjs';
 import { dagenGeleden } from './datum.mjs';
 import { vulInhoud } from './inhoud.mjs';
 import { vindVestiging } from './locatie.mjs';
+import { gooiMediaWeg } from './telegram.mjs';
 
 const MAX_LEEFTIJD_DAGEN = { nieuws: 21, ingekomen: 21, woo: null };
 const NULMETING_RECENT_DAGEN = 2;
@@ -115,7 +116,10 @@ function ruimOp(opslag, nu) {
     // Een bron die alleen het nieuwste toont (ransomware, aardbevingen) bewaart
     // langer: daar is uit beeld raken normaal (`bewaarDagen`).
     const grens = new Date(nu - (bronnen.get(item.bron)?.bewaarDagen || OPRUIMEN_NA_DAGEN) * 86400000).toISOString();
-    if (item.laatstGezien < grens && opslag.status.bronnen[item.bron]?.ok) delete opslag.items[sleutel];
+    if (item.laatstGezien < grens && opslag.status.bronnen[item.bron]?.ok) {
+      if (item.mediaUid) gooiMediaWeg(opslag.map, item);
+      delete opslag.items[sleutel];
+    }
   }
 }
 

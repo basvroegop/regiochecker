@@ -9,8 +9,8 @@ import { archiefFilters, archiefBalkHtml, koppelArchiefBalk, laadBronnen } from 
 
 const STATUSNAAM = { wacht: 'in de wachtrij', downloaden: 'wordt gedownload', transcriberen: 'wordt getranscribeerd', getranscribeerd: 'wordt geanalyseerd', analyseren: 'wordt geanalyseerd', mislukt: 'mislukt' };
 
-const GROEPEN = ['alles', 'nieuws', 'ingekomen', 'woo', 'kamerstuk', 'audio', 'knmi', 'rvs', 'ransomware', 'verkeer'];
-const GROEPNAAM = { alles: 'Alles', nieuws: 'Gemeentenieuws', ingekomen: 'Ingekomen', woo: 'Woo', kamerstuk: 'Kamerstukken', audio: 'Audio & video', knmi: 'KNMI', rvs: 'Raad van State', ransomware: 'Ransomware', verkeer: 'Verkeer' };
+const GROEPEN = ['alles', 'nieuws', 'ingekomen', 'woo', 'kamerstuk', 'audio', 'knmi', 'rvs', 'ransomware', 'verkeer', 'ingezonden'];
+const GROEPNAAM = { alles: 'Alles', nieuws: 'Gemeentenieuws', ingekomen: 'Ingekomen', woo: 'Woo', kamerstuk: 'Kamerstukken', audio: 'Audio & video', knmi: 'KNMI', rvs: 'Raad van State', ransomware: 'Ransomware', verkeer: 'Verkeer', ingezonden: 'Ingezonden' };
 
 // Filters blijven staan als je even naar een andere pagina gaat.
 const filters = { groep: 'alles', regio: '', ongelezen: false };
@@ -286,13 +286,20 @@ function waaromHtml(d) {
   if (!viaMelding.length && (!d.landelijk || !viaRegio.length)) return '';
   const audio = d.groep === 'audio';
   const zinnen = [];
-  if (d.landelijk && viaRegio.length) {
-    const termen = uniek(viaRegio.map((t) => aanhalen(esc(t.term))));
-    const regios = uniek(viaRegio.map((t) => t.regioNaam));
-    const aantal = viaRegio.length === 1 && viaRegio[0].aantal > 1 ? ` ${viaRegio[0].aantal}×` : '';
+  // Via de plek (aardbeving, file, station, gedeelde locatie) of via een sleutelwoord.
+  const viaPlek = viaRegio.filter((t) => t.plek);
+  if (d.landelijk && viaPlek.length) {
+    const regios = uniek(viaPlek.map((t) => t.regioNaam));
+    zinnen.push(`Dit is een landelijke bron. Het stuk hoort bij de regio${regios.length > 1 ? '\'s' : ''} <strong>${esc(opsomming(regios))}</strong> door de plek.`);
+  }
+  const viaTerm = viaRegio.filter((t) => !t.plek);
+  if (d.landelijk && viaTerm.length) {
+    const termen = uniek(viaTerm.map((t) => aanhalen(esc(t.term))));
+    const regios = uniek(viaTerm.map((t) => t.regioNaam));
+    const aantal = viaTerm.length === 1 && viaTerm[0].aantal > 1 ? ` ${viaTerm[0].aantal}×` : '';
     const werkwoord = audio ? (termen.length === 1 ? `wordt${aantal} ${termen[0]} gezegd` : `worden ${opsomming(termen)} gezegd`)
       : (termen.length === 1 ? `komt${aantal} ${termen[0]} voor` : `komen ${opsomming(termen)} voor`);
-    zinnen.push(`Dit is een landelijke bron. ${audio ? 'In de aflevering' : 'In het stuk'} ${werkwoord}, ${termen.length === 1 ? 'een sleutelwoord' : 'sleutelwoorden'} van de regio${regios.length > 1 ? '\'s' : ''} <strong>${esc(opsomming(regios))}</strong>.`);
+    zinnen.push(`${viaPlek.length ? '' : 'Dit is een landelijke bron. '}${audio ? 'In de aflevering' : 'In het stuk'} ${werkwoord}, ${termen.length === 1 ? 'een sleutelwoord' : 'sleutelwoorden'} van de regio${regios.length > 1 ? '\'s' : ''} <strong>${esc(opsomming(regios))}</strong>.`);
   }
   if (viaMelding.length) {
     const termen = uniek(viaMelding.map((t) => t.term));
@@ -304,7 +311,7 @@ function waaromHtml(d) {
   const rijen = treffers.filter((t) => (t.melding || d.landelijk) && !getoond.has(t.term) && getoond.add(t.term)).map((t) => {
     const links = audio && t.tijd !== undefined
       ? tijdLink(d, t.tijd, `${icoon('play', 12)}${tijdcode(t.tijd)}`, 'treffer-tijd')
-      : `<span class="treffer-term">${esc(t.term)}${t.aantal ? `<span class="aantal">${t.aantal}× in het stuk</span>` : ''}</span>`;
+      : `<span class="treffer-term">${esc(t.term)}${t.aantal && !t.plek ? `<span class="aantal">${t.aantal}× in het stuk</span>` : ''}</span>`;
     return `<div class="treffer">${links}<span>${markeer(t.fragment.tekst, t.fragment.treffer)}</span></div>`;
   });
   return `<div class="waarom"><div class="waarom-titel">Waarom staat dit in je feed?</div><div class="waarom-uitleg">${zinnen.join(' ')}</div>${rijen.join('')}</div>`;
@@ -386,10 +393,19 @@ function tekstPaneel(d) {
     <div class="acties" id="acties">${actiesHtml(d)}</div>
     <div class="kopblok"><div class="kicker">${esc(kicker.filter(Boolean).join(' · '))}</div><h2>${esc(d.titel)}</h2></div>
     ${metaHtml(d)}
+    ${mediaHtml(d)}
     ${waaromHtml(d)}
     ${notitieHtml(d)}
     ${documentHtml(d)}
   </div>`;
+}
+
+// Foto's en video's van een inzending; een foto klikt door naar het origineel.
+function mediaHtml(d) {
+  if (!d.media?.length) return '';
+  return `<div class="mediagalerij">${d.media.map((m) => (m.soort === 'video'
+    ? `<video src="${esc(m.url)}" controls preload="metadata"></video>`
+    : `<a href="${esc(m.url)}" target="_blank" rel="noopener"><img src="${esc(m.url)}" loading="lazy" alt="Ingezonden foto"></a>`)).join('')}</div>`;
 }
 
 // ---------- audio en video (2b) ----------

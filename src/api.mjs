@@ -11,9 +11,12 @@
 //   PUT  /api/stuk                   { id, gelezen?, bewaard?, notitie? }
 //   …    /api/meldingen[/id]         directe meldingen van deze gebruiker
 //   …    /api/audio/…                audio en video (src/audio/api.mjs)
+//   GET  /api/ingezonden/{map}/{bestand}   foto of video van een inzending (src/telegram.mjs)
 //   …    /api/beheer/…               src/beheer.mjs
 
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import { isBeheerder, werkGebruikerBij, voorClient } from './gebruikers.mjs';
 import { alleRegios } from './register.mjs';
 import { GROEPEN, ENKELVOUD } from './regios.mjs';
@@ -24,13 +27,14 @@ import { beheerApi } from './beheer.mjs';
 import { kamerApi } from './kamer/api.mjs';
 import { publiekeInstellingen, werkInstellingenBij } from './instellingen.mjs';
 import { ollamaInfo } from './ollama.mjs';
-import { audioApi } from './audio/api.mjs';
+import { audioApi, stuurBestand } from './audio/api.mjs';
 import { worker as audioWorker } from './audio/worker.mjs';
 import { verstuur } from './mail.mjs';
 import { volgendeWeekmail } from './planning.mjs';
 import { documentOpVraag } from './inhoud.mjs';
 
 const EMAIL = /^[^\s@<>,;]+@[^\s@<>,;]+\.[a-z]{2,}$/i;
+const MEDIATYPE = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm' };
 const DAG_MS = 86400000;
 
 function meldingVoorClient(k, gebruiker, m) {
@@ -156,6 +160,16 @@ export async function api(req, res, url, ctx) {
   // ---------- audio en video ----------
   if (deel[1] === 'audio') return audioApi(req, res, url, ctx, k);
 
+  // ---------- foto's en video's van inzendingen (src/telegram.mjs) ----------
+  if (req.method === 'GET' && deel[1] === 'ingezonden' && deel.length === 4) {
+    const [, , map, bestand] = deel;
+    if (!/^[a-f0-9]{32}$/.test(map) || !/^\w[\w.-]*$/.test(bestand)) throw new Fout(400, 'Ongeldig pad');
+    const pad = path.join(opslag.map, 'ingezonden', map, bestand);
+    if (!existsSync(pad)) throw new Fout(404, 'Niet gevonden');
+    // Alleen beeld en video; al het andere als download, nooit als pagina.
+    return stuurBestand(req, res, pad, MEDIATYPE[path.extname(bestand).slice(1).toLowerCase()] || 'application/octet-stream');
+  }
+
   // ---------- kamerstukken (status en zoeken) ----------
   if (url.pathname.startsWith('/api/kamer/')) {
     await kamerApi(req, res, url, { opslag, kdb, stuur, Fout });
@@ -172,7 +186,7 @@ export async function api(req, res, url, ctx) {
 
   // ---------- alleen beheer ----------
   alleenBeheer();
-  if (deel[1] === 'beheer') return beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, stuur, leesJson, Fout });
+  if (deel[1] === 'beheer') return beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, telegram: ctx.telegram, stuur, leesJson, Fout });
   if (route === 'GET /api/logboek') return stuur(opslag.logboek.slice(0, 200));
   if (route === 'GET /api/instellingen') return stuur(publiekeInstellingen(opslag));
   if (route === 'PUT /api/instellingen') {

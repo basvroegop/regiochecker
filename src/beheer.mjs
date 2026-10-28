@@ -18,6 +18,7 @@ import { isAudio } from './audio/verwerking.mjs';
 import { nieuweGebruiker, werkGebruikerBij, voorClient, InvoerFout } from './gebruikers.mjs';
 import { volgendeWeekmail } from './planning.mjs';
 import { controleerKanaal, nieuwKanaal, kanaalVoorClient, kanaalKeuzes, stuurNaarTeams, testKaart } from './kanalen.mjs';
+import { tokenVan, telegramVoorClient, schoneHandle } from './telegram.mjs';
 
 const DAG_MS = 86400000;
 const RUIS = 25;
@@ -53,6 +54,7 @@ const geleden = (dagen) => new Date(Date.now() - dagen * DAG_MS).toISOString();
 export function bronStatus(opslag, bron) {
   if (bron.type === 'ontbreekt') return { staat: 'ontbreekt', tekst: 'Niet gevonden' };
   if (sleutelOntbreekt(bron)) return { staat: 'ontbreekt', tekst: 'Sleutel nodig', fout: `Zet ${bron.sleutel} in .env om deze bron te gebruiken.` };
+  if (bron.type === 'telegram' && !tokenVan(opslag)) return { staat: 'ontbreekt', tekst: 'Niet ingesteld', fout: 'Stel de bot in bij Beheer › Telegram.' };
   const s = bron.id === TWEEDE_KAMER.id ? opslag.status.kamer : opslag.status.bronnen[bron.id];
   if (!s) return { staat: 'wacht', tekst: 'Nog niet gecontroleerd' };
   const tijd = s.laatsteRonde || s.tijd || null;
@@ -449,7 +451,7 @@ async function audioOverzicht(k, verwerking) {
   };
 }
 
-export async function beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, stuur, leesJson, Fout }) {
+export async function beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, telegram, stuur, leesJson, Fout }) {
   const deel = url.pathname.split('/').filter(Boolean); // ['api', 'beheer', ...]
   const route = `${req.method} /${deel.slice(2).join('/')}`;
   const k = maakKader({ opslag, kdb, fdb, adb });
@@ -599,6 +601,51 @@ export async function beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, s
       opslag.bewaar('kanalen');
       return stuur({ ok: true });
     }
+  }
+
+  // ---------- de Telegram-bot (src/telegram.mjs) ----------
+  if (route === 'GET /telegram') return stuur(telegramVoorClient(opslag, telegram));
+  if (route === 'PUT /telegram') {
+    const invoer = await leesJson(req);
+    const t = opslag.instellingen.telegram ||= {};
+    let herstart = false;
+    if (invoer.token) {
+      const token = String(invoer.token).trim();
+      if (!/^\d{5,15}:[\w-]{30,60}$/.test(token)) throw new Fout(400, 'Dat lijkt geen bottoken. Het ziet eruit als 123456789:ABC… (van @BotFather).');
+      t.token = token;
+      herstart = true;
+    }
+    if (invoer.wisToken) {
+      t.token = '';
+      herstart = true;
+    }
+    if (invoer.reageren !== undefined) t.reageren = Boolean(invoer.reageren);
+    opslag.bewaar('instellingen');
+    if (herstart) await telegram?.herstart();
+    return stuur(telegramVoorClient(opslag, telegram));
+  }
+  if (route === 'POST /telegram/vooraf') {
+    const handle = schoneHandle((await leesJson(req)).handle);
+    if (!handle) throw new Fout(400, 'Vul een Telegram-gebruikersnaam (@naam) of een id in');
+    const tg = opslag.telegram;
+    tg.vooraf = [...new Set([...(tg.vooraf || []), handle])];
+    opslag.bewaar('telegram');
+    return stuur(telegramVoorClient(opslag, telegram));
+  }
+  if (req.method === 'DELETE' && deel[2] === 'telegram' && deel[3] === 'vooraf' && deel[4]) {
+    const tg = opslag.telegram;
+    tg.vooraf = (tg.vooraf || []).filter((h) => h !== decodeURIComponent(deel[4]));
+    opslag.bewaar('telegram');
+    return stuur(telegramVoorClient(opslag, telegram));
+  }
+  if (req.method === 'PUT' && deel[2] === 'telegram' && deel[3] === 'chats' && deel[4]) {
+    const chat = opslag.telegram.chats[decodeURIComponent(deel[4])];
+    if (!chat) throw new Fout(404, 'Chat niet gevonden');
+    const { status } = await leesJson(req);
+    if (!['wacht', 'goedgekeurd', 'geblokkeerd'].includes(status)) throw new Fout(400, 'Kies goedkeuren, blokkeren of terugzetten');
+    chat.status = status;
+    opslag.bewaar('telegram');
+    return stuur(telegramVoorClient(opslag, telegram));
   }
 
   if (route === 'GET /gebruikers') {

@@ -516,6 +516,8 @@ Het Authelia-account zelf, en toegang tot deze site, regel je in Authelia
   en de volgorde van de bronnen.
 - **Teams**: kanalen in Microsoft Teams die meekrijgen wat er binnenkomt (zie
   hieronder).
+- **Telegram**: de bot voor tipgevers, met de chats die op goedkeuring wachten
+  (zie hieronder).
 - **Instellingen**: controle-interval, standaard weekmail, SMTP, samenvatting
   (Claude of Ollama), de Whisper-worker en hoe lang audio bewaard blijft.
   Wachtwoorden, sleutels en tokens gaan nooit terug naar de browser.
@@ -550,6 +552,38 @@ kopiëren. Wie dat adres heeft, kan in het kanaal berichten zetten. Het staat
 daarom alleen in `data/kanalen.json`, gaat nooit terug naar de browser en komt
 niet in het logboek; bij Wijzig leeg laten houdt het oude adres.
 
+### Telegram: inzendingen van tipgevers
+
+De DVHN-bot uit de checker (`src/telegram.mjs`). 112-fotografen en andere
+tipgevers sturen foto's, video's, tekst of een locatie naar een Telegram-bot,
+1-op-1 of in een groep waar de bot in zit. In de checker heeft de bot nooit
+gedraaid (er stond geen token).
+
+- **Instellen** bij Beheer › Telegram: een bot maken via @BotFather en het token
+  plakken (of `TELEGRAM_BOT_TOKEN` in `.env`). De Regiochecker haalt de
+  berichten zelf op (long polling); de site zit achter Authelia, en een webhook
+  zou een openbare uitzondering vragen. Heeft de bot al een webhook (de checker,
+  of een andere server), dan neemt de Regiochecker hem niet over maar meldt dat.
+- **Goedkeuren**: een nieuwe chat wacht. De inzender krijgt daar een bericht
+  over, met (1-op-1) een knop om het telefoonnummer te delen. Een admin keurt
+  goed of blokkeert; @gebruikersnamen en nummers van personen of groepen kunnen
+  ook vooraf. Berichten van vóór de goedkeuring worden niet bewaard.
+- **Inzendingen** worden stukken onder het tabblad **Ingezonden**: de eerste
+  regel van het bericht als kop, de foto's en video's in het leespaneel
+  (`data/ingezonden/`, alleen voor wie is ingelogd), en telefoon en
+  @gebruikersnaam van de inzender bij de gegevens. Een album wordt één stuk; een
+  aangepast bijschrift werkt het stuk bij. De bot zet een duim omhoog bij een
+  inzending die binnen is (uit te zetten).
+- **Regio**: een gedeelde locatie, of een plaatsnaam met een woord ervoor ("brand
+  in Gorredijk"). Zonder plaats staat een inzending bij alle regio's, zoals in de
+  checker. Inzendingen gaan naar meldingen en Teams-kanalen (met inzender en
+  telefoon, zonder de foto's zelf: die staan achter de inlog), niet in de
+  weekmail. Ze blijven twee jaar bewaard, de foto's ook.
+
+Niet overgenomen: het insturen via een eigen API met een token (in de checker
+`POST /api/inbound/submit`, nooit gebruikt). Dat vraagt een openbare route langs
+Authelia.
+
 ### Van audioscraper naar de Regiochecker
 
 Het archief van audioscraper (projecten, afleveringen met transcripten, sprekers
@@ -583,6 +617,8 @@ voorkeur met de dienst gestopt).
 | `status.json` | per bron de laatste ronde; laatste mailronde |
 | `meldingen.json` | directe meldingen per gebruiker |
 | `kanalen.json` | Teams-kanalen: workflowadres, regio's, bronnen, laatste verzending |
+| `telegram.json` | Telegram-bot: chats met hun status, inzenders (telefoon), vooraf goedgekeurd |
+| `ingezonden/` | foto's en video's van inzendingen, per stuk |
 | `logboek.json` | verzonden mails, meldingen en fouten |
 | `samenvattingen.json` | cache van Claude- en Ollama-antwoorden |
 | `kamerstukken.sqlite` | de kamerstukken met zoekindex |

@@ -1,6 +1,7 @@
 // Hulpjes om src/api.mjs aan te roepen zonder echte server: een nagebootst
 // verzoek en antwoord, en dezelfde stuur/leesJson/Fout als in src/dienst.mjs.
 
+import { Writable } from 'node:stream';
 import { api } from '../src/api.mjs';
 
 export class Fout extends Error {
@@ -17,14 +18,15 @@ function nepVerzoek(methode, pad, body, headers = {}) {
   };
 }
 
+// Een echte Writable, zodat ook een gestreamd bestand (pipeline) aankomt.
 function nepAntwoord() {
-  const res = { status: null, kop: {}, stukken: [], klaar: false, luisteraars: {} };
+  const stukken = [];
+  const res = new Writable({ write(stuk, _codering, klaar) { stukken.push(Buffer.from(stuk)); klaar(); } });
+  res.status = null;
+  res.kop = {};
   res.writeHead = (status, kop = {}) => { res.status = status; res.kop = kop; return res; };
-  res.write = (stuk) => { res.stukken.push(Buffer.from(stuk)); return true; };
-  res.end = (stuk) => { if (stuk) res.stukken.push(Buffer.from(stuk)); res.klaar = true; };
-  res.on = (naam, f) => { res.luisteraars[naam] = f; };
   Object.defineProperty(res, 'headersSent', { get: () => res.status !== null });
-  res.lijf = () => Buffer.concat(res.stukken);
+  res.lijf = () => Buffer.concat(stukken);
   res.json = () => JSON.parse(res.lijf().toString('utf8'));
   return res;
 }

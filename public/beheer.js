@@ -739,6 +739,89 @@ export async function toonTeams(hoofd) {
   });
 }
 
+// ---------- Telegram-bot ----------
+
+const CHATSTATUS = { wacht: 'Wacht op goedkeuring', goedgekeurd: 'Goedgekeurd', geblokkeerd: 'Geblokkeerd' };
+const CHATSOORT = { private: 'Persoon', group: 'Groep', supergroup: 'Groep', channel: 'Kanaal' };
+
+function botStatus(t) {
+  if (!t.token) return { staat: 'ontbreekt', tekst: 'Nog geen bot' };
+  if (t.status.staat === 'fout') return { staat: 'fout', tekst: t.status.fout };
+  if (t.status.staat === 'aan') return { staat: 'werkt', tekst: `Verbonden als @${t.status.bot}` };
+  return { staat: 'wacht', tekst: 'Verbinden…' };
+}
+
+export async function toonTelegram(hoofd) {
+  let t = await vraag('GET', '/api/beheer/telegram');
+  hoofd.innerHTML = '<div class="pagina" id="telegram"></div>';
+  const teken = () => {
+    const s = botStatus(t);
+    const wacht = t.chats.filter((c) => c.status === 'wacht').length;
+    $('#telegram').innerHTML = `
+      <div class="paginakop"><h1>Telegram-bot</h1><span class="klein zacht">Inzendingen van tipgevers${wacht ? ` · ${wacht} chat${wacht === 1 ? '' : 's'} wacht${wacht === 1 ? '' : 'en'} op goedkeuring` : ''}</span></div>
+      ${instelBlok('Bot', 'Maak een bot via @BotFather in Telegram en plak het token hier. De Regiochecker haalt de berichten zelf op; de bot mag dus geen webhook elders hebben.', `
+        <div class="botregel">${statusHtml(s)}${t.status.tijd && t.status.staat === 'aan' ? `<span class="klein zacht">laatst ${esc(uurMinuut(t.status.tijd))}</span>` : ''}</div>
+        <form class="tokenrij" id="token-form">
+          <input class="invoer" name="token" type="password" autocomplete="off" placeholder="${t.token ? (t.tokenUitOmgeving ? 'Uit TELEGRAM_BOT_TOKEN; plak hier een ander token' : 'Ingesteld; plak hier een nieuw token') : '123456789:ABC…'}">
+          <button class="knop inkt klein">Opslaan</button>${t.token && !t.tokenUitOmgeving ? '<button class="linkknop" type="button" id="token-wis">Bot loskoppelen</button>' : ''}
+        </form>
+        <label class="vink"><input type="checkbox" id="reageren" ${t.reageren ? 'checked' : ''}><span class="vakje"></span>Duim omhoog bij een inzending die binnen is</label>`)}
+      ${instelBlok('Vooraf goedgekeurd', 'Een chat van deze afzenders (of deze groep) is meteen goedgekeurd: @gebruikersnaam of het nummer van een persoon of groep.', `
+        <div class="regiochips-cel">${t.vooraf.map((h) => `<span class="regiochip">${esc(/^-?\d+$/.test(h) ? h : `@${h}`)} <button class="verwijder" data-vooraf="${esc(h)}" aria-label="${esc(h)} weghalen">×</button></span>`).join('') || '<span class="klein zacht">Nog niemand.</span>'}</div>
+        <form class="tokenrij" id="vooraf-form"><input class="invoer" name="handle" placeholder="@fotograaf of 123456789" required><button class="knop zacht klein">Toevoegen</button></form>`)}
+      <h2 class="sectiekop">Chats</h2>
+      ${t.chats.length ? `<div class="tabelkop chatrij"><span>Chat</span><span>Soort</span><span>Berichten</span><span>Laatst</span><span>Status</span><span></span></div>
+      ${t.chats.map((c) => `<div class="tabelrij chatrij" data-chat="${esc(c.id)}">
+        <span class="naamcel"><strong>${esc(c.naam || c.id)}</strong><small>${esc([c.username && `@${c.username}`, c.id].filter(Boolean).join(' · '))}</small></span>
+        <span class="klein">${esc(CHATSOORT[c.type] || c.type || '')}</span>
+        <span class="klein">${c.aantal || 0}</span>
+        <span class="klein zacht">${esc(geledenTekst(c.laatst))}</span>
+        <span class="klein ${c.status === 'wacht' ? 'kanaalfout' : ''}">${esc(CHATSTATUS[c.status] || c.status)}</span>
+        <span class="rijacties">${c.status !== 'goedgekeurd' ? '<button class="linkknop" data-status="goedgekeurd">Goedkeuren</button>' : ''}${c.status !== 'geblokkeerd' ? '<button class="linkknop" data-status="geblokkeerd">Blokkeren</button>' : ''}${c.status !== 'wacht' ? '<button class="linkknop" data-status="wacht">Terugzetten</button>' : ''}</span>
+      </div>`).join('')}` : '<p class="leeg">Nog geen berichten aan de bot.</p>'}
+      <div class="uitleg-klein kanaaluitleg">
+        <p>Een nieuwe chat (een persoon die de bot een bericht stuurt, of een groep waar de bot in zit) wacht eerst op goedkeuring; de inzender krijgt daar een bericht over, en kan zijn telefoonnummer delen. Berichten van vóór de goedkeuring worden niet bewaard. Na goedkeuring wordt elk bericht met tekst, foto, video of locatie een stuk onder <strong>Ingezonden</strong>; een album wordt één stuk. Een gedeelde locatie of een plaatsnaam ("brand in Gorredijk") bepaalt de regio; zonder plaats staat een inzending bij alle regio's.</p>
+        <p>In een groep ziet een bot alleen alle berichten als hij beheerder is, of als bij @BotFather de privacymodus uit staat (/setprivacy).</p>
+      </div>`;
+  };
+  teken();
+  const werk = async (methode, pad, body) => {
+    try {
+      t = await vraag(methode, `/api/beheer/telegram${pad}`, body);
+    } catch (fout) {
+      toast(fout.message, 'fout');
+    }
+    teken();
+  };
+  const pagina = $('#telegram');
+  pagina.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (e.target.id === 'token-form' && e.target.token.value) await bezig(e.target.querySelector('button'), () => werk('PUT', '', { token: e.target.token.value }), 'Verbinden…');
+    if (e.target.id === 'vooraf-form') await werk('POST', '/vooraf', { handle: e.target.handle.value });
+  });
+  pagina.addEventListener('click', (e) => {
+    const knop = e.target.closest('button');
+    if (!knop) return;
+    if (knop.id === 'token-wis' && confirm('De bot loskoppelen? Er komen dan geen inzendingen meer binnen.')) werk('PUT', '', { wisToken: true });
+    if (knop.dataset.vooraf) werk('DELETE', `/vooraf/${encodeURIComponent(knop.dataset.vooraf)}`);
+    const chat = knop.closest('[data-chat]');
+    if (chat && knop.dataset.status) werk('PUT', `/chats/${encodeURIComponent(chat.dataset.chat)}`, { status: knop.dataset.status });
+  });
+  pagina.addEventListener('change', (e) => {
+    if (e.target.id === 'reageren') werk('PUT', '', { reageren: e.target.checked });
+  });
+  // Even later nog eens: na een nieuw token weet de bot pas na een paar seconden wie hij is.
+  const ververs = setInterval(async () => {
+    if (!document.body.contains(pagina)) return clearInterval(ververs);
+    if (document.activeElement?.closest('#telegram form')) return;
+    try {
+      t = await vraag('GET', '/api/beheer/telegram');
+      teken();
+    } catch { /* volgende keer */ }
+  }, 15_000);
+  app.opruimen = () => clearInterval(ververs);
+}
+
 // ---------- logboek ----------
 
 export async function toonLogboek(hoofd) {

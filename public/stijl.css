@@ -409,6 +409,18 @@ span.beurt-tijd { cursor: default; }
 .uitnodigen { display: grid; grid-template-columns: 1fr 1fr 1fr 130px 100px auto; gap: 10px; align-items: end; padding: 16px; margin-bottom: 20px; background: var(--color-surface); border: 2px solid var(--color-text); }
 .rijacties { display: flex; gap: 4px; justify-content: flex-end; }
 
+/* ---------- inzendingen: foto's en video's ---------- */
+.mediagalerij { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.mediagalerij img, .mediagalerij video { display: block; width: 100%; max-height: 420px; object-fit: cover; background: var(--color-surface); border: 2px solid var(--color-text); }
+.mediagalerij a:only-child img, .mediagalerij video:only-child { grid-column: 1 / -1; object-fit: contain; }
+
+/* ---------- Telegram-bot ---------- */
+.botregel { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+.instelblok form.tokenrij, .tokenrij { display: flex; flex-direction: row; gap: 10px; align-items: center; margin: 0; max-width: 620px; }
+.tokenrij .invoer { flex: 1; }
+.chatrij { grid-template-columns: minmax(0, 1fr) 90px 90px 140px 170px 260px; gap: 16px; align-items: center; padding: 12px 0; }
+.sectiekop { font-size: 21px; margin: 32px 0 12px; }
+
 /* ---------- Teams-kanalen ---------- */
 .kanaalrij { grid-template-columns: 240px minmax(0, 1fr) minmax(0, 1fr) 70px 190px 110px; gap: 16px; align-items: center; padding: 14px 0; }
 .kanaalrij .regiochip { padding: 3px 8px; border: 2px solid var(--color-text); font-size: 12px; font-weight: 600; white-space: nowrap; }

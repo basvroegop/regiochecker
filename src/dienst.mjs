@@ -28,6 +28,7 @@ import { verzamelAlles, verzamelSnel } from './verzamel.mjs';
 import { stelMailSamen, mailGebruiker, mailronde, teMailen, allemaalMetWeekmail, herkansMislukte } from './mail.mjs';
 import { verwerkMeldingen } from './meldingen.mjs';
 import { verwerkKanalen } from './kanalen.mjs';
+import { TelegramBot } from './telegram.mjs';
 import { herken } from './gebruikers.mjs';
 import { openKamerDb } from './kamer/db.mjs';
 import { kamerRonde } from './kamer/ronde.mjs';
@@ -103,7 +104,15 @@ const verwerking = adb ? new Verwerking({ opslag, adb }, {
     meldingWekker = setTimeout(meldingen, 60_000);
   },
 }) : null;
-const ctx = { opslag, kdb, fdb, adb, verwerking };
+// Inzendingen via Telegram: meldingen en Teams even later, zodat een album compleet is.
+let telegramWekker = null;
+const telegram = new TelegramBot(opslag, {
+  bijNieuw: () => {
+    clearTimeout(telegramWekker);
+    telegramWekker = setTimeout(meldingen, 10_000);
+  },
+});
+const ctx = { opslag, kdb, fdb, adb, verwerking, telegram };
 
 // ---------- planning ----------
 
@@ -331,6 +340,7 @@ server.listen(POORT, () => {
   setTimeout(kamerTik, 30000);
   setInterval(kamerTik, KAMER_INTERVAL_MS);
   verwerking?.start();
+  telegram.start();
   // De locatie-index (11 MB) alvast inlezen, zodat Audio-archief › Namen meteen opent.
   setTimeout(() => deelLocatieIn('Drachten'), 20_000);
 });

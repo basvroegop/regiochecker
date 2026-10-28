@@ -109,6 +109,7 @@ function routeerOpPlek(k, item, bron) {
   // uitspraak staat ook "advocaat te Heerenveen".
   const tekst = bron.plaatsen ? [item.titel, item.tekst].filter(Boolean).join('\n') : '';
   const plaatsen = bron.plaatsen ? plaatsenIn(tekst) : [];
+  const punten = [item.plek, ...(item.punten || [])].filter((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lon));
   const uit = [];
   for (const r of k.regios) {
     if (!geldtVoor(r, bron.id)) continue;
@@ -117,7 +118,6 @@ function routeerOpPlek(k, item, bron) {
     const gevonden = [];
     // De plek, of een van de punten: het traject van een file, de stations van
     // een treinstoring. Het dichtstbijzijnde punt telt.
-    const punten = [item.plek, ...(item.punten || [])].filter((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lon));
     if (bron.geo && punten.length) {
       const [km, p] = punten.map((x) => [afstandKm(x, g), x]).reduce((a, b) => (b[0] < a[0] ? b : a));
       const naam = p.naam || 'deze plek';
@@ -137,6 +137,11 @@ function routeerOpPlek(k, item, bron) {
     const hier = plaatsen.filter((p) => p.gemeenten.includes(g.naam)).map((p) => p.plaats);
     if (hier.length) gevonden.push(...vindTermen(tekst, hier));
     if (gevonden.length) uit.push({ regio: r.id, gevonden: gevonden.map((g) => ({ ...g, plek: true })) });
+  }
+  // Een inzending zonder plek of plaatsnaam: naar alle regio's, zoals in de checker.
+  if (bron.overalZonderPlek && !uit.length && !punten.length && !plaatsen.length) {
+    const fragment = { tekst: 'De inzending noemt geen plaats en heeft geen locatie, en staat daarom bij alle regio\'s.', treffer: '' };
+    return k.regios.filter((r) => geldtVoor(r, bron.id)).map((r) => ({ regio: r.id, gevonden: [{ term: 'plaats onbekend', aantal: 1, fragment, plek: true }] }));
   }
   return uit;
 }
@@ -275,7 +280,7 @@ function regioRegels(k, volg, { sinds, tot = null, vanaf = sinds.slice(0, 10) })
     if (!bron) continue;
     if (bron.bereik === 'landelijk') {
       for (const r of routeerItem(k, item, bron)) {
-        if (volg.has(r.regio)) voegToe(lijst, itemRegel(item, [r.regio], { term: r.gevonden[0].term, regio: r.regio }));
+        if (volg.has(r.regio)) voegToe(lijst, itemRegel(item, [r.regio], { term: r.gevonden[0].term, regio: r.regio, ...(r.gevonden[0].plek ? { plek: true } : {}) }));
       }
     } else if (volg.has(item.regio)) {
       voegToe(lijst, itemRegel(item, [item.regio], null));
@@ -500,10 +505,14 @@ function itemDetail(k, gebruiker, sleutel) {
       meta('Advies', item.advies),
       meta('Datum stuk', item.datum),
       meta('Vestiging', item.vestiging && vestigingTekst(item.vestiging)),
+      // Een inzending via Telegram: hoe de redactie de inzender bereikt.
+      meta('Telefoon', item.inzender?.telefoon),
+      meta('Telegram', item.inzender?.username && `@${item.inzender.username}`),
       meta('Eerst gezien', item.eersteGezien),
       meta('Regio', regios.map((r) => k.regioMap.get(r)?.naam || r).join(', ')),
     ].filter(Boolean),
     document,
+    media: (item.media || []).map((m) => ({ soort: m.soort, url: `/api/ingezonden/${m.pad}` })),
     documentOphalen: !opgehaald && !item.verdwenen && bron.inhoud !== false && Boolean(k.fdb),
     verdwenen: item.verdwenen || null,
     // Bij een gemeentelijk stuk tellen alleen de termen van de meldingen; bij een

@@ -33,6 +33,7 @@ export const ENKELVOUD = {
   ransomware: 'Ransomware',
   file: 'File',
   treinstoring: 'Treinstoring',
+  ingezonden: 'Inzending',
 };
 
 export const GROEPEN = {
@@ -45,6 +46,7 @@ export const GROEPEN = {
   rvs: 'Raad van State',
   ransomware: 'Ransomware',
   verkeer: 'Verkeer',
+  ingezonden: 'Ingezonden',
 };
 
 export const AUDIOSOORTEN = ['raadsvergadering', 'youtube', 'podcast'];

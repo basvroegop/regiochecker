@@ -65,6 +65,14 @@ export const SIGNAALBRONNEN = [
     soort: 'treinstoring', bereik: 'landelijk', type: 'ns-storingen', url: 'https://gateway.apiportal.ns.nl/reisinformatie-api/api/v3/disruptions',
     sleutel: 'NS_API_KEY', geo: true, straalKm: 0, alleenInRegio: true, inhoud: false, leegKan: true, bijwerken: true, intervalMinuten: 5, inMail: false, bewaarDagen: 90, ingebouwd: true,
   },
+  // Tipgevers via Telegram (src/telegram.mjs, de DVHN-bot uit de checker). Niet
+  // op te halen: de bot haalt de berichten zelf binnen. Een inzending zonder
+  // plaats gaat naar alle regio's (`overalZonderPlek`).
+  {
+    id: 'telegram', naam: 'Telegram · Ingezonden', label: 'Foto\'s en berichten van tipgevers via de Telegram-bot · na goedkeuring',
+    soort: 'ingezonden', bereik: 'landelijk', type: 'telegram', url: null,
+    geo: true, straalKm: 0, plaatsen: true, overalZonderPlek: true, inhoud: false, leegKan: true, inMail: false, bewaarDagen: 730, ingebouwd: true,
+  },
 ];
 
 export const isAudioBron = (b) => AUDIOSOORTEN.includes(b?.soort);

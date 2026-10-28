@@ -69,6 +69,7 @@ const BESTANDEN = {
   samenvattingen: {},
   meldingen: [],
   kanalen: [],
+  telegram: { offset: 0, chats: {}, afzenders: {}, vooraf: [] },
 };
 
 export class Opslag {

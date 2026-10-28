@@ -28,7 +28,7 @@ import { routeerAflevering } from '../feed.mjs';
 
 const ID = /^[0-9a-f]{32}$/;
 
-async function stuurBestand(req, res, pad, type) {
+export async function stuurBestand(req, res, pad, type) {
   const { size } = await stat(pad);
   const bereik = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
   let begin = 0;

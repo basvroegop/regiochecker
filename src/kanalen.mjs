@@ -105,6 +105,12 @@ const kort = (t, n) => {
   return s.length > n ? `${s.slice(0, n - 1).replace(/\s+\S*$/, '')}…` : s;
 };
 
+const mediaTelling = (media) => {
+  const fotos = media.filter((m) => m.soort === 'foto').length;
+  const videos = media.length - fotos;
+  return [fotos && `${fotos} foto${fotos === 1 ? '' : "'s"}`, videos && `${videos} video${videos === 1 ? '' : "'s"}`].filter(Boolean).join(' en ');
+};
+
 // De kern van een regel: waar het over gaat, en waar het staat.
 function inhoudVan(k, regel) {
   const [soort, ...rest] = regel.id.split(':');
@@ -116,7 +122,12 @@ function inhoudVan(k, regel) {
       url: item.url,
       tekst: item.tekst,
       feiten: [
-        item.afzender && ['Afzender', item.afzender],
+        item.afzender && [item.inzender ? 'Inzender' : 'Afzender', item.afzender],
+        // Een inzending: hoe de redactie de inzender bereikt, en wat er bij zit.
+        // De foto's zelf staan achter de inlog; Teams kan ze niet ophalen.
+        item.inzender?.telefoon && ['Telefoon', item.inzender.telefoon],
+        item.inzender?.username && ['Telegram', `@${item.inzender.username}`],
+        item.media?.length && ['Bij de inzending', mediaTelling(item.media)],
         v && ['Vestiging', `${v.plaats || v.gemeente}${v.plaats && v.plaats !== v.gemeente ? ` (gemeente ${v.gemeente})` : ''}`],
       ],
     };
@@ -156,7 +167,9 @@ export function stukKaart(k, regel) {
   if (tekst) lichaam.push({ type: 'TextBlock', text: kort(tekst, 500), wrap: true });
   const rijen = [
     regel.datum && ['Datum', korteDatum(regel.datum)],
-    regel.match?.term && regel.match.regio && !feiten.some((f) => f?.[0] === 'Vestiging') && ['Gevonden', regel.match.term],
+    // Waarom bij deze regio: de plek (een aardbeving, een file) of een sleutelwoord.
+    regel.match?.term && regel.match.regio && !regel.match.plek && ['Gevonden', regel.match.term],
+    regel.match?.plek && regel.match.term !== 'plaats onbekend' && !feiten.some((f) => f?.[0] === 'Vestiging') && ['Waar', regel.match.term],
     ...feiten,
     bron?.naam && ['Bron', bron.naam],
   ].filter(Boolean);
