@@ -19,7 +19,8 @@ import { bronStatus } from '../src/beheer.mjs';
 import { alleBronnen } from '../src/register.mjs';
 import { roep } from './api-hulp.mjs';
 
-const TOKEN = '123456789:AAEhBP0av28HtRnXzmBVcT1NoLrGuF5_xyz';
+// Bewust geen echt ogend token (123:ABC…): dat ziet GitHub aan voor een gelekt geheim.
+const TOKEN = 'nep-bottoken-voor-tests';
 const FOTO = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
 
 function nepTelegram({ webhook = '' } = {}) {
@@ -82,7 +83,7 @@ test('Telegram: goedkeuren, foto\'s en albums, de regio, en de foto\'s achter de
     // Beheer: de chat goedkeuren.
     let r = await roep(ctx, jan, 'GET', '/api/beheer/telegram');
     assert.deepEqual([r.data.token, r.data.chats.map((c) => [c.id, c.status, c.naam])], [true, [['501', 'wacht', 'Jan de Vries']]]);
-    assert.ok(!JSON.stringify(r.data).includes(TOKEN.split(':')[1]), 'het token gaat niet naar de browser');
+    assert.ok(!JSON.stringify(r.data).includes(TOKEN), 'het token gaat niet naar de browser');
     r = await roep(ctx, jan, 'PUT', '/api/beheer/telegram/chats/501', { status: 'goedgekeurd' });
     assert.equal(r.data.chats[0].status, 'goedgekeurd');
 
