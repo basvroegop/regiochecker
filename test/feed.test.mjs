@@ -55,7 +55,7 @@ async function opzet() {
   ]) opslag.items[i.sleutel] = i;
 
   // Kamerstukken: één met Drachten, één met Thialf (maar Heerenveen heeft de Kamer uitgezet).
-  for (const [id, tekst] of [['1', 'De huisartsenpost in Drachten sluit ’s nachts.'], ['2', 'Thialf blijft het nationale schaatscentrum.']]) {
+  for (const [id, tekst] of [['1', 'De huisartsenpost in Drachten sluit ’s nachts.'], ['2', 'Thialf blijft het nationale schaatscentrum.'], ['3', 'Over de drachten van een kledingstuk.']]) {
     kdb.bewaarStuk({ id: `doc${id}`, nummer: `2026D${id}`, soort: 'Schriftelijke vragen', titel: 'Vragen', onderwerp: `Vragen ${id}`, datum: lokaleDatum(), vergaderjaar: '2026-2027', dossier: null, dossiertitel: null, zaak: `2026Z${id}`, afzender: 'Lid Van der Meer', contenttype: 'application/pdf', gewijzigd: 'x' });
     kdb.bewaarTekst(kdb.db.prepare('SELECT nr FROM stukken WHERE id = ?').get(`doc${id}`).nr, tekst);
   }
@@ -130,6 +130,10 @@ test('leespaneel: waarom staat het erin, sprekers, speler; gelezen, bewaard en n
   assert.equal(k.openenBij, 'Tweede Kamer');
   assert.equal(k.url, 'https://www.tweedekamer.nl/kamerstukken/detail?id=2026Z1&did=2026D1');
   assert.deepEqual(k.treffers.map((t) => [t.term, t.aantal, t.regio || t.melding, t.fragment.treffer]), [['Drachten', 1, 'smallingerland', 'Drachten'], ['huisartsenpost', 1, 'm1', 'huisartsenpost']]);
+  // "drachten" met een kleine letter is geen Drachten: geen reden, geen regio.
+  const k3 = detail(ctx, sanne, 'k:doc3');
+  assert.deepEqual([k3.treffers, k3.regios], [[], []]);
+  assert.ok(!bouwFeed(ctx, sanne).items.some((i) => i.id === 'k:doc3'));
   assert.ok(k.meta.some((m) => m.k === 'Regio' && m.v === 'Smallingerland'));
   assert.ok(k.document.blokken.length && k.document.blokken.every(([soort, tekst]) => ['k', 'p', 'l'].includes(soort) && tekst), 'het kamerstuk als blokken');
   assert.equal(k.document.volledig, true);

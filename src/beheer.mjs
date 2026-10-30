@@ -134,7 +134,7 @@ function bronVoorClient(k, bron, nieuw) {
 function telTerm(k, term, regio, dagen = 30) {
   const grens = geleden(dagen);
   let n = 0;
-  if (k.kdb && (!regio || geldtVoor(regio, TWEEDE_KAMER.id))) n += k.kdb.telStukken([term], grens.slice(0, 10));
+  if (k.kdb && (!regio || geldtVoor(regio, TWEEDE_KAMER.id))) n += k.kdb.telStukken([term], grens.slice(0, 10), { hoofdletters: true });
   for (const item of Object.values(k.opslag.items)) {
     if (item.regio || item.basislijn || item.eersteGezien <= grens) continue;
     const bron = k.bronnen.get(item.bron);
@@ -199,7 +199,7 @@ function regioDetail(k, id) {
     }
   }
   if (k.kdb && geldtVoor(r, TWEEDE_KAMER.id) && actieveTermen(r).length) {
-    stukken += k.kdb.feedTreffers(actieveTermen(r), { sinds: grens7, minDatum: grens7.slice(0, 10), max: 1000 }).length;
+    stukken += k.kdb.feedTreffers(actieveTermen(r), { sinds: grens7, minDatum: grens7.slice(0, 10), max: 1000, hoofdletters: true }).length;
   }
   const volgers = k.opslag.gebruikers.filter((g) => g.regios.includes(id));
   return {

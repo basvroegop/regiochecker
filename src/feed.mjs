@@ -157,9 +157,11 @@ const zoekInItem = (k, item, termen) => onthoud(`zi|${item.sleutel}|${tekstVersi
 const zoekInAflevering = (a, termen) => onthoud(`za|${a.id}|${a.bijgewerkt}|${termen.join('\u0000')}`,
   () => vindInSegmenten(a.segmenten, termen));
 
+// `hoofdletters`: de termen zijn sleutelwoorden van regio's; die zijn in
+// kamerstukken hoofdlettergevoelig ("Assen" vindt niet "assen", zie src/termen.mjs).
 function kamerTreffers(k, termen, opties) {
   if (!k.kdb || !termen.length) return [];
-  const sleutel = `kt|${termen.join('\u0000')}|${opties.ookTermen?.join('\u0000') || ''}|${opties.sinds}|${opties.tot || ''}|${k.kamerVersie}`;
+  const sleutel = `kt|${opties.hoofdletters ? 'H' : ''}|${termen.join('\u0000')}|${opties.ookTermen?.join('\u0000') || ''}|${opties.sinds}|${opties.tot || ''}|${k.kamerVersie}`;
   return onthoud(sleutel, () => k.kdb.feedTreffers(termen, { ...opties, tot: opties.tot || '9999' }));
 }
 
@@ -241,7 +243,7 @@ export function meldingTreffers(k, gebruiker, melding, { sinds, tot }) {
     }
     if (!scope || ookTermen.length) {
       const kt = alles
-        ? kamerTreffers(k, ookTermen, { sinds, tot, minDatum: minDatum(sinds) })
+        ? kamerTreffers(k, ookTermen, { sinds, tot, minDatum: minDatum(sinds), hoofdletters: true })
         : kamerTreffers(k, termen, { sinds, tot, minDatum: minDatum(sinds), ookTermen });
       for (const t of kt) {
         uit.push({ ...kamerRegel(t.stuk, [], match(t.term)), gevonden: [{ term: t.term, fragment: t.fragment }], url: stukUrl(t.stuk), stuk: t.stuk });
@@ -300,7 +302,7 @@ function regioRegels(k, volg, { sinds, tot = null, vanaf = sinds.slice(0, 10) })
   for (const id of volg) {
     const regio = k.regioMap.get(id);
     if (!geldtVoor(regio, TWEEDE_KAMER.id)) continue;
-    for (const t of kamerTreffers(k, actieveTermen(regio), { sinds: grens, tot, minDatum: vanaf })) {
+    for (const t of kamerTreffers(k, actieveTermen(regio), { sinds: grens, tot, minDatum: vanaf, hoofdletters: true })) {
       voegToe(lijst, kamerRegel(t.stuk, [id], { term: t.term, regio: id }));
     }
   }
@@ -474,12 +476,14 @@ const meta = (k, v) => (v ? { k, v } : null);
 // van de meldingen van deze gebruiker.
 // `route`: voor een landelijk stuk de uitkomst van routeerItem (sleutelwoorden
 // en plek samen); anders zoeken met de sleutelwoorden van elke regio.
-function redenen(k, gebruiker, zoek, { bronId, regioIds, route = null }) {
+// `zoekRegio`: anders zoeken naar de sleutelwoorden van de regio's dan naar
+// de termen van meldingen (bij kamerstukken: met hoofdletters).
+function redenen(k, gebruiker, zoek, { bronId, regioIds, route = null, zoekRegio = zoek }) {
   const uit = [];
   for (const id of regioIds) {
     const regio = k.regioMap.get(id);
     if (!regio || (bronId && !geldtVoor(regio, bronId))) continue;
-    const gevonden = route ? route.find((r) => r.regio === id)?.gevonden || [] : zoek(actieveTermen(regio));
+    const gevonden = route ? route.find((r) => r.regio === id)?.gevonden || [] : zoekRegio(actieveTermen(regio));
     for (const g of gevonden) uit.push({ ...g, regio: id, regioNaam: regio.naam });
   }
   for (const m of k.opslag.meldingen.filter((x) => x.gebruiker === gebruiker.id && x.actief !== false)) {
@@ -551,7 +555,9 @@ function kamerDetail(k, gebruiker, id) {
   if (!stuk) return null;
   const tekst = k.kdb.tekst(stuk.nr);
   const volledig = `${stuk.titel || ''}\n${stuk.onderwerp || ''}\n${tekst}`;
-  const treffers = redenen(k, gebruiker, (termen) => vindTermen(volledig, termen), { bronId: TWEEDE_KAMER.id, regioIds: gebruiker.regios });
+  const treffers = redenen(k, gebruiker, (termen) => vindTermen(volledig, termen), {
+    bronId: TWEEDE_KAMER.id, regioIds: gebruiker.regios, zoekRegio: (termen) => vindTermen(volledig, termen, { hoofdletters: true }),
+  });
   return {
     id: `k:${id}`,
     soort: 'kamerstuk',

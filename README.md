@@ -232,7 +232,26 @@ Elke bron heeft een **bereik**: één regio (alles gaat naar die regio) of
 landelijk (een stuk gaat naar elke regio waarvan een **sleutelwoord** erin
 voorkomt). Sleutelwoorden stel je per regio in (Beheer › Regio's): plaatsen,
 dorpen, wijken, gebouwen. Hoofdletters en accenten tellen niet, alleen hele
-woorden; een woordgroep moet als geheel voorkomen. Per sleutelwoord zie je hoeveel
+woorden; een woordgroep moet als geheel voorkomen.
+
+**Uitzondering: Kamerstukken** (sinds 30 oktober 2026). Daar moet elke
+hoofdletter van het sleutelwoord ook in de tekst een hoofdletter zijn: "Assen"
+vindt de stad (ook ASSEN in een kop), niet "de assen van een vrachtwagen".
+- Kleine letters mogen allebei: "in Witteveen" vindt ook "In Witteveen" aan het
+  begin van een zin. Een sleutelwoord in kleine letters blijft dus ongevoelig.
+- Een lidwoord vooraan telt niet mee ("het Hogeland" is Het Hogeland), en een
+  webadres ook niet: `dvhn.nl/regio/groningen/…` in Kamervragen gaat over
+  Groningen.
+- Het geldt in de feed, de weekmail, een melding beperkt tot regio's, het blok
+  "Waarom staat dit in je feed?" en de tellingen in Beheer › Regio's.
+- Zoektermen van meldingen en de zoekbalk blijven ongevoelig voor hoofdletters.
+- Effect over de 30 dagen ervoor: Assen ging van 37 naar 19 Kamerstukken, Aa en
+  Hunze van 17 naar 8 ("gieten", "amen"); in totaal 756 → 725.
+- SQLite (FTS5) kent geen hoofdletters. Daarom controleren we eerst het fragment
+  dat SQLite markeert, en lezen we pas de hele tekst als dat niet klopt (zie
+  `src/termen.mjs` en `src/kamer/db.mjs`).
+
+Per sleutelwoord zie je hoeveel
 stukken uit landelijke bronnen het de afgelopen 30 dagen opleverde ("Veel ruis"
 bij 25 of meer). Per regio kun je een landelijke bron uitzetten ("Geldt voor").
 

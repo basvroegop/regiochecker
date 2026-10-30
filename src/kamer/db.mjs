@@ -10,7 +10,7 @@
 // Tabel stuk_fts:  titel, onderwerp en tekst; rowid = stukken.nr.
 // Tabel staat:     sleutel/waarde, onder meer het synchronisatiepunt.
 
-import { ftsVoorTermen, vindTermen, normaliseer, schoneTermen } from '../termen.mjs';
+import { ftsVoorTermen, vindTermen, normaliseer, schoneTermen, hoofdlettersKloppen } from '../termen.mjs';
 
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS stukken (
@@ -190,7 +190,8 @@ class KamerDb {
   // per stuk de gevonden termen en een fragment. `minDatum` houdt stukken buiten
   // die we pas laat binnenhaalden maar al oud zijn (de eerste keer inhalen).
   // Passen er meer dan `max`, dan staat in `.meer` hoeveel er (ongeveer) nog zijn.
-  treffers(termen, { sinds, tot = new Date().toISOString(), minDatum, max = 100 }) {
+  // `hoofdletters`: sleutelwoorden van regio's, zie vindTermen in src/termen.mjs.
+  treffers(termen, { sinds, tot = new Date().toISOString(), minDatum, max = 100, hoofdletters = false }) {
     const fts = ftsVoorTermen(termen);
     if (!fts) return [];
     const rijen = this.db.prepare(`SELECT s.* FROM stuk_fts JOIN stukken s ON s.nr = stuk_fts.rowid
@@ -199,7 +200,7 @@ class KamerDb {
     const uit = [];
     for (const stuk of rijen) {
       // FTS vindt kandidaten; de exacte controle (hele woorden) doen we hier.
-      const gevonden = vindTermen(`${stuk.titel || ''}\n${stuk.onderwerp || ''}\n${this.tekst(stuk.nr)}`, termen);
+      const gevonden = vindTermen(`${stuk.titel || ''}\n${stuk.onderwerp || ''}\n${this.tekst(stuk.nr)}`, termen, { hoofdletters });
       if (gevonden.length) uit.push({ stuk, gevonden });
     }
     uit.meer = rijen.length < max ? 0 : Math.max(0, this.#tel(fts, sinds, tot, minDatum) - rijen.length);
@@ -234,7 +235,9 @@ class KamerDb {
   // treffers(): SQLite maakt het fragment, wij lezen de hele tekst niet.
   // `ookTermen`: het stuk moet daarnaast ook een van die termen bevatten (een
   // melding beperkt tot de sleutelwoorden van bepaalde regio's).
-  feedTreffers(termen, { sinds, tot = '9999', minDatum, max = 300, ookTermen = null }) {
+  // `hoofdletters`: `termen` zijn sleutelwoorden van regio's ("Assen" vindt niet
+  // "assen"; zie vindTermen in src/termen.mjs). `ookTermen` zijn dat altijd.
+  feedTreffers(termen, { sinds, tot = '9999', minDatum, max = 300, ookTermen = null, hoofdletters = false }) {
     let fts = ftsVoorTermen(termen);
     if (!fts) return [];
     if (ookTermen) {
@@ -242,12 +245,17 @@ class KamerDb {
       if (!ook) return [];
       fts = `(${fts}) AND (${ook})`;
     }
+    // FTS kent geen hoofdletters: na de controle valt een deel van de
+    // kandidaten af, dus ruimer ophalen.
+    const controle = hoofdletters || Boolean(ookTermen);
+    const limiet = controle ? max * 3 : max;
     const rijen = this.db.prepare(`SELECT s.*, snippet(stuk_fts, -1, '${MARK_BEGIN}', '${MARK_EIND}', '…', 24) fragment
       FROM stuk_fts JOIN stukken s ON s.nr = stuk_fts.rowid
       WHERE stuk_fts MATCH ? AND s.binnen > ? AND s.binnen <= ? AND s.datum >= ?
-      ORDER BY s.datum DESC, s.nr DESC LIMIT ?`).all(fts, sinds, tot, minDatum || '0000', max);
+      ORDER BY s.datum DESC, s.nr DESC LIMIT ?`).all(fts, sinds, tot, minDatum || '0000', limiet);
     const genormaliseerd = termen.map((t) => [t, normaliseer(t).split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(' ')]);
-    const uit = rijen.map((stuk) => {
+    let uit = [];
+    for (const stuk of rijen) {
       const begin = stuk.fragment.indexOf(MARK_BEGIN);
       const eind = stuk.fragment.indexOf(MARK_EIND, begin);
       const gemarkeerd = begin >= 0 && eind > begin ? stuk.fragment.slice(begin + 1, eind) : '';
@@ -256,17 +264,47 @@ class KamerDb {
         || genormaliseerd.find(([, n]) => sleutel && (n.startsWith(sleutel) || sleutel.startsWith(n)))?.[0]
         || termen[0];
       const tekst = stuk.fragment.replaceAll(MARK_BEGIN, '').replaceAll(MARK_EIND, '').replace(/\s+/g, ' ').trim();
-      return { stuk, term, fragment: { tekst, treffer: gemarkeerd } };
-    });
-    uit.meer = rijen.length < max ? 0 : Math.max(0, this.#tel(fts, sinds, tot, minDatum) - rijen.length);
+      let treffer = { stuk, term, fragment: { tekst, treffer: gemarkeerd } };
+      if (controle) {
+        // Eerst het fragment van SQLite; pas als dat niet klopt de hele tekst.
+        let volledig = null;
+        const geheel = () => (volledig ??= `${stuk.titel || ''}\n${stuk.onderwerp || ''}\n${this.tekst(stuk.nr)}`);
+        if (hoofdletters && !hoofdlettersKloppen(term, gemarkeerd)) {
+          const g = vindTermen(geheel(), termen, { hoofdletters: true });
+          if (!g.length) continue;
+          treffer = { stuk, term: g[0].term, fragment: g[0].fragment };
+        }
+        if (ookTermen && !vindTermen(geheel(), ookTermen, { hoofdletters: true }).length) continue;
+      }
+      uit.push(treffer);
+    }
+    // Meer dan er in één keer passen: hoeveel nog. Haalden we de limiet, dan
+    // is het een bovengrens (FTS telt ook kandidaten die de controle niet halen).
+    const rest = rijen.length < limiet ? 0 : Math.max(0, this.#tel(fts, sinds, tot, minDatum) - rijen.length);
+    const meer = Math.max(0, uit.length - max) + rest;
+    uit = uit.slice(0, max);
+    uit.meer = meer;
     return uit;
   }
 
-  // Hoeveel stukken (op datum van het stuk, sinds `vanaf`) bevatten een van de termen?
-  telStukken(termen, vanaf) {
-    const fts = ftsVoorTermen(schoneTermen(termen));
+  // Hoeveel stukken (op datum van het stuk, sinds `vanaf`) bevatten een van de
+  // termen? Met `hoofdletters` zoals bij feedTreffers.
+  telStukken(termen, vanaf, { hoofdletters = false } = {}) {
+    const schoon = schoneTermen(termen);
+    const fts = ftsVoorTermen(schoon);
     if (!fts) return 0;
-    return this.db.prepare('SELECT count(*) n FROM stuk_fts JOIN stukken s ON s.nr = stuk_fts.rowid WHERE stuk_fts MATCH ? AND s.datum >= ?').get(fts, vanaf).n;
+    if (!hoofdletters) return this.db.prepare('SELECT count(*) n FROM stuk_fts JOIN stukken s ON s.nr = stuk_fts.rowid WHERE stuk_fts MATCH ? AND s.datum >= ?').get(fts, vanaf).n;
+    let n = 0;
+    for (const r of this.db.prepare(`SELECT s.nr, s.titel, s.onderwerp, snippet(stuk_fts, -1, '${MARK_BEGIN}', '${MARK_EIND}', '…', 8) fragment
+      FROM stuk_fts JOIN stukken s ON s.nr = stuk_fts.rowid WHERE stuk_fts MATCH ? AND s.datum >= ?`).all(fts, vanaf)) {
+      const begin = r.fragment.indexOf(MARK_BEGIN);
+      const eind = r.fragment.indexOf(MARK_EIND, begin);
+      const gemarkeerd = begin >= 0 && eind > begin ? r.fragment.slice(begin + 1, eind) : '';
+      const sleutel = normaliseer(gemarkeerd).split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(' ');
+      if (schoon.some((t) => normaliseer(t).split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(' ') === sleutel && hoofdlettersKloppen(t, gemarkeerd))
+        || vindTermen(`${r.titel || ''}\n${r.onderwerp || ''}\n${this.tekst(r.nr)}`, schoon, { hoofdletters: true }).length) n++;
+    }
+    return n;
   }
 
   // Hoe vaak komt elke term voor in stukken van de afgelopen `dagen`? Voor de

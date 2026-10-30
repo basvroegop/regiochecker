@@ -5,6 +5,13 @@
 // ("De Peinder Mieden") moet als geheel voorkomen; aanhalingstekens mogen,
 // maar zijn niet nodig.
 //
+// Uitzondering: met `hoofdletters` moet elke hoofdletter van de term ook in de
+// tekst een hoofdletter zijn. Zo vindt het sleutelwoord "Assen" in kamerstukken
+// de stad (ook ASSEN in een kop), maar niet "assen" van een auto. Kleine
+// letters mogen allebei: "in Witteveen" vindt ook "In Witteveen" aan het begin
+// van een zin. Een lidwoord ("Het Hogeland"), accenten en een webadres
+// (dvhn.nl/regio/groningen/…) tellen ook dan niet.
+//
 // Bij kamerstukken zoekt SQLite (FTS5) eerst de kandidaten; daarna controleren
 // we hier per stuk met een reguliere expressie en halen we de zin rond de
 // treffer op. Bij transcripten (audio) zoeken we per segment, met de tijd.
@@ -77,15 +84,43 @@ function fragment(tekst, positie, lengte, ruimte = 160) {
   };
 }
 
+const LETTER = /[\p{L}\p{N}]/u;
+const letters = (tekst) => [...tekst].filter((t) => LETTER.test(t));
+const isHoofdletter = (t) => t !== t.toLowerCase();
+
+// Een lidwoord vooraan een naam schrijft niet iedereen met een hoofdletter
+// ("de gemeente het Hogeland"): daar telt de hoofdletter niet.
+const LIDWOORDEN = new Set(['de', 'het', 'den', 'der']);
+
+// Staat er een hoofdletter in de tekst waar de term er een heeft? `gevonden`
+// is het stuk tekst dat het patroon van de term vond (of het fragment dat
+// SQLite markeerde); de letters lopen dan één op één gelijk.
+export function hoofdlettersKloppen(term, gevonden) {
+  const a = [...String(term).matchAll(/[\p{L}\p{N}]+/gu)]
+    .flatMap(([woord]) => [...(LIDWOORDEN.has(woord.toLowerCase()) ? woord.toLowerCase() : woord)]);
+  const b = letters(String(gevonden || ''));
+  return a.length === b.length && a.every((t, i) => !isHoofdletter(t) || isHoofdletter(b[i]));
+}
+
+// Een webadres heeft geen hoofdletters: dvhn.nl/regio/groningen/… in
+// Kamervragen gaat wel over Groningen. Dan telt de hoofdletter niet.
+function inLink(tekst, positie) {
+  let begin = positie;
+  while (begin > 0 && !/\s/.test(tekst[begin - 1])) begin--;
+  return /:\/\/|www\./i.test(tekst.slice(begin, positie));
+}
+
 // Welke van de termen komen in de tekst voor? Per term het eerste fragment en
 // het aantal keer dat hij voorkomt.
-export function vindTermen(tekst, termen) {
+export function vindTermen(tekst, termen, { hoofdletters = false } = {}) {
   const norm = normaliseer(tekst);
   const treffers = [];
   for (const term of termen) {
     const re = patroon(term);
     if (!re) continue;
-    const gevonden = [...norm.matchAll(re)];
+    let gevonden = [...norm.matchAll(re)];
+    // normaliseer() houdt de lengte gelijk: dezelfde plek in het origineel.
+    if (hoofdletters) gevonden = gevonden.filter((m) => hoofdlettersKloppen(term, tekst.slice(m.index, m.index + m[0].length)) || inLink(tekst, m.index));
     if (!gevonden.length) continue;
     treffers.push({ term, aantal: gevonden.length, fragment: fragment(tekst, gevonden[0].index, gevonden[0][0].length) });
   }

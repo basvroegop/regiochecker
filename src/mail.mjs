@@ -267,7 +267,7 @@ export async function stelMailSamen(opslag, gebruiker, opties = {}) {
     // Kamerstukken met de sleutelwoorden van deze regio (opslag.kamer: de
     // database, als die draait; zonder database of sleutelwoorden geen kopje).
     const kamerTermen = opslag.kamer && geldtVoor(regio, TWEEDE_KAMER.id) ? actieveTermen(regio) : [];
-    const kamerstukken = kamerTermen.length ? opslag.kamer.treffers(kamerTermen, { sinds, tot, minDatum: minDatum(sinds) }) : [];
+    const kamerstukken = kamerTermen.length ? opslag.kamer.treffers(kamerTermen, { sinds, tot, minDatum: minDatum(sinds), hoofdletters: true }) : [];
     const blok = {
       regio, items, kamerTermen, kamerstukken,
       landelijk: landelijkVoor(k, regio, sinds, tot),

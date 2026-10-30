@@ -81,6 +81,51 @@ test('database: zoeken zonder accenten, fragmenten, termen alleen als heel woord
   kdb.sluit();
 });
 
+test('sleutelwoorden van regio\'s zijn in kamerstukken hoofdlettergevoelig, termen van meldingen niet', metSqlite, async () => {
+  const { openKamerDb } = await import('../src/kamer/db.mjs');
+  const { vindTermen, hoofdlettersKloppen } = await import('../src/termen.mjs');
+  const kdb = await openKamerDb(path.join(tijdelijk(), 'k.sqlite'));
+  const binnen = new Date('2026-10-21T10:00:00Z');
+  for (const [id, tekst] of [
+    ['1', 'De assen van vrachtwagens slijten sneller dan gedacht.'],
+    // Eerst de kleine letters: het fragment van SQLite toont dan "assen", de hele tekst ook Assen.
+    ['2', 'De assen van de trein zijn vervangen. ' + 'Verder niets. '.repeat(60) + 'In Assen komt een station voor vrachtwagens.'],
+    ['3', 'ASSEN – De gemeente vraagt om geld.'],
+  ]) {
+    kdb.bewaarStuk(stuk(id));
+    kdb.bewaarTekst(kdb.wachtrij(10, 3).find((x) => x.id === id).nr, tekst, binnen);
+  }
+  const opties = { sinds: '2026-10-21T00:00:00Z', minDatum: '2026-10-01' };
+  const ids = (lijst) => lijst.map((t) => t.stuk.id).sort();
+
+  // Het sleutelwoord Assen: de stad, ook in een kop in hoofdletters, maar niet de assen van een auto.
+  const regio = kdb.feedTreffers(['Assen'], { ...opties, hoofdletters: true });
+  assert.deepEqual(ids(regio), ['2', '3']);
+  assert.equal(regio.find((t) => t.stuk.id === '2').fragment.treffer, 'Assen', 'het fragment toont de juiste plek');
+  assert.deepEqual(ids(kdb.treffers(['Assen'], { ...opties, hoofdletters: true })), ['2', '3']);
+  assert.equal(kdb.treffers(['Assen'], { ...opties, hoofdletters: true }).find((t) => t.stuk.id === '2').gevonden[0].aantal, 1);
+  assert.equal(kdb.telStukken(['Assen'], '2026-10-01', { hoofdletters: true }), 2);
+  // Een zoekterm van een melding blijft ongevoelig voor hoofdletters…
+  assert.deepEqual(ids(kdb.feedTreffers(['Assen'], opties)), ['1', '2', '3']);
+  assert.equal(kdb.telStukken(['Assen'], '2026-10-01'), 3);
+  // …maar beperkt tot de sleutelwoorden van een regio telt de hoofdletter weer.
+  assert.deepEqual(ids(kdb.feedTreffers(['vrachtwagens'], { ...opties, ookTermen: ['Assen'] })), ['2']);
+  // Past het niet in één keer, dan staat erbij hoeveel er nog zijn.
+  const een = kdb.feedTreffers(['Assen'], { ...opties, hoofdletters: true, max: 1 });
+  assert.deepEqual([een.length, een.meer], [1, 1]);
+
+  // De regel zelf: hoofdletters van de term moeten er staan, kleine letters mogen allebei.
+  assert.equal(vindTermen('In Witteveen ligt een weg.', ['in Witteveen'], { hoofdletters: true }).length, 1);
+  assert.equal(vindTermen('in witteveen', ['in Witteveen'], { hoofdletters: true }).length, 0);
+  assert.equal(vindTermen('Súdwest-Fryslân', ['Sudwest-Fryslan'], { hoofdletters: true }).length, 1, 'accenten tellen niet');
+  assert.equal(hoofdlettersKloppen('Assen', 'assen'), false);
+  assert.equal(hoofdlettersKloppen('Het Hogeland', 'het Hogeland'), true, 'een lidwoord mag klein');
+  assert.equal(hoofdlettersKloppen('Het Hogeland', 'het hogeland'), false);
+  assert.equal(vindTermen('Zie https://www.dvhn.nl/regio/groningen/stad/iets', ['Groningen'], { hoofdletters: true }).length, 1, 'in een webadres telt de hoofdletter niet');
+  assert.equal(vindTermen('de provincie groningen', ['Groningen'], { hoofdletters: true }).length, 0);
+  kdb.sluit();
+});
+
 async function nepKamer() {
   const verzoeken = [];
   const docs = [
