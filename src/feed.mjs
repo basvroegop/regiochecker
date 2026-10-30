@@ -208,12 +208,16 @@ function voegToe(lijst, regel) {
 //   bereik:  'overal', 'mijn' (de regio's van de gebruiker) of een regio-id
 //   bronnen: 'alle', 'gemeente' (gemeentelijke en landelijke bronnen),
 //            'kamerstuk' of 'audio'
+// Zonder termen: alles binnen bereik en bronnen, zoals de feed het voor die
+// regio's toont (kamerstukken dus via de sleutelwoorden van de regio). Nooit
+// 'overal' zonder termen: dat is alles wat binnenkomt (controleerMelding).
 export function meldingTreffers(k, gebruiker, melding, { sinds, tot }) {
   const termen = melding.termen || [];
-  if (!termen.length) return [];
   const scope = melding.bereik === 'overal' ? null : new Set(melding.bereik === 'mijn' ? gebruiker.regios : [melding.bereik]);
+  const alles = !termen.length;
+  if (alles && !scope) return [];
   const wil = (groep) => !melding.bronnen || melding.bronnen === 'alle' || melding.bronnen === groep;
-  const match = (term) => ({ term, melding: melding.id });
+  const match = (term) => ({ ...(term ? { term } : {}), melding: melding.id });
   const uit = [];
 
   if (wil('gemeente')) {
@@ -223,8 +227,8 @@ export function meldingTreffers(k, gebruiker, melding, { sinds, tot }) {
       if (!bron) continue;
       const regios = isLandelijk(item, bron) ? routeerItem(k, item, bron).map((r) => r.regio) : [item.regio];
       if (scope && !regios.some((r) => scope.has(r))) continue;
-      const gevonden = zoekInItem(k, item, termen);
-      if (gevonden.length) uit.push({ ...itemRegel(item, scope ? regios.filter((r) => scope.has(r)) : regios, match(gevonden[0].term)), gevonden, url: item.url });
+      const gevonden = alles ? [] : zoekInItem(k, item, termen);
+      if (alles || gevonden.length) uit.push({ ...itemRegel(item, scope ? regios.filter((r) => scope.has(r)) : regios, match(gevonden[0]?.term)), gevonden, url: item.url });
     }
   }
 
@@ -236,7 +240,9 @@ export function meldingTreffers(k, gebruiker, melding, { sinds, tot }) {
         .flatMap(actieveTermen))];
     }
     if (!scope || ookTermen.length) {
-      const kt = kamerTreffers(k, termen, { sinds, tot, minDatum: minDatum(sinds), ookTermen });
+      const kt = alles
+        ? kamerTreffers(k, ookTermen, { sinds, tot, minDatum: minDatum(sinds) })
+        : kamerTreffers(k, termen, { sinds, tot, minDatum: minDatum(sinds), ookTermen });
       for (const t of kt) {
         uit.push({ ...kamerRegel(t.stuk, [], match(t.term)), gevonden: [{ term: t.term, fragment: t.fragment }], url: stukUrl(t.stuk), stuk: t.stuk });
       }
@@ -251,10 +257,10 @@ export function meldingTreffers(k, gebruiker, melding, { sinds, tot }) {
       if (!bron) continue;
       const regios = bron.bereik === 'landelijk' ? routeerAflevering(k, a).map((r) => r.regio) : [bron.regio];
       if (scope && !regios.some((r) => scope.has(r))) continue;
-      const gevonden = zoekInAflevering(a, termen);
-      if (gevonden.length) {
+      const gevonden = alles ? [] : zoekInAflevering(a, termen);
+      if (alles || gevonden.length) {
         uit.push({
-          ...audioRegel(a, scope ? regios.filter((r) => scope.has(r)) : regios, { ...match(gevonden[0].term), tijd: gevonden[0].treffers[0]?.tijd }),
+          ...audioRegel(a, scope ? regios.filter((r) => scope.has(r)) : regios, { ...match(gevonden[0]?.term), tijd: gevonden[0]?.treffers[0]?.tijd }),
           gevonden: gevonden.map((g) => ({ term: g.term, aantal: g.aantal, fragment: g.treffers[0].fragment, tijd: g.treffers[0].tijd })),
           url: a.url,
         });
@@ -319,7 +325,9 @@ function regioRegels(k, volg, { sinds, tot = null, vanaf = sinds.slice(0, 10) })
 // Alle regels voor deze gebruiker vanaf `grens`, zonder filters.
 function verzamel(k, gebruiker, grens) {
   const lijst = regioRegels(k, new Set(gebruiker.regios.filter((id) => k.regioMap.has(id))), { sinds: grens });
-  for (const melding of k.opslag.meldingen.filter((m) => m.gebruiker === gebruiker.id && m.actief !== false)) {
+  // Een melding zonder zoekterm zet niets extra in de feed: dat zou hele regio's
+  // toevoegen, en welke regio's de feed toont, kies je met volgen.
+  for (const melding of k.opslag.meldingen.filter((m) => m.gebruiker === gebruiker.id && m.actief !== false && m.termen?.length)) {
     for (const regel of meldingTreffers(k, gebruiker, melding, { sinds: grens })) {
       const { gevonden, url, stuk, ...rest } = regel;
       voegToe(lijst, rest);

@@ -1,4 +1,6 @@
 // Meldingen (1g): de weekmail en directe meldingen op zoektermen, op één plek.
+// Een directe melding zonder zoekterm geeft alles binnen de gekozen regio('s)
+// en bronnen (src/feed.mjs meldingTreffers).
 
 import { $, esc, vraag, toast, bezig, toonVoorbeeld, moment, DAGEN_KORT } from './gedeeld.js';
 import { app, laadIk } from './app.js';
@@ -44,16 +46,16 @@ function optiesHtml(m = {}) {
 
 function meldingRij(m) {
   return `<div class="meldingrij" data-id="${esc(m.id)}" title="Klik om te wijzigen">
-    <div class="naamcel"><strong>${esc(m.zoekvraag)}</strong><small>${esc(m.bereikNaam)} · ${esc(m.bronnenNaam)}${m.laatsteFout ? ` · laatste mail mislukt: ${esc(m.laatsteFout)}` : ''}</small></div>
+    <div class="naamcel"><strong>${esc(m.naam)}</strong><small>${esc(m.bereikNaam)} · ${esc(m.bronnenNaam)}${m.laatsteFout ? ` · laatste mail mislukt: ${esc(m.laatsteFout)}` : ''}</small></div>
     <span>${m.frequentie === 'dagelijks' ? `Dagelijks ${esc(m.tijd)}` : 'Direct'}</span>
     <span class="klein zacht">${m.aantal30} in 30 dagen</span>
-    <button class="verwijder" data-verwijder="${esc(m.id)}" title="Melding verwijderen" aria-label="Melding ${esc(m.zoekvraag)} verwijderen">×</button>
+    <button class="verwijder" data-verwijder="${esc(m.id)}" title="Melding verwijderen" aria-label="Melding ${esc(m.naam)} verwijderen">×</button>
   </div>`;
 }
 
 function bewerkHtml(m) {
   return `<form class="melding-bewerken" data-bewerk="${esc(m.id)}">
-    <label class="veld"><span>Zoektermen</span><input class="invoer" name="zoekvraag" value="${esc(m.zoekvraag)}"></label>
+    <label class="veld"><span>Zoektermen (optioneel)</span><input class="invoer" name="zoekvraag" value="${esc(m.zoekvraag)}" placeholder="Leeg: alles uit de gekozen regio('s)"></label>
     ${optiesHtml(m)}
     <div class="knoppenrij"><button class="knop inkt klein">Opslaan</button><button type="button" class="knop zacht klein" data-annuleer>Annuleren</button></div>
   </form>`;
@@ -69,14 +71,14 @@ export async function toonMeldingen(hoofd) {
   let bewerken = null;
   hoofd.innerHTML = `<div class="meldingenpagina"><h1>Meldingen</h1><div id="weekmail"></div>
     <div class="meldingsectie">
-      <div><span class="titel">Directe meldingen</span><span class="uitleg">Een mail zodra een nieuw stuk een van je zoektermen bevat: websites van gemeenten, Kamerstukken, raadsvergaderingen. Ook buiten je eigen regio's, als je dat wilt.</span></div>
+      <div><span class="titel">Directe meldingen</span><span class="uitleg">Een mail zodra een nieuw stuk een van je zoektermen bevat: websites van gemeenten, Kamerstukken, raadsvergaderingen. Ook buiten je eigen regio's, als je dat wilt. Zonder zoekterm krijg je alles wat er nieuw binnenkomt uit de gekozen regio('s) en bronnen.</span></div>
       <div class="inhoud" style="gap:0">
         <div id="meldinglijst"></div>
         <form id="nieuwe-melding">
-          <div class="meldinginvoer"><input name="zoekvraag" placeholder='Nieuwe zoekterm, bijv. "stikstof" OR natura2000' aria-label="Nieuwe zoekterm"><button>Melding maken</button></div>
+          <div class="meldinginvoer"><input name="zoekvraag" placeholder='Zoekterm (optioneel), bijv. "stikstof" OR natura2000' aria-label="Zoekterm, optioneel"><button>Melding maken</button></div>
           ${optiesHtml()}
         </form>
-        <p class="uitleg-klein" style="margin-top:12px">Hoofdletters en accenten tellen niet mee, alleen hele woorden. Meer termen scheid je met OR of een komma; een woordgroep zet je tussen aanhalingstekens.</p>
+        <p class="uitleg-klein" style="margin-top:12px">Hoofdletters en accenten tellen niet mee, alleen hele woorden. Meer termen scheid je met OR of een komma; een woordgroep zet je tussen aanhalingstekens. Laat je de zoekterm leeg, kies dan je eigen regio's of één regio: alles van overal zou te veel zijn.</p>
       </div>
     </div></div>`;
 
@@ -129,13 +131,12 @@ export async function toonMeldingen(hoofd) {
     e.preventDefault();
     const form = e.currentTarget;
     const zoekvraag = form.zoekvraag.value.trim();
-    if (!zoekvraag) return;
     await bezig(form.querySelector('button'), async () => {
       const m = await vraag('POST', '/api/meldingen', { zoekvraag, ...leesOpties(form) });
       meldingen.push(m);
       form.zoekvraag.value = '';
       tekenLijst();
-      toast(`Melding gemaakt: ${m.zoekvraag}`);
+      toast(`Melding gemaakt: ${m.naam}`);
     });
   });
   $('#meldinglijst').addEventListener('click', async (e) => {
@@ -143,7 +144,7 @@ export async function toonMeldingen(hoofd) {
     if (weg) {
       e.stopPropagation();
       const m = meldingen.find((x) => x.id === weg.dataset.verwijder);
-      if (!confirm(`Melding "${m.zoekvraag}" verwijderen?`)) return;
+      if (!confirm(`Melding "${m.naam}" verwijderen?`)) return;
       try {
         await vraag('DELETE', `/api/meldingen/${encodeURIComponent(m.id)}`);
         meldingen = meldingen.filter((x) => x.id !== m.id);

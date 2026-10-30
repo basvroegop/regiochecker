@@ -86,6 +86,17 @@ voorkomen, `"woordgroep"` als geheel, `OR` voor alternatieven.
   (mijn regio's, overal, of één regio), welke bronnen (alles, alleen websites,
   alleen Kamerstukken, alleen audio en video) en hoe vaak (direct, of dagelijks
   op een vaste tijd).
+- De zoekterm is optioneel. **Zonder zoekterm** komt alles wat er nieuw
+  binnenkomt binnen die keuze, precies zoals de feed het voor die regio's toont:
+  hun eigen bronnen, landelijke stukken via sleutelwoord of plek, Kamerstukken via
+  de sleutelwoorden van de regio, en audio. De melding heet dan bijvoorbeeld
+  "Alles uit Smallingerland, alleen Kamerstukken", en de mail heeft geen regel
+  "Gevonden".
+- Zonder zoekterm kan **Overal** niet: dat zou alles zijn wat er binnenkomt,
+  waaronder honderden Kamerstukken per week.
+- Zo'n melding zet ook niets extra in de feed. Een melding met zoekterm doet dat
+  wel; zonder zoekterm zou dat hele regio's toevoegen, en welke regio's de feed
+  toont, kies je met volgen.
 
 ## Wat er in de weekmail staat
 

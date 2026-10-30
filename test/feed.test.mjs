@@ -206,7 +206,7 @@ test('meldingen: bereik en bronnen, één mail met alles wat nieuw is, daarna ni
     opslag.instellingen.smtp = { host: '127.0.0.1', port: smtp.poort, secure: false, user: '', pass: '', from: 'rc@example.nl' };
     const regioIds = ['smallingerland', 'opsterland'];
     assert.deepEqual(controleerMelding({ zoekvraag: '"stikstof" OR natura2000, De Peinder Mieden' }, null, { regioIds }).termen, ['stikstof', 'natura2000', 'De Peinder Mieden']);
-    assert.throws(() => controleerMelding({ zoekvraag: '  ' }, null, { regioIds }), /minstens één zoekterm/);
+    assert.throws(() => controleerMelding({ zoekvraag: '  ', bereik: 'overal' }, null, { regioIds }), /overal zonder zoekterm/);
     assert.throws(() => controleerMelding({ zoekvraag: 'x y', bereik: 'nergens' }, null, { regioIds }), /Onbekend bereik/);
 
     // Alleen Sanne's regio's: Opsterland valt af, de rest blijft.
@@ -227,6 +227,52 @@ test('meldingen: bereik en bronnen, één mail met alles wat nieuw is, daarna ni
     assert.match(plat(smtp.ontvangen[1]), /Bakkeveen/);
     assert.equal(sanne.email, 'sanne@lc.nl');
     assert.ok(opslag.logboek.some((l) => l.soort === 'melding' && l.aan === 'sanne@lc.nl'));
+  } finally {
+    smtp.server.close();
+  }
+});
+
+test('meldingen zonder zoekterm: alles binnen regio\'s en bronnen, en niet extra in de feed', metSqlite, async () => {
+  const { verwerkMeldingen, controleerMelding, meldingNaam } = await import('../src/meldingen.mjs');
+  const { meldingTreffers, maakKader, bouwFeed } = await import('../src/feed.mjs');
+  const { ctx, opslag, sanne } = await opzet();
+  const smtp = await nepSmtp();
+  try {
+    opslag.instellingen.smtp = { host: '127.0.0.1', port: smtp.poort, secure: false, user: '', pass: '', from: 'rc@example.nl' };
+    const regioIds = ['smallingerland', 'opsterland', 'heerenveen'];
+    assert.deepEqual(controleerMelding({ zoekvraag: '  ', bereik: 'opsterland' }, null, { regioIds }).termen, []);
+    assert.equal(controleerMelding({ zoekvraag: '' }, null, { regioIds }).bereik, 'mijn');
+    assert.throws(() => controleerMelding({ zoekvraag: '', bereik: 'overal' }, null, { regioIds }), /overal zonder zoekterm/);
+    // Een bestaande melding: de zoekterm weghalen mag, zolang hij niet overal zoekt.
+    assert.throws(() => controleerMelding({ zoekvraag: '' }, { termen: ['x'], bereik: 'overal' }, { regioIds }), /overal zonder zoekterm/);
+    assert.equal(meldingNaam({ termen: [], bereik: 'mijn', bronnen: 'kamerstuk' }), 'Alles uit je regio\'s, alleen Kamerstukken');
+    assert.equal(meldingNaam({ termen: [], bereik: 'opsterland', bronnen: 'alle' }, () => 'Opsterland'), 'Alles uit Opsterland');
+
+    const k = maakKader(ctx);
+    const basis = { id: 'm2', gebruiker: sanne.id, termen: [], bronnen: 'alle', frequentie: 'direct', tijd: '17:00', actief: true };
+    const ids = (m) => meldingTreffers(k, sanne, { ...basis, ...m }, { sinds: uurGeleden(100) }).map((r) => r.id).sort();
+    // Sanne's regio's, zoals de feed ze toont: eigen nieuws, landelijk via
+    // sleutelwoord, het kamerstuk met Drachten (Heerenveen heeft de Kamer uit) en audio.
+    assert.deepEqual(ids({ bereik: 'mijn' }), [`a:${E1}`, `a:${E2}`, 'i:rijk:c', 'i:rijk:d', 'i:smallingerland-nieuws:a', 'k:doc1']);
+    assert.deepEqual(ids({ bereik: 'opsterland', bronnen: 'gemeente' }), ['i:opsterland-nieuws:b']);
+    assert.deepEqual(ids({ bereik: 'smallingerland', bronnen: 'kamerstuk' }), ['k:doc1']);
+    assert.deepEqual(ids({ bereik: 'heerenveen', bronnen: 'kamerstuk' }), []);
+    assert.deepEqual(ids({ bereik: 'smallingerland', bronnen: 'audio' }), [`a:${E1}`, `a:${E2}`]);
+    assert.deepEqual(ids({ bereik: 'overal' }), [], 'een oude melding zonder termen en overal: niets');
+
+    // De mail: alles uit Opsterland, zonder "Gevonden".
+    opslag.meldingen[0].actief = false;
+    opslag.meldingen.push({ ...basis, bereik: 'opsterland', aangemaakt: uurGeleden(100), laatsteMelding: null });
+    assert.deepEqual((await verwerkMeldingen(ctx)).filter((r) => r.verstuurd).map((r) => [r.id, r.aantal]), [['m2', 1]]);
+    const mail = plat(smtp.ontvangen[0]);
+    assert.match(mail, /Subject: Melding: 1 nieuw stuk uit Opsterland/);
+    assert.match(mail, /Alles uit Opsterland/);
+    assert.match(mail, /Bakkeveen: omleiding/);
+    assert.doesNotMatch(mail, /Gevonden:/);
+    assert.match(mail, /voor alles wat er nieuw binnenkomt uit Opsterland/);
+
+    // Sanne volgt Opsterland niet: de melding zet het niet in haar feed.
+    assert.ok(!bouwFeed(ctx, sanne).items.some((i) => i.id === 'i:opsterland-nieuws:b'));
   } finally {
     smtp.server.close();
   }

@@ -21,7 +21,7 @@ import { isBeheerder, werkGebruikerBij, voorClient } from './gebruikers.mjs';
 import { alleRegios, alleBronnen } from './register.mjs';
 import { zichtbareGroepen, ENKELVOUD } from './regios.mjs';
 import { maakKader, bouwFeed, bewaardeFeed, zoekFeed, detail, momentopname, meldingTreffers } from './feed.mjs';
-import { controleerMelding, BRONNEN } from './meldingen.mjs';
+import { controleerMelding, meldingNaam, BRONNEN } from './meldingen.mjs';
 import { zoekvraagTekst } from './termen.mjs';
 import { beheerApi } from './beheer.mjs';
 import { rondKoppelingAf, debatVideo, naarVideoTijd } from './gehoord.mjs';
@@ -45,6 +45,7 @@ function meldingVoorClient(k, gebruiker, m) {
   return {
     ...m,
     zoekvraag: zoekvraagTekst(m.termen),
+    naam: meldingNaam(m, (id) => k.regioMap.get(id)?.naam),
     bereikNaam: m.bereik === 'overal' ? 'Overal' : m.bereik === 'mijn' ? 'Mijn regio\'s' : regio?.naam || m.bereik,
     bronnenNaam: BRONNEN[m.bronnen] || BRONNEN.alle,
     aantal30: meldingTreffers(k, gebruiker, m, { sinds: new Date(Date.now() - 30 * DAG_MS).toISOString() }).length,
