@@ -84,7 +84,7 @@ function regioDetailHtml(d) {
   return `<div class="regiodetail">
     <div class="regiodetail-kop">
       <div class="naamcel"><span class="klein zacht">Regio</span><h1>${esc(d.naam)}</h1></div>
-      <div class="rechts"><span>${d.stukken7} stukken in 7 dagen · ${d.volgers.length} volger${d.volgers.length === 1 ? '' : 's'}</span>
+      <div class="rechts"><span>${d.stukken7} stuk${d.stukken7 === 1 ? '' : 'ken'} in 7 dagen · ${d.volgers.length} volger${d.volgers.length === 1 ? '' : 's'}</span>
         ${d.eigen ? '<button class="linkknop" data-actie="hernoem">Naam wijzigen</button><button class="linkknop" data-actie="verwijder-regio">Verwijderen</button>' : ''}</div>
     </div>
 
@@ -97,7 +97,7 @@ function regioDetailHtml(d) {
     <section class="sectie">
       <div class="sectiekop"><span class="titel">2 · Sleutelwoorden</span><span class="uitleg">Een stuk uit een landelijke bron met een van deze woorden gaat naar ${esc(d.naam)}.</span></div>
       <div class="geldt"><span>Geldt voor:</span>${d.landelijk.map((b) => `<button data-landelijk="${esc(b.id)}" aria-pressed="${b.aan}" title="${b.aan ? 'Klik om uit te zetten voor deze regio' : 'Klik om aan te zetten voor deze regio'}">${esc(b.naam)}</button>`).join('')}</div>
-      ${d.sleutelwoorden.length ? `<div class="termen">${d.sleutelwoorden.map(termKaart).join('')}</div>` : '<p class="hulptekst">Nog geen sleutelwoorden: er gaan nog geen stukken uit landelijke bronnen naar deze regio.</p>'}
+      ${d.sleutelwoorden.length ? `<div class="termen">${d.sleutelwoorden.map(termKaart).join('')}</div>` : '<p class="hulptekst">Nog geen sleutelwoorden. Uit landelijke bronnen komt nu alleen wat een plek in deze gemeente heeft: aardbevingen, files, ransomware, uitspraken, bekendmakingen van de provincie.</p>'}
       <form class="terminvoer" id="terminvoer">
         <label><input id="nieuwe-term" placeholder="Nieuw sleutelwoord, bijv. een dorp of wijk" autocomplete="off" aria-label="Nieuw sleutelwoord"><span class="voorbeeld" id="term-voorbeeld"></span></label>
         <button>Toevoegen</button>
