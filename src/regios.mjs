@@ -28,6 +28,7 @@ export const ENKELVOUD = {
   raadsvergadering: 'Raadsvergadering',
   youtube: 'YouTube',
   podcast: 'Podcast',
+  kamerdebat: 'Kamerdebat',
   aardbeving: 'Aardbeving',
   weerwaarschuwing: 'Weerwaarschuwing',
   uitspraak: 'Uitspraak Raad van State',
@@ -52,7 +53,8 @@ export const GROEPEN = {
   bekendmaking: 'Bekendmakingen',
 };
 
-export const AUDIOSOORTEN = ['raadsvergadering', 'youtube', 'podcast'];
+// kamerdebat: de transcripten van gehoord.de (src/gehoord.mjs), in het audioarchief.
+export const AUDIOSOORTEN = ['raadsvergadering', 'youtube', 'podcast', 'kamerdebat'];
 
 // Aardbevingen, weerwaarschuwingen, uitspraken, ransomware, files en
 // treinstoringen: landelijke signalen uit de checker (src/bronnen/signalen.mjs

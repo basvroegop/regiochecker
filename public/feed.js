@@ -268,6 +268,11 @@ function metaHtml(d) {
 
 function tijdLink(d, t, inhoud, klasse) {
   if (d.speler) return `<button class="${klasse}" data-tijd="${t}">${inhoud}</button>`;
+  // Een Kamerdebat: het fragment op gehoord.de waarin die tijd valt.
+  if (d.gehoord) {
+    const s = (d.segmenten || []).filter((x) => x.link && x.start <= t + 0.5).at(-1) || d.segmenten?.find((x) => x.link);
+    if (s) return `<a class="${klasse}" href="${esc(s.link)}" target="_blank" rel="noopener noreferrer" title="Openen bij gehoord.de op deze plek">${inhoud}</a>`;
+  }
   if (d.youtube && d.url) {
     try {
       const u = new URL(d.url);
@@ -306,6 +311,7 @@ function waaromHtml(d) {
     zinnen.push(`${esc(opsomming(termen.map(aanhalen)))} ${termen.length === 1 ? 'is een zoekterm' : 'zijn zoektermen'} van je meldingen.`);
   }
   if (audio && (d.speler || d.youtube)) zinnen.push('Klik op een tijd om vanaf daar te luisteren.');
+  else if (audio && d.gehoord) zinnen.push('Klik op een tijd om dat fragment bij gehoord.de te openen.');
   // Eén rij per term, ook als hij er zowel als sleutelwoord als via een melding in staat.
   const getoond = new Set();
   const rijen = treffers.filter((t) => (t.melding || d.landelijk) && !getoond.has(t.term) && getoond.add(t.term)).map((t) => {
@@ -581,7 +587,7 @@ function audioPaneel(d) {
         </div>
         <div class="spelerknoppen"><button id="terug15" title="15 seconden terug">−15 s</button><button id="tempo" title="Afspeelsnelheid">1×</button></div>
       </div>`
-    : `<div class="geen-speler">${d.youtube ? 'De tijden openen de video bij YouTube op dat moment.' : 'De audio van deze aflevering is niet bewaard; de tijden zijn ter oriëntatie. Luister terug bij de bron.'}</div>`;
+    : `<div class="geen-speler">${d.youtube ? 'De tijden openen de video bij YouTube op dat moment.' : d.gehoord ? 'De tijden openen het debat bij gehoord.de op die plek, met de video van de Kamer.' : 'De audio van deze aflevering is niet bewaard; de tijden zijn ter oriëntatie. Luister terug bij de bron.'}</div>`;
   const kop = `<div class="acties" id="acties">${actiesHtml(d)}</div>
     <div class="kopblok" style="gap:8px"><div class="kicker">${esc(kicker.filter(Boolean).join(' · '))}</div><h2>${esc(d.titel)}</h2>${sub ? `<span class="subregel">${esc(sub)}</span>` : ''}</div>`;
   // Nog geen transcript: zeggen waar de aflevering in de verwerking staat.

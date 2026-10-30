@@ -10,6 +10,7 @@
 import { createHash } from 'node:crypto';
 import { ytdlp, haalTekstOpenbaar, openbaar } from './ophalen.mjs';
 import * as vergaderingen from './vergaderingen.mjs';
+import { gehoordOntdek } from '../gehoord.mjs';
 import { ontsnap } from '../html.mjs';
 
 const YT_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be', 'www.youtu.be']);
@@ -158,8 +159,10 @@ async function podcastOntdek(bron) {
 
 // ---------- samen ----------
 
-export function ontdek(bron, { map, proef = false } = {}) {
+// `opslag`: voor een bron met een eigen koppeling (gehoord.de, de tokens).
+export function ontdek(bron, { map, proef = false, opslag } = {}) {
   const kind = bron.audio.kind;
+  if (kind === 'gehoord') return gehoordOntdek(bron, { opslag, proef });
   if (vergaderingen.PLATFORMS[kind]) return vergaderingen.ontdek(bron, { proef });
   if (kind === 'rss') return podcastOntdek(bron);
   if (kind === 'video') {
@@ -173,8 +176,13 @@ export function ontdek(bron, { map, proef = false } = {}) {
 //   soort 'raadsvergadering' → een vergaderplatform, anders een duidelijke fout
 //   soort 'youtube'          → een YouTube-adres, met `scope`
 //   soort 'podcast'          → een RSS-feed
+//   soort 'kamerdebat'       → gehoord.de (inloggen via Beheer › Instellingen)
 export async function herkenBron(url, soort, scope = 'auto') {
   await openbaar(url);
+  if (soort === 'kamerdebat') {
+    if (new URL(url).hostname.replace(/^www\./, '') !== 'gehoord.de') throw new Error('Kamerdebatten komen van gehoord.de: gebruik https://gehoord.de/beraadslagingen');
+    return { kind: 'gehoord', url: 'https://gehoord.de/beraadslagingen' };
+  }
   if (soort === 'youtube' || isYoutube(url)) {
     if (soort !== 'youtube') throw new Error('Dit is een YouTube-link; kies het type YouTube.');
     return youtubeAdres(url, scope);

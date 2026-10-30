@@ -12,7 +12,7 @@ import path from 'node:path';
 import { MockAgent } from 'undici';
 import { zetOpenbaarDispatcher } from '../src/netwerk.mjs';
 import { Opslag } from '../src/opslag.mjs';
-import { koppelAdres, rondKoppelingAf, toegang, gehoordStatus, gehoordTools, ontkoppel } from '../src/gehoord.mjs';
+import { koppelAdres, rondKoppelingAf, toegang, gehoordStatus, gehoordTools, ontkoppel, leesDebatten, leesTranscript, debatSegmenten } from '../src/gehoord.mjs';
 import { publiekeInstellingen } from '../src/instellingen.mjs';
 import { leesStroom } from '../src/mcp.mjs';
 import { herken, nieuweGebruiker } from '../src/gebruikers.mjs';
@@ -24,7 +24,7 @@ const TERUG = 'https://regiochecker.test/api/beheer/gehoord/terug';
 const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
 function nepGehoord() {
-  const staat = { registraties: [], tokens: [], mcp: [], ververs: 'goed', uitgedeeld: 0, challenge: null };
+  const staat = { registraties: [], tokens: [], mcp: [], aanroepen: [], ververs: 'goed', uitgedeeld: 0, challenge: null };
   const agent = new MockAgent();
   agent.disableNetConnect();
   const server = agent.get(BASIS);
@@ -63,6 +63,12 @@ function nepGehoord() {
         ? json({ jsonrpc: '2.0', id: b.id, result: { tools: [{ name: 'zoek_uitspraken', description: 'Zoek in uitspraken\nmet details', inputSchema: { type: 'object' } }] } })
         : json({ jsonrpc: '2.0', id: b.id, result: { tools: [{ name: 'lijst_debatten', title: 'Debatten', description: 'Recente debatten' }], nextCursor: 'p2' } });
     }
+    if (b.method === 'tools/call') {
+      staat.aanroepen.push([b.params.name, b.params.arguments]);
+      const a = b.params.arguments || {};
+      const tekst = b.params.name === 'search_debates' ? DEBATTEN(a.offset || 0) : b.params.name === 'get_transcript' ? TRANSCRIPT(a.offset || 0) : null;
+      if (tekst) return json({ jsonrpc: '2.0', id: b.id, result: { content: [{ type: 'text', text: tekst }] } });
+    }
     return json({ jsonrpc: '2.0', id: b.id, error: { code: -32601, message: 'onbekend' } });
   }).persist();
   const vorige = zetOpenbaarDispatcher(agent);
@@ -70,6 +76,65 @@ function nepGehoord() {
 }
 
 const leegOpslag = () => new Opslag(mkdtempSync(path.join(tmpdir(), 'rc-gehoord-')));
+const sqlite = await import('node:sqlite').catch(() => null);
+
+// Zoals de tools van gehoord.de antwoorden (30 oktober 2026).
+const DEBATTEN = (offset) => (offset ? `3 debat(ten) gevonden.
+
+- #307209 · 29-10-2026 19:00 · Regeling van werkzaamheden · Plenaire zaal, Tweede Kamer · afgelopen · 1 fragmenten
+  https://gehoord.de/beraadslagingen/307209
+` : `3 debat(ten) gevonden.
+
+- #307215 · 29-10-2026 23:58 · Begrotingen Infrastructuur en Waterstaat · Mobiliteitsfonds 2027 (voortzetting) · Plenaire zaal, Tweede Kamer · afgelopen · 4 fragmenten
+  https://gehoord.de/beraadslagingen/307215
+- #307214 · 29-10-2026 16:00 · EU-wetenschapstoets Omnibus directe belastingen · Groen van Prinstererzaal, Tweede Kamer · afgelopen · 47 fragmenten
+  https://gehoord.de/beraadslagingen/307214
+
+Nog 1 meer: offset=2.`);
+const TRANSCRIPT = (offset) => (offset ? `# Begrotingen Infrastructuur en Waterstaat · Mobiliteitsfonds 2027 (voortzetting)
+Fragmenten 3–4 van 4.
+
+[00:01:10] Thom van Campen (VVD) — https://gehoord.de/beraadslagingen/307215?segment=13
+Dan de N31 bij Leeuwarden. Wanneer gaat de schop in de grond?
+
+[00:01:30] Onbekende spreker — https://gehoord.de/beraadslagingen/307215?segment=14
+Dank u wel.
+` : `# Begrotingen Infrastructuur en Waterstaat · Mobiliteitsfonds 2027 (voortzetting)
+Debat #307215 · Tweede Kamer, Plenaire zaal · 29-10-2026 23:58 · afgelopen
+Automatische transcriptie zonder menselijke correctie.
+Fragmenten 1–2 van 4.
+
+[23:59:50] Voorzitter — https://gehoord.de/beraadslagingen/307215?segment=11
+Ik open de vergadering.
+
+[00:00:20] Hidde Heutink (Groep Markuszower) — https://gehoord.de/beraadslagingen/307215?segment=12
+Voorzitter, de regio's
+verdienen beter.
+
+— Vervolg: get_transcript met debate_id=307215 en offset=2 (nog 2 fragmenten).`);
+
+test('gehoord.de: de debattenlijst en het transcript lezen, ook na middernacht', () => {
+  const { debatten, volgende } = leesDebatten(DEBATTEN(0));
+  assert.deepEqual(debatten.map((d) => [d.id, d.titel, d.plek, d.fragmenten]), [
+    [307215, 'Begrotingen Infrastructuur en Waterstaat · Mobiliteitsfonds 2027 (voortzetting)', 'Plenaire zaal, Tweede Kamer', 4],
+    [307214, 'EU-wetenschapstoets Omnibus directe belastingen', 'Groen van Prinstererzaal, Tweede Kamer', 47],
+  ], 'een middenpunt in de titel blijft bij de titel');
+  assert.equal(volgende, 2);
+  assert.deepEqual([debatten[0].begin.getHours(), debatten[0].begin.getMinutes(), debatten[0].begin.getDate()], [23, 58, 29]);
+  assert.equal(leesDebatten(DEBATTEN(2)).volgende, null);
+
+  const een = leesTranscript(TRANSCRIPT(0));
+  assert.equal(een.volgende, 2);
+  assert.deepEqual(een.fragmenten.map((f) => [f.spreker, f.fragment, f.tekst]), [
+    ['Voorzitter', 11, 'Ik open de vergadering.'], ['Hidde Heutink (Groep Markuszower)', 12, 'Voorzitter, de regio\'s verdienen beter.'],
+  ]);
+  const twee = leesTranscript(TRANSCRIPT(2));
+  assert.equal(twee.volgende, null);
+  assert.equal(twee.fragmenten[1].spreker, null, '"Onbekende spreker" is geen naam');
+  assert.deepEqual(debatSegmenten([...een.fragmenten, ...twee.fragmenten]).map((x) => [x.start, x.end, x.speaker || null, x.fragment]), [
+    [0, 30, 'Voorzitter', 11], [30, 80, 'Hidde Heutink (Groep Markuszower)', 12], [80, 100, 'Thom van Campen (VVD)', 13], [100, 105, null, 14],
+  ], 'de tijden lopen over middernacht door');
+});
 
 test('MCP: berichten uit een eventstroom', () => {
   assert.deepEqual(leesStroom('event: message\ndata: {"id":1}\n\n: keepalive\n\ndata: {"id":2,\ndata: "x":1}\n\n'), [{ id: 1 }, { id: 2, x: 1 }]);
@@ -145,6 +210,62 @@ test('gehoord.de: terugkomen in de Regiochecker stuurt door naar Instellingen', 
     const fout = await roep(ctx, jan, 'GET', '/api/beheer/gehoord/terug?error=access_denied&state=x');
     assert.match(decodeURIComponent(fout.kop.Location), /gehoord=Koppeling geweigerd/);
     assert.equal((await roep(ctx, jan, 'GET', '/api/instellingen')).data.gehoord.gekoppeld, true);
+  } finally {
+    net.herstel();
+  }
+});
+
+test('Kamerdebatten als landelijke bron: catalogus, transcript zonder Whisper, en naar de regio via een sleutelwoord', { skip: sqlite ? false : 'node:sqlite niet beschikbaar' }, async () => {
+  const { openFeedDb } = await import('../src/feeddb.mjs');
+  const { AudioDb } = await import('../src/audio/db.mjs');
+  const { Verwerking } = await import('../src/audio/verwerking.mjs');
+  const { detail } = await import('../src/feed.mjs');
+  const net = nepGehoord();
+  try {
+    const map = mkdtempSync(path.join(tmpdir(), 'rc-gehoord-'));
+    const opslag = new Opslag(map);
+    const fdb = await openFeedDb(path.join(map, 'regiochecker.sqlite'));
+    const adb = new AudioDb(fdb.db);
+    Object.assign(opslag, { feeddb: fdb, audiodb: adb });
+    // Een worker is ingesteld, maar een debat heeft hem niet nodig.
+    opslag.instellingen.audio = { ...opslag.instellingen.audio, workerUrl: 'http://127.0.0.1:9', workerToken: 'x' };
+    const p = Object.fromEntries(new URL(await koppelAdres(opslag, TERUG)).searchParams);
+    net.staat.challenge = p.code_challenge;
+    await rondKoppelingAf(opslag, { code: 'code-1', state: p.state });
+    opslag.regios = { heerenveen: { sleutelwoorden: [{ term: 'N31', actief: true }] } };
+    const jan = herken(opslag, { login: 'jan', email: 'jan@example.nl', naam: 'Jan' });
+    jan.regios = ['heerenveen'];
+
+    const bron = { id: 'kamerdebatten', naam: 'Kamerdebatten (gehoord.de)', soort: 'kamerdebat', bereik: 'landelijk', type: 'audio', url: 'https://gehoord.de/beraadslagingen', aangemaakt: new Date().toISOString(), audio: { kind: 'gehoord', eersteImport: 0, actief: true, prioriteit: 0 } };
+    opslag.bronnen.push(bron);
+    const verwerking = new Verwerking({ opslag, adb });
+    assert.deepEqual(await verwerking.synchroniseer(bron), { ok: true, nieuw: 2, aantal: 2 }, 'de regeling met één fragment niet');
+    assert.deepEqual(net.staat.aanroepen.filter(([n]) => n === 'search_debates').map(([, a]) => a.offset), [0, 2]);
+    // Een nieuwere vergadering uit een archief wacht: een debat kost geen GPU en gaat voor.
+    const raad = { id: 'raad', naam: 'Raad', soort: 'raadsvergadering', bereik: 'regio', regio: 'heerenveen', type: 'audio', url: 'https://x.test/', audio: { kind: 'notubiz', actief: true, prioriteit: -5 } };
+    opslag.bronnen.push(raad);
+    adb.voegToe(raad, { extern: 'ntb:1/1', vorm: 'vergadering', url: 'https://x.test/v/1', titel: 'Raadsvergadering', gepubliceerdOp: Date.now() / 1000 }, { nulmeting: true });
+    assert.deepEqual(verwerking.volgende(Date.now() / 1000 + 60).map((r) => adb.aflevering(r.id).bron), ['kamerdebatten', 'kamerdebatten', 'raad']);
+    // Een nieuwe vergadering (geen archief) gaat wel voor.
+    adb.voegToe(raad, { extern: 'ntb:1/2', vorm: 'vergadering', url: 'https://x.test/v/2', titel: 'Nieuwe raad', gepubliceerdOp: Date.now() / 1000 });
+    assert.equal(adb.aflevering(verwerking.volgende(Date.now() / 1000 + 60)[0].id).titel, 'Nieuwe raad');
+    adb.db.prepare("DELETE FROM afleveringen WHERE extern IN ('ntb:1/1', 'ntb:1/2')").run();
+
+    assert.equal(await verwerking.verwerkEen(), true);
+    const a = adb.lijst({ bron: 'kamerdebatten' }).map((x) => adb.aflevering(x.id)).find((x) => x.transcript);
+    assert.equal(a.titel, 'Begrotingen Infrastructuur en Waterstaat · Mobiliteitsfonds 2027 (voortzetting)');
+    assert.equal(a.status, 'getranscribeerd');
+    assert.match(a.transcript, /^Ik open de vergadering\. .* Dan de N31 bij Leeuwarden/);
+    assert.deepEqual(a.segmenten.map((x) => x.fragment), [11, 12, 13, 14]);
+    assert.equal(a.duur, 105);
+    assert.deepEqual(net.staat.aanroepen.filter(([n]) => n === 'get_transcript').map(([, x]) => [x.debate_id, x.offset]), [[307215, 0], [307215, 2]]);
+
+    // Een landelijke bron: via het sleutelwoord naar Heerenveen, met de tijd en een link naar dat fragment.
+    const d = detail({ opslag, fdb, adb }, jan, `a:${a.id}`);
+    assert.deepEqual([d.soort, d.soortNaam, d.groep, d.gehoord, d.regios], ['kamerdebat', 'Kamerdebat', 'audio', true, ['heerenveen']]);
+    assert.equal(d.treffers.find((t) => t.term === 'N31').tijd, 80);
+    assert.equal(d.segmenten[2].link, `${BASIS}/beraadslagingen/307215?segment=13`);
+    assert.equal(d.speler, null);
   } finally {
     net.herstel();
   }

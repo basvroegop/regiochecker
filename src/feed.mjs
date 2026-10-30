@@ -677,16 +677,18 @@ function audioDetail(k, gebruiker, id) {
       ? { tekst: a.samenvatting.tekst, model: a.samenvatting.model || null, tijd: a.samenvatting.tijd || null }
       : (a.transcript && (a.samenvatting?.pogingen || 0) < 3 && samenvattingAanbieder(k.opslag).klaar ? { volgt: true } : null),
     youtube: a.vorm === 'youtube',
+    // Een Kamerdebat van gehoord.de: geen audio hier; een tijd opent dat fragment daar.
+    gehoord: a.vorm === 'gehoord',
     speler,
     meta: [
       meta('Bron', bron.naam || a.bron),
       meta('Aflevering', a.auteur),
       meta('Gepubliceerd', a.gepubliceerd),
       meta('Eerst gezien', a.eersteGezien),
-      meta('Transcript', a.transcript ? `Automatisch${a.taal ? ` · ${a.taal.toUpperCase()}` : ''}` : null),
+      meta('Transcript', a.transcript ? (a.vorm === 'gehoord' ? 'Automatisch, door gehoord.de; niet citeren als officieel verslag (dat zijn de Handelingen)' : `Automatisch${a.taal ? ` · ${a.taal.toUpperCase()}` : ''}`) : null),
       meta('Regio', regios.filter(Boolean).map((r) => k.regioMap.get(r)?.naam || r).join(', ') || null),
     ].filter(Boolean),
-    segmenten: a.segmenten.map((s) => ({ start: s.start, eind: s.end, tekst: s.text, spreker: s.speaker || null, sprekerId: s.speaker_id || null })),
+    segmenten: a.segmenten.map((s) => ({ start: s.start, eind: s.end, tekst: s.text, spreker: s.speaker || null, sprekerId: s.speaker_id || null, ...(s.fragment ? { link: `${a.url}?segment=${s.fragment}` } : {}) })),
     sprekers: sprekersVan(a),
     // De agenda van het vergaderplatform, met de tijd waarop elk punt begint.
     agenda: a.platform?.agenda || [],

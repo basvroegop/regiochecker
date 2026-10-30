@@ -231,7 +231,7 @@ export class AudioDb {
     const zonderSamenvatting = "(samenvatting IS NULL OR (json_extract(samenvatting, '$.tekst') IS NULL AND COALESCE(json_extract(samenvatting, '$.pogingen'), 0) < 3))";
     return this.db.prepare(`SELECT id, bron, status, transcript IS NULL AS zonder_transcript, sprekers_gevraagd, entiteiten IS NULL AS zonder_entiteiten,
         ${zonderSamenvatting} AS zonder_samenvatting, transcript_delen IS NOT NULL AS met_delen,
-        segmenten LIKE '%speaker_id%' AS met_stemmen, COALESCE(gepubliceerd_op, aangemaakt) AS moment, opnieuw_op, nulmeting
+        segmenten LIKE '%speaker_id%' AS met_stemmen, COALESCE(gepubliceerd_op, aangemaakt) AS moment, opnieuw_op, nulmeting, vorm
       FROM afleveringen WHERE status IN ('wacht', 'getranscribeerd', 'downloaden', 'transcriberen', 'analyseren')
         OR (status = 'klaar' AND transcript IS NOT NULL AND ${zonderSamenvatting})`).all()
       .map((r) => ({ ...r, klaarVoor: r.opnieuw_op <= nu }));

@@ -29,6 +29,7 @@ import { vindNummers, nummerlijst, contextVenster, namenInBuurt, controleerDuidi
 import { vatKortSamen } from '../vergadering.mjs';
 import { samenvattingAanbieder } from '../samenvatting.mjs';
 import { sprekersVan } from '../feed.mjs';
+import { gehoordDebat } from '../gehoord.mjs';
 
 const BRON_INTERVAL_MS = 60 * 60_000;
 const ARCHIEF_TUSSEN_MS = 15 * 60_000;
@@ -169,7 +170,7 @@ export class Verwerking {
     const vorige = status[bron.id] || {};
     status[bron.id] = { ...vorige, bezig: true };
     try {
-      const { titel, items } = await ontdek(bron, { map: this.map });
+      const { titel, items } = await ontdek(bron, { map: this.map, opslag: this.opslag });
       const gezien = this.adb.gezien(bron.id);
       const vers = items.filter((i) => !gezien.has(i.extern));
       const eersteKeer = !bron.audio.geinitialiseerd;
@@ -225,7 +226,7 @@ export class Verwerking {
   async importeerArchief(bron) {
     const vorige = bron.audio.archief || {};
     try {
-      const { items } = await ontdek({ ...bron, audio: { ...bron.audio, geinitialiseerd: false, eersteImport: 0 } }, { map: this.map });
+      const { items } = await ontdek({ ...bron, audio: { ...bron.audio, geinitialiseerd: false, eersteImport: 0 } }, { map: this.map, opslag: this.opslag });
       let toegevoegd = 0;
       for (const i of items) {
         if (!this.adb.bestaand(bron.id, i.extern) && this.adb.voegToe(bron, i, { nulmeting: true })) toegevoegd++;
@@ -276,7 +277,8 @@ export class Verwerking {
   // volgende, in de volgorde van de bronnen en het nieuwste eerst. Het archief
   // (een eerste import, of het hele archief van een bron) komt achter alles wat
   // nieuw is: anders wacht een nieuwe vergadering weken op de jaren ervoor. Dat
-  // archief gaat het nieuwste eerst, over alle bronnen heen. Afleveringen die al
+  // archief gaat het nieuwste eerst, over alle bronnen heen; wat geen GPU kost
+  // (een Kamerdebat van gehoord.de), gaat daarbinnen voor. Afleveringen die al
   // klaar waren en alleen nog een samenvatting missen (een overgenomen archief,
   // of een samenvatting die mislukte), komen als laatste.
   static fase(r, namen = true) {
@@ -303,8 +305,11 @@ export class Verwerking {
       // "getranscribeerd" (herstart, of het taalmodel ging uit), dan rondt de stap hem af.
       && (fase(r) < 2 || (samenvatten && r.zonder_samenvatting) || r.status !== 'klaar'));
     const groep = (r) => (lopend(r) ? 0 : fase(r) === 0 ? 1 : 2);
+    // Een Kamerdebat (gehoord.de) kost geen GPU en is in seconden binnen.
+    const metGpu = (r) => (r.vorm === 'gehoord' ? 0 : 1);
     rijen.sort((a, b) => groep(a) - groep(b)
       || a.nulmeting - b.nulmeting
+      || metGpu(a) - metGpu(b)
       || (a.nulmeting
         ? b.moment - a.moment || volgorde.get(a.bron) - volgorde.get(b.bron)
         : volgorde.get(a.bron) - volgorde.get(b.bron) || b.moment - a.moment));
@@ -399,8 +404,25 @@ export class Verwerking {
     return !(af.nulmeting && Date.parse(af.gepubliceerd || '') < Date.now() - dagen * DAG_MS);
   }
 
+  // Een Kamerdebat van gehoord.de: het transcript is er al, met sprekers en
+  // tijden; geen download en geen Whisper (src/gehoord.mjs).
+  async haalDebat(af, werk) {
+    werk({ status: 'downloaden', stap: 'Transcript ophalen bij gehoord.de', fout: null });
+    const d = await gehoordDebat(this.opslag, af);
+    const verder = this.adb.aflevering(af.id);
+    werk({
+      transcript: d.tekst, segmenten: d.segmenten, taal: 'nl', duur: d.duur, sprekerFout: null,
+      sprekersGevraagd: false, entiteiten: null, entiteitDelen: null, transcriptDelen: null, samenvatting: null, pogingen: 0,
+      eersteGezien: verder.eersteGezien || (verder.nulmeting && verder.gepubliceerd ? verder.gepubliceerd : new Date().toISOString()),
+    });
+    this.scanNummers(af.id, d.segmenten);
+    werk({ status: 'getranscribeerd', stap: 'Transcript klaar · samenvatting volgt', fout: null });
+    this.bijBeschikbaar?.(this.adb.aflevering(af.id));
+  }
+
   async verwerk(af, w) {
     const werk = (velden) => this.adb.werkBij(af.id, velden);
+    if (af.vorm === 'gehoord' && !af.transcript) return this.haalDebat(af, werk);
     if (!af.transcript || af.sprekersGevraagd) {
       let pad = af.audioPad;
       if (!pad || !existsSync(pad)) {

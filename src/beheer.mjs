@@ -54,6 +54,7 @@ const AUDIO_LEZER = {
   ...Object.fromEntries(Object.entries(PLATFORMS).map(([k, v]) => [k, `${v}-archief`])),
   rss: 'Podcast-RSS',
   video: 'YouTube-video',
+  gehoord: 'gehoord.de (MCP)',
   ...Object.fromEntries(Object.entries(YOUTUBE_SOORTEN).map(([k, [naam]]) => [k, `YouTube · ${naam.toLowerCase()}`])),
 };
 
@@ -367,7 +368,7 @@ async function proef(k, invoer) {
     const w = audioWorker(k.opslag.instellingen);
     let catalogus;
     try {
-      catalogus = await ontdekCatalogus({ ...bron, naam: bron.naam }, { map: k.opslag.map, proef: true });
+      catalogus = await ontdekCatalogus({ ...bron, naam: bron.naam }, { map: k.opslag.map, proef: true, opslag: k.opslag });
     } catch (fout) {
       return { tekst: `De catalogus kon niet worden gelezen: ${fout.message}`, fout: true };
     }
@@ -378,7 +379,10 @@ async function proef(k, invoer) {
     const regels = [`${PLATFORMS[bron.audio.kind] ? `${PLATFORMS[bron.audio.kind]}-archief` : 'De bron'}${catalogus.titel ? ` "${catalogus.titel}"` : ''}: ${aantal} gevonden.`];
     if (nieuwste) regels.push(`De nieuwste: "${nieuwste.titel}"${nieuwste.gepubliceerdOp ? ` (${new Date(nieuwste.gepubliceerdOp * 1000).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })})` : ''}${nieuwste.duur ? `, ${duurTekst(nieuwste.duur)}` : ''}.`);
     const eerste = catalogus.deels ? bron.audio.eersteImport || 'alle' : bron.audio.eersteImport ? Math.min(bron.audio.eersteImport, n) : n;
-    regels.push(bron.audio.kind === 'video' ? 'Bij het opslaan wordt de video gedownload en getranscribeerd.'
+    regels.push(bron.audio.kind === 'gehoord'
+      ? (bron.audio.eersteImport < 0 ? 'Bij het opslaan wordt nog niets opgehaald; elk nieuw debat daarna komt vanzelf binnen.'
+        : `Bij het opslaan ${bron.audio.eersteImport ? `worden de transcripten van de ${bron.audio.eersteImport} nieuwste debatten` : 'worden de transcripten van alle debatten'} opgehaald bij gehoord.de (geen download, geen GPU); daarna komt elk afgelopen debat vanzelf binnen.`)
+      : bron.audio.kind === 'video' ? 'Bij het opslaan wordt de video gedownload en getranscribeerd.'
       : bron.audio.eersteImport < 0 ? 'Bij het opslaan wordt nog niets gedownload; elke nieuwe aflevering daarna komt vanzelf binnen en wordt getranscribeerd.'
         : `Bij het opslaan ${eerste === 1 ? 'wordt de nieuwste aflevering' : eerste === 'alle' ? 'worden alle afleveringen' : `worden de ${eerste} nieuwste afleveringen`} gedownload en getranscribeerd, met stemherkenning en namen; daarna komt elke nieuwe aflevering vanzelf binnen.`);
     if (bron.bereik === 'landelijk') regels.push('Het transcript wordt doorzocht op de sleutelwoorden van alle regio\'s; bij een treffer gaat de aflevering naar die regio, met de tijd waarop het woord valt.');

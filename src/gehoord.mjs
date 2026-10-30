@@ -185,3 +185,122 @@ export async function gehoordTools(opslag) {
     tools: (await klant.tools()).map((t) => ({ naam: t.name, titel: t.title || null, omschrijving: t.description || '', invoer: t.inputSchema || null })),
   }));
 }
+
+// ---------- de debatten als bron ----------
+//
+// Een debat is in de Regiochecker een aflevering in het audioarchief (soort
+// kamerdebat, vorm gehoord): het transcript komt kant-en-klaar van gehoord.de,
+// zonder downloaden of Whisper. Een landelijke bron, dus een debat gaat naar een
+// regio als een sleutelwoord valt, met het tijdstip (src/feed.mjs). De tools
+// geven tekst, geen JSON; die lezen we hier.
+
+const MIN_FRAGMENTEN = 2; // "Regeling van werkzaamheden · 1 fragmenten": niets te lezen
+const PAGINA = 50;
+const TRANSCRIPT_TEKENS = 100_000;
+const MAX_TRANSCRIPT_PAGINAS = 40;
+const twee = (n) => String(n).padStart(2, '0');
+
+// "- #307215 · 29-10-2026 19:01 · Titel · Plenaire zaal, Tweede Kamer · afgelopen · 483 fragmenten"
+const DEBAT = /^- #(\d+) · (\d{2})-(\d{2})-(\d{4}) (\d{2}):(\d{2}) · (.+) · ([^·\n]+) · ([^·\n]+) · (\d+) fragment(?:en)?\s*$/gm;
+
+export function leesDebatten(tekst) {
+  const debatten = [...String(tekst).matchAll(DEBAT)].map((m) => ({
+    id: Number(m[1]),
+    // Nederlandse tijd; de dienst draait met TZ=Europe/Amsterdam.
+    begin: new Date(+m[4], +m[3] - 1, +m[2], +m[5], +m[6]),
+    titel: m[7].trim(),
+    plek: m[8].trim(),
+    status: m[9].trim(),
+    fragmenten: Number(m[10]),
+  }));
+  const volgende = /\boffset=(\d+)/.exec(String(tekst).split('\n').slice(-3).join('\n'))?.[1];
+  return { debatten, volgende: volgende ? Number(volgende) : null };
+}
+
+const debatItem = (d) => ({
+  extern: `gh:${d.id}`,
+  vorm: 'gehoord',
+  url: `${basis()}/beraadslagingen/${d.id}`,
+  titel: d.titel,
+  auteur: d.plek,
+  gepubliceerd: `${d.begin.getFullYear()}${twee(d.begin.getMonth() + 1)}${twee(d.begin.getDate())}`,
+  gepubliceerdOp: d.begin.getTime() / 1000,
+  _sort: d.begin.getTime(),
+});
+
+// De catalogus: afgelopen debatten, nieuwste eerst. Een vervolgcontrole leest de
+// nieuwste honderd, een eerste import alles (zo'n 1100 eind oktober 2026).
+export async function gehoordOntdek(bron, { opslag, proef = false } = {}) {
+  const paginas = proef ? 1 : bron.audio.geinitialiseerd ? 2 : 100;
+  return metGehoord(opslag, async (klant) => {
+    const items = [];
+    let offset = 0;
+    for (let p = 0; p < paginas; p++) {
+      const { tekst } = await klant.roep('search_debates', { status: 'ended', limit: PAGINA, offset });
+      const { debatten, volgende } = leesDebatten(tekst);
+      items.push(...debatten.filter((d) => d.fragmenten >= MIN_FRAGMENTEN).map(debatItem));
+      if (volgende === null || !debatten.length) break;
+      offset = volgende;
+    }
+    return { titel: 'gehoord.de/beraadslagingen', items, deels: proef };
+  });
+}
+
+// "[16:00:09] Chris Jansen (PVV) — https://gehoord.de/beraadslagingen/307214?segment=239523"
+const FRAGMENT = /^\[(\d{2}):(\d{2}):(\d{2})\] (.+?) — (https?:\/\/\S+?[?&]segment=(\d+))\s*$/gm;
+const VERVOLG = /^— Vervolg: .*?\boffset=(\d+)/m;
+
+// Eén pagina van get_transcript: de fragmenten, en de offset van de volgende pagina.
+export function leesTranscript(tekst) {
+  const t = String(tekst);
+  const eind = VERVOLG.exec(t);
+  const inhoud = eind ? t.slice(0, eind.index) : t;
+  const koppen = [...inhoud.matchAll(FRAGMENT)];
+  const fragmenten = koppen.map((m, i) => ({
+    seconde: +m[1] * 3600 + +m[2] * 60 + +m[3],
+    spreker: /^onbekende spreker$/i.test(m[4].trim()) ? null : m[4].trim(),
+    fragment: Number(m[6]),
+    tekst: inhoud.slice(m.index + m[0].length, koppen[i + 1]?.index ?? inhoud.length).replace(/\s+/g, ' ').trim(),
+  })).filter((f) => f.tekst);
+  return { fragmenten, volgende: eind ? Number(eind[1]) : null };
+}
+
+// Van fragmenten met een kloktijd naar segmenten vanaf het begin van het debat,
+// zoals een transcript van Whisper (start, end, text, speaker), met het
+// fragment-id voor de link naar die plek op gehoord.de.
+export function debatSegmenten(fragmenten) {
+  let dag = 0;
+  let vorige = null;
+  const absoluut = fragmenten.map((f) => {
+    // Een debat dat na middernacht doorgaat.
+    if (vorige !== null && f.seconde + dag < vorige - 6 * 3600) dag += 86400;
+    vorige = f.seconde + dag;
+    return vorige;
+  });
+  const begin = absoluut[0] ?? 0;
+  return fragmenten.map((f, i) => {
+    const start = absoluut[i] - begin;
+    const volgende = i + 1 < fragmenten.length ? absoluut[i + 1] - begin : start + Math.max(5, Math.round(f.tekst.length / 15));
+    return { start, end: Math.max(start + 1, volgende), text: f.tekst, ...(f.spreker ? { speaker: f.spreker } : {}), fragment: f.fragment };
+  });
+}
+
+// Het hele transcript van één debat (alle pagina's): { segmenten, tekst, duur }.
+export async function gehoordDebat(opslag, af) {
+  const id = /^gh:(\d+)$/.exec(af.extern || '')?.[1];
+  if (!id) throw new GehoordFout('Dit debat heeft geen herkenbaar nummer van gehoord.de.');
+  return metGehoord(opslag, async (klant) => {
+    const fragmenten = [];
+    let offset = 0;
+    for (let p = 0; p < MAX_TRANSCRIPT_PAGINAS; p++) {
+      const { tekst } = await klant.roep('get_transcript', { debate_id: Number(id), offset, max_chars: TRANSCRIPT_TEKENS });
+      const pagina = leesTranscript(tekst);
+      fragmenten.push(...pagina.fragmenten);
+      if (pagina.volgende === null || pagina.volgende <= offset) break;
+      offset = pagina.volgende;
+    }
+    if (!fragmenten.length) throw new GehoordFout('gehoord.de heeft (nog) geen tekst bij dit debat.');
+    const segmenten = debatSegmenten(fragmenten);
+    return { segmenten, tekst: segmenten.map((s) => s.text).join(' '), duur: segmenten.at(-1).end };
+  });
+}

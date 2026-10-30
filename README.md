@@ -350,7 +350,25 @@ OAuth (autorisatiecode met PKCE, dynamische registratie; `src/gehoord.mjs`):
 Het wachtwoord ziet de Regiochecker nooit, en de tokens gaan niet naar de
 browser. Trekt gehoord.de de koppeling in, dan staat dat bij Instellingen en
 koppel je opnieuw. Na het koppelen toont het blok welke functies de server
-aanbiedt; daarop bouwt de landelijke bron Kamerdebatten voort.
+aanbiedt (`search_debates`, `get_debate`, `get_transcript`, `search_transcripts`).
+
+**De bron Kamerdebatten** (landelijk, soort `kamerdebat`, `audio.kind`
+`gehoord`) is een bron in het audioarchief, maar zonder download en zonder
+Whisper: elk uur de afgelopen debatten (`search_debates`, status `ended`), en
+per debat het hele transcript (`get_transcript`, in pagina's van 100.000
+tekens). De tools geven tekst, geen JSON; `src/gehoord.mjs` leest de regels
+"#id · datum tijd · titel · zaal · status · n fragmenten" en per fragment
+"[tijd] Spreker (fractie) — link". Elk fragment wordt een segment met spreker,
+de tijd vanaf het begin van het debat (ook na middernacht), en het fragment-id.
+Zo werkt alles van audio mee: zoeken in het transcript, een debat naar een regio
+als een sleutelwoord valt (met het tijdstip), de AI-samenvatting, de weekmail.
+In het leespaneel openen de tijden het fragment bij gehoord.de, met de video van
+de Kamer. Debatten met minder dan twee fragmenten ("Regeling van werkzaamheden")
+slaan we over. De eerste import nam alle debatten mee (vanaf 30 maart 2026, toen
+ruim 1000) als archief. Een debat kost geen GPU: in het archief gaat het voor de
+opnames die door Whisper moeten, maar een nieuwe vergadering gaat altijd voor. gehoord.de waarschuwt: automatische
+transcriptie, sprekers soms een paar seconden ernaast; niet citeren als
+officieel verslag (dat zijn de Handelingen). Dat staat ook bij het transcript.
 
 ## Audio en video
 
@@ -467,7 +485,8 @@ lezen van een iBabs-archief duurt met vijf seconden per pagina een paar uur);
 mislukt het drie keer, dan stopt het en staat de fout bij de bron. **Volgorde in
 de wachtrij:** eerst wat nieuw is, in de volgorde van de bronnen; het archief
 daarna, het nieuwste eerst over alle bronnen heen, zodat van elke gemeente eerst
-het recente verleden binnenkomt. Een archiefopname die al ouder is dan de
+het recente verleden binnenkomt. Binnen het archief gaat wat geen GPU kost (een
+Kamerdebat) voor. Een archiefopname die al ouder is dan de
 bewaartermijn van de audio, verliest haar audio direct na het transcriberen (het
 transcript blijft); anders zou een heel archief de schijf vullen.
 
