@@ -215,7 +215,8 @@ stukken uit landelijke bronnen het de afgelopen 30 dagen opleverde ("Veel ruis"
 bij 25 of meer). Per regio kun je een landelijke bron uitzetten ("Geldt voor").
 
 Sinds 30 oktober 2026 heeft elke regio als sleutelwoorden de naam van de
-gemeente en alle woonplaatsen erin (CBS, `src/geo/nl.json`; 917 aan, 57 uit).
+gemeente en alle woonplaatsen erin (CBS, `src/geo/nl.json`; 917 aan, 57 uit; met
+de Nederlandse namen hieronder samen 1039 aan, 67 uit).
 Vooraf geteld in de Kamerstukken sinds 15 september; wat daar vooral iets anders
 betekende, staat uit:
 - gewone woorden, of een grotere plaats elders: "Een", "Anderen", "Oranje",
@@ -230,8 +231,15 @@ betekende, staat uit:
 Een plaatsnaam die in twee regio's ligt (Oudega, Zuidwolde, Winsum, Alteveer),
 staat bij allebei. "Groningen" levert de meeste treffers (stad én provincie,
 zo'n 45 Kamerstukken per week). De officiële namen zijn in een deel van Fryslân
-Fries (Burgum, Damwâld); landelijke stukken gebruiken soms de Nederlandse naam
-(Bergum, Damwoude), die er nog niet bij staat.
+Fries (Burgum, Damwâld); landelijke stukken gebruiken vaak de Nederlandse naam.
+Die staan er ook bij (122 aan), uit Wikidata: bij een plaats waarvan de officiële
+naam de Friese naam is, de Nederlandse naam en de andere namen ("Burgum" →
+"Bergum", "Grou" → "Grouw", "De Westereen" → "Zwaagwesteinde", "Warten" →
+"Wartena"), en de Nederlandse namen van de gemeenten (Tietjerksteradeel,
+Dantumadeel, Noordoost-Friesland, Zuidwest-Friesland). Uit staan namen die elders
+een officiële plaats zijn (Oosterend, Beers, Oostrum, Waaxens) of in de
+Kamerstukken iets anders betekenden ("Kaart", "De Pomp", "de Friese meren");
+achternamen (Edens, Boxum) alleen met "in", "uit", "te", "naar" of "bij" ervoor.
 
 De Tweede Kamer is de ingebouwde landelijke bron; een RSS-feed, Woo-platform of
 podcast voeg je als landelijke bron toe in Beheer › Bronnen, met een
