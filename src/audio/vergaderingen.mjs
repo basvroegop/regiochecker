@@ -291,9 +291,22 @@ const notubizItem = (portaal, org, vergadering, titel, auteur, start) => item({
   auteur,
 }, start);
 
+// Een vergadering die niet live is uitgezonden, kan achteraf toch een opname
+// hebben gekregen (Pekela plaatst de video na afloop). Dat staat alleen in
+// /media; wat na twee weken nog niets heeft, onthouden we.
+const NOTUBIZ_LATER_DAGEN = 14;
+const notubizZonderMedia = new Set();
+async function notubizHeeftMedia(ev) {
+  if (notubizZonderMedia.has(ev.id)) return false;
+  const heeft = ((await notubiz('media', { event_id: ev.id })).media || []).length > 0;
+  if (!heeft && notubizStart(ev) < Date.now() - NOTUBIZ_LATER_DAGEN * 86400_000) notubizZonderMedia.add(ev.id);
+  return heeft;
+}
+
 async function notubizItems(portaal, org, gremia, ev) {
-  // Niet openbaar of niet uitgezonden: dan is er ook geen opname.
-  if (ev.permission_group !== 'public' || !ev.live || ev.canceled || ev.inactive) return [];
+  // Niet openbaar: dan is er ook geen opname.
+  if (ev.permission_group !== 'public' || ev.canceled || ev.inactive) return [];
+  if (!ev.live && (ev.type === 'assembly' || !(await notubizHeeftMedia(ev)))) return [];
   const titel = notubizAttribuut(ev);
   const auteur = gremia.get(ev.gremium?.id) || '';
   const start = notubizStart(ev);

@@ -120,6 +120,9 @@ function bronVoorClient(k, bron, nieuw) {
       catalogus: k.opslag.status.bronnen[bron.id]?.aantal ?? null,
       bezig: Boolean(k.opslag.status.bronnen[bron.id]?.bezig),
       tellingen: k.audioTellingen?.[bron.id] || { totaal: 0, klaar: 0, bezig: 0, mislukt: 0, transcripten: 0 },
+      // Het hele archief: aangevraagd, en wat het opleverde (src/audio/verwerking.mjs).
+      archiefGevraagd: Boolean(bron.audio.archiefGevraagd),
+      archief: bron.audio.archief || null,
     } : null,
   };
 }
@@ -476,6 +479,13 @@ function werkBronBij(k, id, invoer) {
   }
   bron.naam = bronNaam(bron.regio ? k.regioMap.get(bron.regio) : null, bron.label, bron.url, true);
   if (isAudio(bron) && invoer.actief !== undefined) bron.audio.actief = Boolean(invoer.actief);
+  // Ook het hele archief transcriberen; een nieuwe aanvraag begint met een schone lei.
+  if (isAudio(bron) && invoer.archief !== undefined && bron.audio.kind !== 'video') {
+    if (invoer.archief && !bron.audio.archiefGevraagd) {
+      bron.audio.archiefGevraagd = true;
+      delete bron.audio.archief;
+    } else if (!invoer.archief) delete bron.audio.archiefGevraagd;
+  }
   // Een overzicht zonder datums: voortaan de dag dat we een stuk voor het eerst zien.
   if (invoer.datumBijEersteZicht !== undefined && !isAudio(bron)) {
     if (invoer.datumBijEersteZicht) bron.datumBijEersteZicht = true;

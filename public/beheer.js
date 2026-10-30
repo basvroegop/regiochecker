@@ -244,7 +244,16 @@ const TYPES = {
 
 function audioTelling(a) {
   const t = a.tellingen;
-  return [`${t.transcripten} transcript${t.transcripten === 1 ? '' : 'en'}`, t.bezig && `${t.bezig} in de wachtrij`, t.mislukt && `${t.mislukt} mislukt`].filter(Boolean).join(' · ');
+  return [`${t.transcripten} transcript${t.transcripten === 1 ? '' : 'en'}`, t.bezig && `${t.bezig} in de wachtrij`, t.mislukt && `${t.mislukt} mislukt`,
+    a.archiefGevraagd && 'archief wordt gelezen'].filter(Boolean).join(' · ');
+}
+
+// Wat het lezen van het hele archief opleverde.
+function archiefTekst(a) {
+  if (a.archiefGevraagd) return `Het hele archief wordt gelezen (binnen een uur of wat); oudere afleveringen komen achter nieuwe in de wachtrij.${a.archief?.fout ? ` Vorige poging mislukt: ${a.archief.fout}` : ''}`;
+  if (a.archief?.klaar) return `Hele archief gelezen op ${new Date(a.archief.klaar).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}: ${a.archief.toegevoegd} oudere ${a.archief.toegevoegd === 1 ? 'aflevering' : 'afleveringen'} toegevoegd.`;
+  if (a.archief?.fout) return `Het archief lezen lukte drie keer niet: ${a.archief.fout}`;
+  return '';
 }
 
 function bronnenRij(b) {
@@ -279,6 +288,8 @@ function wijzigBronDialoog(b, opslaan) {
       ${app.ik.regios.map((r) => `<option value="regio:${esc(r.id)}" ${b.bereik === 'regio' && b.regio === r.id ? 'selected' : ''}>${esc(r.naam)}</option>`).join('')}
     </select></label>
     ${b.audio ? `<label class="vinkregel"><input type="checkbox" name="actief" ${b.audio.actief ? 'checked' : ''}><span class="vakje"></span>Nieuwe afleveringen blijven zoeken (uit = gepauzeerd; de wachtrij loopt door)</label>
+      ${b.audio.kind !== 'video' ? `<label class="vinkregel"><input type="checkbox" name="archief" ${b.audio.archiefGevraagd ? 'checked' : ''}><span class="vakje"></span>Ook het hele archief transcriberen (oudere afleveringen komen achter nieuwe in de wachtrij)</label>` : ''}
+      ${archiefTekst(b.audio) ? `<p class="uitleg-klein">${esc(archiefTekst(b.audio))}</p>` : ''}
       <p class="uitleg-klein">${esc(b.lezer)}${b.audio.titel ? ` · ${esc(b.audio.titel)}` : ''} · ${esc(audioTelling(b.audio))}${b.audio.catalogus !== null ? ` · catalogus ${b.audio.catalogus}` : ''}<br>${esc(b.url)}</p>` : `<p class="uitleg-klein">${esc(b.url)}</p>`}
     <div class="knoppenrij"><button class="knop primair" value="opslaan">Opslaan</button>${b.audio ? '<button class="knop" value="controleer">Nu controleren</button>' : ''}<button class="knop zacht" value="annuleer" formnovalidate>Annuleren</button></div>
   </form>`;
@@ -287,7 +298,7 @@ function wijzigBronDialoog(b, opslaan) {
     if (!['opslaan', 'controleer'].includes(dialoog.returnValue)) return;
     const f = dialoog.querySelector('form');
     const [bereik, regio] = f.bereik.value.split(':');
-    opslaan({ label: f.label.value, bereik, regio, ...(b.audio ? { actief: f.actief.checked } : {}) }, dialoog.returnValue === 'controleer');
+    opslaan({ label: f.label.value, bereik, regio, ...(b.audio ? { actief: f.actief.checked, ...(f.archief ? { archief: f.archief.checked } : {}) } : {}) }, dialoog.returnValue === 'controleer');
   };
 }
 
@@ -1042,7 +1053,7 @@ export async function toonAudio(hoofd) {
           ${d.bezig.length ? d.bezig.map((a) => afleveringRij(a)).join('') : '<p class="leeg" style="padding-left:0">Niets.</p>'}
         </section>
         <section class="sectie">
-          <div class="sectiekop"><span class="titel">Wachtrij</span><span class="uitleg">${d.inWachtrij} ${d.inWachtrij === 1 ? 'stap' : 'stappen'} te gaan. Per bron eerst alle transcripten, dan de namen; het nieuwste eerst.</span></div>
+          <div class="sectiekop"><span class="titel">Wachtrij</span><span class="uitleg">${d.inWachtrij} ${d.inWachtrij === 1 ? 'stap' : 'stappen'} te gaan. Eerst wat nieuw is, per bron het nieuwste eerst; het archief daarna, het nieuwste eerst over alle bronnen.</span></div>
           ${d.wachtrij.length ? d.wachtrij.map((a) => afleveringRij(a)).join('') : '<p class="leeg" style="padding-left:0">Leeg.</p>'}
         </section>
         ${d.mislukt.length ? `<section class="sectie">
@@ -1050,7 +1061,7 @@ export async function toonAudio(hoofd) {
           ${d.mislukt.map((a) => afleveringRij(a, { knop: `<button class="knop klein" data-opnieuw="${esc(a.id)}">Opnieuw</button>` })).join('')}
         </section>` : ''}
         <section class="sectie">
-          <div class="sectiekop"><span class="titel">Volgorde van de bronnen</span><span class="uitleg">Een bron wordt helemaal afgemaakt voordat de volgende aan de beurt is.</span></div>
+          <div class="sectiekop"><span class="titel">Volgorde van de bronnen</span><span class="uitleg">Nieuwe afleveringen gaan in deze volgorde: een bron eerst helemaal, dan de volgende.</span></div>
           ${bronnen.length ? bronnen.map((b, i) => `<div class="tabelrij volgorderij">
             <span class="tab-nums" style="font-weight:600">${i + 1}</span>
             <span class="naamcel"><strong>${esc(b.naam)}</strong><small>${esc(b.lezer)} · ${esc(audioTelling(b.audio))}${b.audio.actief ? '' : ' · gepauzeerd'}</small></span>

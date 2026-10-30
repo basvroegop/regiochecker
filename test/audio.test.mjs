@@ -582,6 +582,33 @@ test('Notubiz: de opname en agenda uit de API als het portaal achter een Cloudfl
   } finally {
     net.herstel();
   }
+
+  // Niet live uitgezonden, wel een video achteraf (Pekela): die telt mee; zonder video niet.
+  const { ontdek } = await import('../src/audio/vergaderingen.mjs');
+  const dagen = (n) => new Date(Date.now() - n * 86400_000).toISOString().slice(0, 10);
+  const ev = (id, live, d) => ({ id, live, type: 'meeting', permission_group: 'public', canceled: false, inactive: false, gremium: { id: 1 }, attributes: [{ id: 1, value: `Raad ${id}` }], plannings: [{ start_date: `${dagen(d)} 19:30:00` }] });
+  const gevraagd = [];
+  const pekela = await nepInternet((u) => {
+    if (u.host !== 'api.notubiz.nl') return undefined;
+    if (u.pathname === '/organisations/1811/gremia') return { gremia: [{ id: 1, title: 'Gemeenteraad' }] };
+    if (u.pathname === '/organisations/1811') return { organisation: { name: 'Gemeente Pekela' } };
+    if (u.pathname === '/events') return { events: [ev(1, true, 10), ev(2, false, 20), ev(3, false, 30)], pagination: { has_more_pages: false } };
+    if (u.pathname === '/media') {
+      gevraagd.push(u.searchParams.get('event_id'));
+      return u.searchParams.get('event_id') === '2' ? media : { media: [] };
+    }
+    return undefined;
+  });
+  try {
+    const c = await ontdek({ url: 'https://pekela.raadsinformatie.nl/', audio: { kind: 'notubiz', organisatie: '1811', eersteImport: 0, geinitialiseerd: true } });
+    assert.deepEqual(c.items.map((i) => i.extern), ['ntb:1811/1', 'ntb:1811/2']);
+    assert.deepEqual(gevraagd, ['2', '3'], 'alleen bij wat niet live was, de media opvragen');
+    gevraagd.length = 0;
+    await ontdek({ url: 'https://pekela.raadsinformatie.nl/', audio: { kind: 'notubiz', organisatie: '1811', eersteImport: 0, geinitialiseerd: true } });
+    assert.deepEqual(gevraagd, ['2'], 'een oude vergadering zonder video wordt onthouden');
+  } finally {
+    pekela.herstel();
+  }
 });
 
 test('een vergadering die al klaar was, krijgt de sprekers van Notubiz alsnog', metSqlite, async () => {
@@ -700,7 +727,7 @@ test('lange opnames in delen naar de worker, met tussenstand', metAlles, async (
   }
 });
 
-test('een eerste import van alleen nieuwe afleveringen: niets uit het archief, wel wat er daarna bij komt', metSqlite, async () => {
+test('een eerste import van alleen nieuwe afleveringen, en later toch het hele archief, achter wat nieuw is', metSqlite, async () => {
   const feed = await nepPodcast({ n: 4 });
   try {
     const { opslag, adb, verwerking } = await opzet();
@@ -711,6 +738,27 @@ test('een eerste import van alleen nieuwe afleveringen: niets uit het archief, w
     feed.staat.extra.push({ guid: 'afl-nieuw', dagen: 0 });
     assert.deepEqual(await verwerking.synchroniseer(bron), { ok: true, nieuw: 1, aantal: 5 });
     assert.deepEqual(adb.lijst({ bron: 'p' }).map((a) => [a.titel, a.status]), [['afl-nieuw', 'wacht']]);
+
+    // Later toch het hele archief: wat als gezien was gemarkeerd, komt alsnog
+    // binnen, als archief, en achter wat nieuw is in de wachtrij.
+    bron.audio.archiefGevraagd = true;
+    await verwerking.controleerBronnen(Date.now() - 2 * 3600_000);
+    assert.equal(bron.audio.archiefGevraagd, undefined);
+    assert.deepEqual([bron.audio.archief.aantal, bron.audio.archief.toegevoegd], [5, 4]);
+    const archief = adb.lijst({ bron: 'p' }).filter((a) => a.nulmeting);
+    assert.equal(archief.length, 4);
+    const tweede = { ...bron, id: 'q', naam: 'q', audio: { ...bron.audio, prioriteit: 1, archiefGevraagd: undefined, archief: undefined } };
+    opslag.bronnen.push(tweede);
+    adb.voegToe(tweede, { extern: 'q:1', vorm: 'rss', url: `${feed.url}#q1`, mediaUrl: `${feed.url}#q1`, titel: 'Nieuw bij de tweede bron', gepubliceerdOp: Date.now() / 1000 - 30 * 86400 });
+    const volgorde = verwerking.volgende(Date.now() / 1000 + 60).map((r) => adb.aflevering(r.id).titel);
+    assert.deepEqual(volgorde.slice(0, 2), ['afl-nieuw', 'Nieuw bij de tweede bron'], 'eerst wat nieuw is, ook van een latere bron');
+    assert.equal(volgorde.length, 6);
+
+    // Audio van een archiefopname ouder dan de bewaartermijn gaat meteen weg.
+    opslag.instellingen.audio = { ...opslag.instellingen.audio, bewaarAudio: 'alles', bewaarDagen: 180 };
+    assert.equal(verwerking.bewaarAudio({ soort: 'podcast', nulmeting: true, gepubliceerd: new Date(Date.now() - 400 * 86400_000).toISOString() }), false);
+    assert.equal(verwerking.bewaarAudio({ soort: 'podcast', nulmeting: true, gepubliceerd: new Date(Date.now() - 10 * 86400_000).toISOString() }), true);
+    assert.equal(verwerking.bewaarAudio({ soort: 'podcast', nulmeting: false, gepubliceerd: new Date(Date.now() - 400 * 86400_000).toISOString() }), true);
   } finally {
     feed.server.close();
   }

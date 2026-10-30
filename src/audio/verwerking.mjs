@@ -31,6 +31,8 @@ import { samenvattingAanbieder } from '../samenvatting.mjs';
 import { sprekersVan } from '../feed.mjs';
 
 const BRON_INTERVAL_MS = 60 * 60_000;
+const ARCHIEF_TUSSEN_MS = 15 * 60_000;
+const ARCHIEF_POGINGEN = 3;
 const DAG_MS = 86400_000;
 
 export const isAudio = (b) => b?.type === 'audio' && b.audio;
@@ -215,6 +217,36 @@ export class Verwerking {
     }
   }
 
+  // Het hele archief van een bron (`audio.archiefGevraagd`, Beheer › Bronnen):
+  // de catalogus lezen zoals bij een eerste import van alles, en wat nog niet in
+  // de database staat toevoegen als archief (nulmeting): op de eigen datum, en
+  // in de wachtrij achter nieuwe afleveringen. Ook wat bij een eerste import van
+  // "alleen nieuwe" als gezien werd gemarkeerd, komt zo alsnog binnen.
+  async importeerArchief(bron) {
+    const vorige = bron.audio.archief || {};
+    try {
+      const { items } = await ontdek({ ...bron, audio: { ...bron.audio, geinitialiseerd: false, eersteImport: 0 } }, { map: this.map });
+      let toegevoegd = 0;
+      for (const i of items) {
+        if (!this.adb.bestaand(bron.id, i.extern) && this.adb.voegToe(bron, i, { nulmeting: true })) toegevoegd++;
+      }
+      this.adb.markeerGezien(bron.id, items.map((i) => i.extern));
+      delete bron.audio.archiefGevraagd;
+      bron.audio.archief = { klaar: new Date().toISOString(), aantal: items.length, toegevoegd };
+      this.opslag.log({ soort: 'audio', tekst: `${bron.naam}: hele archief gelezen, ${toegevoegd} oudere ${toegevoegd === 1 ? 'aflevering' : 'afleveringen'} in de wachtrij` });
+      this.wek();
+      return { ok: true, toegevoegd, aantal: items.length };
+    } catch (fout) {
+      const pogingen = (vorige.pogingen || 0) + 1;
+      bron.audio.archief = { fout: fout.message.slice(0, 500), tijd: new Date().toISOString(), pogingen };
+      // Na drie keer niet meer vanzelf; opnieuw aanvragen kan in Beheer.
+      if (pogingen >= ARCHIEF_POGINGEN) delete bron.audio.archiefGevraagd;
+      return { ok: false, fout: fout.message };
+    } finally {
+      this.opslag.bewaar('bronnen');
+    }
+  }
+
   async controleerBronnen(nu = Date.now()) {
     if (this.adb.gepauzeerd()) return;
     for (const bron of this.bronVolgorde()) {
@@ -226,15 +258,27 @@ export class Verwerking {
       await this.synchroniseer(bron);
       if (this.adb.gepauzeerd()) return;
     }
+    // Daarna hooguit één archief per kwartier: het lezen ervan kan lang duren
+    // (iBabs vraagt vijf seconden per pagina), en de gewone controles gaan voor.
+    if (nu - (this.archiefMoment || 0) < ARCHIEF_TUSSEN_MS) return;
+    const archief = this.bronVolgorde()
+      .filter((b) => b.audio.archiefGevraagd && b.audio.actief !== false && b.audio.geinitialiseerd && b.audio.kind !== 'video')
+      .sort((a, b) => (a.audio.archief?.tijd || '').localeCompare(b.audio.archief?.tijd || ''))[0];
+    if (!archief) return;
+    this.archiefMoment = nu;
+    await this.importeerArchief(archief);
   }
 
   // ---------- de wachtrij ----------
 
   // Per aflevering drie fasen: transcript, namen, AI-samenvatting. Een
   // aflevering die al begonnen is, wordt eerst helemaal afgemaakt; daarna de
-  // volgende, in de volgorde van de bronnen en het nieuwste eerst. Afleveringen
-  // die al klaar waren en alleen nog een samenvatting missen (een overgenomen
-  // archief, of een samenvatting die mislukte), komen als laatste.
+  // volgende, in de volgorde van de bronnen en het nieuwste eerst. Het archief
+  // (een eerste import, of het hele archief van een bron) komt achter alles wat
+  // nieuw is: anders wacht een nieuwe vergadering weken op de jaren ervoor. Dat
+  // archief gaat het nieuwste eerst, over alle bronnen heen. Afleveringen die al
+  // klaar waren en alleen nog een samenvatting missen (een overgenomen archief,
+  // of een samenvatting die mislukte), komen als laatste.
   static fase(r, namen = true) {
     return r.zonder_transcript || r.sprekers_gevraagd ? 0 : namen && r.zonder_entiteiten ? 1 : 2;
   }
@@ -260,8 +304,10 @@ export class Verwerking {
       && (fase(r) < 2 || (samenvatten && r.zonder_samenvatting) || r.status !== 'klaar'));
     const groep = (r) => (lopend(r) ? 0 : fase(r) === 0 ? 1 : 2);
     rijen.sort((a, b) => groep(a) - groep(b)
-      || volgorde.get(a.bron) - volgorde.get(b.bron)
-      || b.moment - a.moment);
+      || a.nulmeting - b.nulmeting
+      || (a.nulmeting
+        ? b.moment - a.moment || volgorde.get(a.bron) - volgorde.get(b.bron)
+        : volgorde.get(a.bron) - volgorde.get(b.bron) || b.moment - a.moment));
     return { rijen, groep };
   }
 
@@ -346,7 +392,11 @@ export class Verwerking {
 
   bewaarAudio(af) {
     const keuze = this.opslag.instellingen.audio?.bewaarAudio || 'vergaderingen';
-    return keuze === 'alles' || (keuze === 'vergaderingen' && af.soort === 'raadsvergadering');
+    if (!(keuze === 'alles' || (keuze === 'vergaderingen' && af.soort === 'raadsvergadering'))) return false;
+    // Een opname uit het archief die al ouder is dan de bewaartermijn: meteen weg
+    // (het transcript blijft). Een heel archief zou de schijf anders vullen.
+    const dagen = Number(this.opslag.instellingen.audio?.bewaarDagen) || 180;
+    return !(af.nulmeting && Date.parse(af.gepubliceerd || '') < Date.now() - dagen * DAG_MS);
   }
 
   async verwerk(af, w) {

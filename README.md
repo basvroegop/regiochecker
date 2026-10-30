@@ -439,6 +439,22 @@ catalogus van "de nieuwste honderd" kan een stukje terugschuiven, bijvoorbeeld
 als een vergadering van vandaag nog niet is geweest. Wat daardoor alsnog
 opduikt, is achterstand en gaat niet in de wachtrij.
 
+**Het hele archief** (vinkje in het bewerkvenster van een audiobron, of `PUT
+/api/beheer/bronnen/<id>` met `archief: true`): de catalogus wordt gelezen zoals
+bij een eerste import van alles, en wat nog niet in de database staat, gaat
+alsnog als archief (nulmeting) in de wachtrij; ook wat bij "alleen nieuwe" als
+gezien was gemarkeerd. Na de gewone controles, hooguit één bron per kwartier (het
+lezen van een iBabs-archief duurt met vijf seconden per pagina een paar uur);
+mislukt het drie keer, dan stopt het en staat de fout bij de bron. **Volgorde in
+de wachtrij:** eerst wat nieuw is, in de volgorde van de bronnen; het archief
+daarna, het nieuwste eerst over alle bronnen heen, zodat van elke gemeente eerst
+het recente verleden binnenkomt. Een archiefopname die al ouder is dan de
+bewaartermijn van de audio, verliest haar audio direct na het transcriberen (het
+transcript blijft); anders zou een heel archief de schijf vullen.
+
+Sinds 30 oktober 2026 staat voor alle raadsvergaderingen het hele archief aan, op
+verzoek van de opdrachtgever.
+
 **Lange opnames** gaan in delen van 45 minuten naar de worker (met een paar
 seconden overlap; het laatste deel neemt de rest mee, dus pas vanaf zo'n 56
 minuten). Een vergadering van ruim drie uur in één keer liet de worker crashen.
@@ -606,9 +622,12 @@ Het Authelia-account zelf, en toegang tot deze site, regel je in Authelia
   `data/regios.json` en `data/bronnen.json` (toegevoegd via Beheer): nieuws bij
   alle 33 (27 via RSS, 6 via `html-lijst`), ingekomen stukken (of als
   vervangende bron raadsinformatiebrieven en memo's) uit iBabs of Notubiz bij
-  32, Woo bij 22, en de vergaderingen van 30 gemeenten (22 Company Webcast, 5
+  32, Woo bij 22, en de vergaderingen van alle 33 (22 Company Webcast, 8
   Notubiz, Stadskanaal en Westerwolde via iBabs, Tynaarlo via
-  GemeenteOplossingen) met eerste import "alleen nieuwe". Daarnaast
+  GemeenteOplossingen); eerst met "alleen nieuwe", sinds 30 oktober met het
+  hele archief (zie Audio en video). Pekela zendt niet live uit maar zet de
+  video achteraf in Notubiz; zo'n vergadering telt mee als `/media` iets heeft.
+  Daarnaast
   krijgen ze de bekendmakingen van de provincie Fryslân voor hun gemeente, de
   signalen met een plek (KNMI, ransomware, Raad van State, verkeer,
   inzendingen) en wat via hun sleutelwoorden binnenkomt. Een regio heet naar de gemeente: hernoem hem niet,
