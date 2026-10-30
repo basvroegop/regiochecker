@@ -626,7 +626,8 @@ async function ibabsOntdek(bron, { proef = false } = {}) {
   const limiet = Number(bron.audio.eersteImport ?? 3);
   const nu = Date.now();
   const rand = new Date(nu - IBABS_MARGE_UUR * 3600_000);
-  const grens = new Date(nu - (bron.audio.geinitialiseerd ? IBABS_RECENT : IBABS_JAREN * 365) * 86400_000);
+  // Een eerste import van alleen nieuwe vergaderingen (-1) hoeft het archief niet door.
+  const grens = new Date(nu - (bron.audio.geinitialiseerd || limiet < 0 ? IBABS_RECENT : IBABS_JAREN * 365) * 86400_000);
   const namen = proef ? new Map() : await ibabsSoortnamen(portaal);
   const items = [];
   const gehad = new Set();

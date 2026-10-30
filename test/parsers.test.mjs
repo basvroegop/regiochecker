@@ -78,7 +78,18 @@ test('Notubiz-API: ingekomen stukken Smallingerland', () => {
     document: 'https://api.notubiz.nl/document/17483299/1',
     soortStuk: 'Nr. 2026-247',
     advies: 'Voor kennisgeving aannemen',
+    afzender: null,
   });
+
+  // Andere gemeenten, andere velden (Pekela: "Datum publicatie", "Nieuw document", "Afzender"); een andere module.
+  const pekela = leesNotubizApi({ item: [{ '@attributes': { id: 77 }, attributes: { attribute: [
+    { label: 'Onderwerp', value: 'Provincie - Zienswijze ontwerp beheersverordening' },
+    { label: 'Afzender', value: 'Provincie Groningen' },
+    { label: 'Datum publicatie', value: '2026-10-17 10:33:03' },
+    { label: 'Nieuw document', value: { title: 'Zienswijze', url: 'https://api.notubiz.nl/document/123/1' } },
+  ] } }] }, 'https://pekela.notubiz.nl', { module: 5, moduleNaam: 'Collegeberichten' });
+  assert.deepEqual([pekela[0].datum, pekela[0].document, pekela[0].afzender, pekela[0].url],
+    ['2026-10-17', 'https://api.notubiz.nl/document/123/1', 'Provincie Groningen', 'https://pekela.notubiz.nl/modules/5/Collegeberichten/77']);
 });
 
 test('Smallingerland: nieuwsarchief en Woo-verzoeken', () => {

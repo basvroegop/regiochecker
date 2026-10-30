@@ -385,8 +385,11 @@ de worker) staat standaard uit, bij Instellingen › Audio en video aan te zette
 Het kost bij een lange vergadering een kwartier GPU-tijd, en de namen van
 sprekers komen uit de gegevens van het vergaderplatform.
 
-**Nieuw na de eerste import** is alleen wat niet ouder is dan de oudste
-aflevering uit die eerste catalogus (`audio.ondergrens` bij de bron). Een
+**De eerste import** (`audio.eersteImport`): de zoveel nieuwste afleveringen,
+0 voor alles, of -1 ("Geen: alleen nieuwe afleveringen") voor niets uit het
+archief, alleen wat er daarna bij komt. **Nieuw na de eerste import** is alleen
+wat niet ouder is dan de oudste aflevering uit die eerste catalogus
+(`audio.ondergrens` bij de bron). Een
 catalogus van "de nieuwste honderd" kan een stukje terugschuiven, bijvoorbeeld
 als een vergadering van vandaag nog niet is geweest. Wat daardoor alsnog
 opduikt, is achterstand en gaat niet in de wachtrij.
@@ -549,16 +552,29 @@ Het Authelia-account zelf, en toegang tot deze site, regel je in Authelia
   een live voorbeeld bij het intypen) en wie de regio volgt. Een eigen regio
   toevoegen kan; de zeven ingebouwde staan in de code, met hun eigen bronnen.
   Sinds 30 oktober 2026 zijn alle gemeenten van Fryslân, Groningen en Drenthe
-  een regio (40). De 33 toegevoegde hebben (nog) geen eigen bronnen: ze krijgen
-  de bekendmakingen van de provincie Fryslân voor hun gemeente, de signalen met
-  een plek (KNMI, ransomware, Raad van State, verkeer, inzendingen) en wat via
-  hun sleutelwoorden binnenkomt. Een regio heet naar de gemeente: hernoem hem
-  niet, anders vindt de routering de gemeentegrens niet meer. Een nieuwe regio
-  krijgt meteen de bekendmakingen die al voor die gemeente binnen waren.
+  een regio (40). De 33 toegevoegde staan niet in de code maar in
+  `data/regios.json` en `data/bronnen.json` (toegevoegd via Beheer), met wat er
+  met de bestaande lezers te halen viel: nieuws via RSS bij 27, ingekomen
+  stukken (of als vervangende bron raadsinformatiebrieven en memo's) uit iBabs
+  of Notubiz bij 27, Woo bij Assen (GPP) en Westerwolde (iBabs), en de
+  vergaderingen van 27 gemeenten (22 Company Webcast, 4 Notubiz, Stadskanaal
+  via iBabs) met eerste import "alleen nieuwe". Geen RSS hebben Leeuwarden en De
+  Fryske Marren (feed uit), De Wolden en Westerveld (feed leeg), Tynaarlo, en
+  Coevorden (de site weert ons). Daarnaast krijgen ze de bekendmakingen van de
+  provincie Fryslân voor hun gemeente, de signalen met een plek (KNMI,
+  ransomware, Raad van State, verkeer, inzendingen) en wat via hun
+  sleutelwoorden binnenkomt. Een regio heet naar de gemeente: hernoem hem niet,
+  anders vindt de routering de gemeentegrens niet meer. Een nieuwe regio krijgt
+  meteen de bekendmakingen die al voor die gemeente binnen waren.
 - **Bronnen**: het register van alle bronnen, landelijk en gemeentelijk, met
   status en het aantal nieuwe stukken in zeven dagen. **Bron toevoegen**: bereik,
   soort, type, adres, proefronde, opslaan. Zelf toegevoegde bronnen zijn te
-  wijzigen (naam, bereik, bij audio pauzeren) en te verwijderen.
+  wijzigen (naam, bereik, bij audio pauzeren) en te verwijderen. Via de API
+  (`POST /api/beheer/bronnen`) kan ook een Notubiz-module (`lezer:
+  'notubiz-ingekomen'` met `organisatie`, `module` en `moduleNaam`, uit
+  `api.notubiz.nl/organisations/<id>/modules`), een vervangende bron
+  (`vervangend: true`) en een Notubiz-vergaderarchief met de organisatie vooraf
+  (`organisatie`; het portaal zelf zit achter een Cloudflare-controle).
 - **Audio**: workerstatus, wat er nu gebeurt, de wachtrij, mislukte afleveringen
   en de volgorde van de bronnen.
 - **Teams**: kanalen in Microsoft Teams die meekrijgen wat er binnenkomt (zie

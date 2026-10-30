@@ -179,8 +179,10 @@ export class Verwerking {
       const data = items.map((i) => i.gepubliceerdOp).filter(Boolean);
       if (eersteKeer) bron.audio.ondergrens = data.length ? Math.min(...data) : null;
       const ondergrens = bron.audio.ondergrens ?? (Date.parse(bron.aangemaakt || '') / 1000 - 30 * 86400 || null);
+      // eersteImport: het aantal nieuwste bij de eerste import, 0 = alles, -1 =
+      // niets (alleen wat er daarna bij komt).
       const gekozen = eersteKeer
-        ? (limiet ? vers.slice(0, limiet) : vers)
+        ? (limiet < 0 ? [] : limiet ? vers.slice(0, limiet) : vers)
         : vers.filter((i) => !ondergrens || !i.gepubliceerdOp || i.gepubliceerdOp >= ondergrens);
       let nieuw = 0;
       for (const i of gekozen) {

@@ -636,6 +636,22 @@ test('lange opnames in delen naar de worker, met tussenstand', metAlles, async (
   }
 });
 
+test('een eerste import van alleen nieuwe afleveringen: niets uit het archief, wel wat er daarna bij komt', metSqlite, async () => {
+  const feed = await nepPodcast({ n: 4 });
+  try {
+    const { opslag, adb, verwerking } = await opzet();
+    const bron = { id: 'p', naam: 'p', soort: 'podcast', bereik: 'landelijk', type: 'audio', url: feed.url, aangemaakt: new Date().toISOString(), audio: { kind: 'rss', eersteImport: -1, actief: true, prioriteit: 0 } };
+    opslag.bronnen.push(bron);
+    assert.deepEqual(await verwerking.synchroniseer(bron), { ok: true, nieuw: 0, aantal: 4 });
+    assert.equal(adb.lijst({ bron: 'p' }).length, 0, 'het archief niet');
+    feed.staat.extra.push({ guid: 'afl-nieuw', dagen: 0 });
+    assert.deepEqual(await verwerking.synchroniseer(bron), { ok: true, nieuw: 1, aantal: 5 });
+    assert.deepEqual(adb.lijst({ bron: 'p' }).map((a) => [a.titel, a.status]), [['afl-nieuw', 'wacht']]);
+  } finally {
+    feed.server.close();
+  }
+});
+
 test('AI-samenvatting: de hele opname in hooguit 100 woorden, als laatste stap', metSqlite, async () => {
   const { beperkWoorden } = await import('../src/vergadering.mjs');
   const zin = (n) => Array.from({ length: n }, (_, i) => `woord${i + 1}`).join(' ');

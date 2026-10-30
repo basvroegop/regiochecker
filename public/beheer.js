@@ -292,7 +292,7 @@ function wijzigBronDialoog(b, opslaan) {
 }
 
 const YOUTUBE_SCOPES = [['auto', 'Automatisch uit het adres'], ['youtube', 'Hele kanaal'], ['youtube-videos', 'Alleen video\'s'], ['youtube-streams', 'Alleen afgeronde live-uitzendingen'], ['youtube-shorts', 'Alleen Shorts'], ['youtube-playlist', 'Eén afspeellijst']];
-const EERSTE_IMPORT = [[1, 'De nieuwste aflevering'], [3, 'De 3 nieuwste'], [10, 'De 10 nieuwste'], [25, 'De 25 nieuwste'], [50, 'De 50 nieuwste'], [100, 'De 100 nieuwste'], [0, 'Alle beschikbare afleveringen']];
+const EERSTE_IMPORT = [[-1, 'Geen: alleen nieuwe afleveringen'], [1, 'De nieuwste aflevering'], [3, 'De 3 nieuwste'], [10, 'De 10 nieuwste'], [25, 'De 25 nieuwste'], [50, 'De 50 nieuwste'], [100, 'De 100 nieuwste'], [0, 'Alle beschikbare afleveringen']];
 
 function formulierHtml(f, worker) {
   const types = TYPES[f.groep];

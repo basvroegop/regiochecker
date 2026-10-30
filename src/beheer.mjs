@@ -206,7 +206,7 @@ function regioDetail(k, id) {
 // ---------- bronnen toevoegen ----------
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-const LEZERS_TOEVOEGEN = ['rss', 'ibabs', 'gpp-woo', 'audio'];
+const LEZERS_TOEVOEGEN = ['rss', 'ibabs', 'notubiz-ingekomen', 'gpp-woo', 'audio'];
 
 function bronNaam(regio, label, url, eigenNaam) {
   return regio ? `${regio.naam} · ${label}` : `${label}${eigenNaam ? '' : ` · ${host(url)}`}`;
@@ -238,6 +238,20 @@ async function maakBron(opslag, invoer) {
     Object.assign(bron, { basis: url.origin, overzicht });
   }
   if (lezer === 'gpp-woo') Object.assign(bron, { basis: url.origin, url: url.origin });
+  // Notubiz: het portaal zit achter een Cloudflare-controle, dus de organisatie
+  // en de module (uit api.notubiz.nl/organisations/<id>/modules) geef je mee.
+  const organisatie = Number(invoer.organisatie);
+  if (lezer === 'notubiz-ingekomen') {
+    const module = Number(invoer.module ?? 1);
+    if (!Number.isInteger(organisatie) || organisatie <= 0 || !Number.isInteger(module) || module <= 0) {
+      throw new InvoerFout('Geef bij Notubiz de organisatie en de module (zie api.notubiz.nl/organisations/<id>/modules)');
+    }
+    const moduleNaam = String(invoer.moduleNaam || 'Ingekomen stukken').slice(0, 80);
+    // Het adres van de module zelf: twee modules van één gemeente zijn twee bronnen.
+    Object.assign(bron, { organisatie, module, moduleNaam, basis: url.origin, url: `${url.origin}/modules/${module}/${encodeURIComponent(moduleNaam)}` });
+  }
+  // Een vervangende bron: de gemeente heeft het gewone overzicht niet (online).
+  if (invoer.vervangend) bron.vervangend = true;
   if (audio) {
     // Welk platform of welke YouTube-tab? Dit zoekt het adres ook na.
     let herkend;
@@ -251,9 +265,12 @@ async function maakBron(opslag, invoer) {
     bron.audio = {
       kind: herkend.kind,
       // 0 = alles wat de bron nu aanbiedt (zoals in audioscraper, tot 5000).
-      eersteImport: Number.isInteger(eersteImport) && eersteImport >= 0 && eersteImport <= 5000 ? eersteImport : 3,
+      // -1: geen, alleen wat er na het toevoegen bij komt.
+      eersteImport: Number.isInteger(eersteImport) && eersteImport >= -1 && eersteImport <= 5000 ? eersteImport : 3,
       actief: true,
       geinitialiseerd: false,
+      // Notubiz: de organisatie vooraf, want het portaal is niet te lezen.
+      ...(herkend.kind === 'notubiz' && Number.isInteger(organisatie) && organisatie > 0 ? { organisatie: String(organisatie) } : {}),
     };
   }
   const label = String(invoer.naam || '').trim().slice(0, 120)
@@ -292,7 +309,8 @@ async function proef(k, invoer) {
     if (nieuwste) regels.push(`De nieuwste: "${nieuwste.titel}"${nieuwste.gepubliceerdOp ? ` (${new Date(nieuwste.gepubliceerdOp * 1000).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })})` : ''}${nieuwste.duur ? `, ${duurTekst(nieuwste.duur)}` : ''}.`);
     const eerste = catalogus.deels ? bron.audio.eersteImport || 'alle' : bron.audio.eersteImport ? Math.min(bron.audio.eersteImport, n) : n;
     regels.push(bron.audio.kind === 'video' ? 'Bij het opslaan wordt de video gedownload en getranscribeerd.'
-      : `Bij het opslaan ${eerste === 1 ? 'wordt de nieuwste aflevering' : eerste === 'alle' ? 'worden alle afleveringen' : `worden de ${eerste} nieuwste afleveringen`} gedownload en getranscribeerd, met stemherkenning en namen; daarna komt elke nieuwe aflevering vanzelf binnen.`);
+      : bron.audio.eersteImport < 0 ? 'Bij het opslaan wordt nog niets gedownload; elke nieuwe aflevering daarna komt vanzelf binnen en wordt getranscribeerd.'
+        : `Bij het opslaan ${eerste === 1 ? 'wordt de nieuwste aflevering' : eerste === 'alle' ? 'worden alle afleveringen' : `worden de ${eerste} nieuwste afleveringen`} gedownload en getranscribeerd, met stemherkenning en namen; daarna komt elke nieuwe aflevering vanzelf binnen.`);
     if (bron.bereik === 'landelijk') regels.push('Het transcript wordt doorzocht op de sleutelwoorden van alle regio\'s; bij een treffer gaat de aflevering naar die regio, met de tijd waarop het woord valt.');
     if (!w) regels.push('Let op: de Whisper-worker is nog niet ingesteld (Instellingen › Audio en video); tot dan blijft alles in de wachtrij staan.');
     else if (!w.heeftToken) regels.push('Let op: het token van de Whisper-worker ontbreekt (Instellingen › Audio en video).');
@@ -331,7 +349,8 @@ async function proef(k, invoer) {
 async function slaBronOp(k, invoer, verwerking) {
   const bron = await maakBron(k.opslag, invoer);
   const bestaand = new Set(alleBronnen(k.opslag).map((b) => b.id));
-  if (alleBronnen(k.opslag).some((b) => b.url === bron.url && b.bereik === bron.bereik && b.regio === bron.regio)) {
+  // Hetzelfde adres kan twee bronnen zijn: de ingekomen stukken en de vergaderingen van één Notubiz-portaal.
+  if (alleBronnen(k.opslag).some((b) => b.url === bron.url && b.type === bron.type && b.bereik === bron.bereik && b.regio === bron.regio)) {
     throw new InvoerFout('Deze bron staat er al in');
   }
   bron.id = maakId(`${bron.regio || 'landelijk'}-${bron.label}`, bestaand);
