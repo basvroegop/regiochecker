@@ -20,6 +20,7 @@ import { volgendeWeekmail } from './planning.mjs';
 import { controleerKanaal, nieuwKanaal, kanaalVoorClient, kanaalKeuzes, stuurNaarTeams, testKaart } from './kanalen.mjs';
 import { tokenVan, telegramVoorClient, schoneHandle } from './telegram.mjs';
 import { verdeelOverRegio, haalRegioWeg } from './verzamel.mjs';
+import { gehoordStatus, gehoordTools, koppelAdres, ontkoppel } from './gehoord.mjs';
 
 const DAG_MS = 86400000;
 const RUIS = 25;
@@ -642,6 +643,30 @@ export async function beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, t
   }
 
   // ---------- audio en video: de verwerking ----------
+  // ---------- gehoord.de (Kamerdebatten) ----------
+  if (route === 'GET /gehoord') {
+    const status = gehoordStatus(opslag);
+    if (!status.gekoppeld) return stuur({ ...status, tools: null });
+    try {
+      return stuur({ ...status, ...await gehoordTools(opslag) });
+    } catch (fout) {
+      return stuur({ ...gehoordStatus(opslag), tools: null, fout: fout.message });
+    }
+  }
+  if (route === 'POST /gehoord/koppel') {
+    const site = (process.env.REGIOCHECKER_SITE_URL || '').replace(/\/$/, '');
+    if (!site) throw new Fout(400, 'Zet REGIOCHECKER_SITE_URL: gehoord.de moet weten waarheen het na het inloggen terugstuurt.');
+    try {
+      return stuur({ url: await koppelAdres(opslag, `${site}/api/beheer/gehoord/terug`) });
+    } catch (fout) {
+      throw new Fout(502, fout.message);
+    }
+  }
+  if (route === 'DELETE /gehoord') {
+    await ontkoppel(opslag);
+    return stuur(gehoordStatus(opslag));
+  }
+
   if (route === 'GET /audio') {
     if (!k.adb) throw new Fout(503, 'De database voor audio is niet beschikbaar');
     return stuur(await audioOverzicht(k, verwerking));

@@ -24,6 +24,7 @@ import { maakKader, bouwFeed, bewaardeFeed, zoekFeed, detail, momentopname, meld
 import { controleerMelding, BRONNEN } from './meldingen.mjs';
 import { zoekvraagTekst } from './termen.mjs';
 import { beheerApi } from './beheer.mjs';
+import { rondKoppelingAf } from './gehoord.mjs';
 import { kamerApi } from './kamer/api.mjs';
 import { publiekeInstellingen, werkInstellingenBij } from './instellingen.mjs';
 import { ollamaInfo } from './ollama.mjs';
@@ -186,6 +187,18 @@ export async function api(req, res, url, ctx) {
 
   // ---------- alleen beheer ----------
   alleenBeheer();
+  // Terug van het inloggen bij gehoord.de (src/gehoord.mjs): de browser van de
+  // beheerder komt hier met een code; daarna terug naar Instellingen.
+  if (route === 'GET /api/beheer/gehoord/terug') {
+    let uitkomst = 'gekoppeld';
+    try {
+      await rondKoppelingAf(opslag, { code: z.get('code'), state: z.get('state'), fout: z.get('error') });
+    } catch (fout) {
+      uitkomst = fout.message;
+    }
+    res.writeHead(302, { Location: `/#/beheer/instellingen?gehoord=${encodeURIComponent(uitkomst)}` });
+    return res.end();
+  }
   if (deel[1] === 'beheer') return beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, telegram: ctx.telegram, stuur, leesJson, Fout });
   if (route === 'GET /api/logboek') return stuur(opslag.logboek.slice(0, 200));
   if (route === 'GET /api/instellingen') return stuur(publiekeInstellingen(opslag));

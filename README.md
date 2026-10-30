@@ -333,6 +333,25 @@ uit het open-data-Gegevensmagazijn (opendata.tweedekamer.nl, OData v4).
 - **Zoeken**: de zoekbalk doorzoekt ook alle kamerstukken (FTS5: woorden,
   `"woordgroep"`, `OR`, `NOT`, `voorvoegsel*`).
 
+## Kamerdebatten (gehoord.de)
+
+[gehoord.de/beraadslagingen](https://gehoord.de/beraadslagingen) transcribeert
+de debatten in de Tweede en Eerste Kamer terwijl ze plaatsvinden, met tijd,
+spreker en fractie; gratis na registratie. De gegevens zijn te lezen via hun
+MCP-server (`https://gehoord.de/api/mcp`, `src/mcp.mjs`). Inloggen gaat met
+OAuth (autorisatiecode met PKCE, dynamische registratie; `src/gehoord.mjs`):
+
+1. Beheer › Instellingen › Kamerdebatten › **Koppelen met gehoord.de**.
+2. Je logt bij gehoord.de zelf in en geeft toestemming (`transcripts:read`).
+3. gehoord.de stuurt je terug naar `/api/beheer/gehoord/terug` (op
+   `REGIOCHECKER_SITE_URL`); de Regiochecker bewaart het toegangs- en
+   verversingstoken in `data/instellingen.json` en vernieuwt het zelf.
+
+Het wachtwoord ziet de Regiochecker nooit, en de tokens gaan niet naar de
+browser. Trekt gehoord.de de koppeling in, dan staat dat bij Instellingen en
+koppel je opnieuw. Na het koppelen toont het blok welke functies de server
+aanbiedt; daarop bouwt de landelijke bron Kamerdebatten voort.
+
 ## Audio en video
 
 Overgenomen uit audioscraper; de code staat in `src/audio/`.

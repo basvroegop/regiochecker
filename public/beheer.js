@@ -914,9 +914,35 @@ export async function toonInstellingen(hoofd) {
           <p class="uitleg-klein">Kost bij een lange vergadering een kwartier GPU-tijd op de worker. Namen van sprekers komen uit de gegevens van het vergaderplatform, ook als dit uit staat.</p>
           <div class="knoppenrij"><button class="knop inkt klein">Bewaren</button><button type="button" class="knop klein" id="worker-test">Verbinding testen</button>${i.audio.heeftToken && !i.audio.tokenUitOmgeving ? '<button type="button" class="knop zacht klein" id="wis-token">Token wissen</button>' : ''}<span class="statusregel" id="worker-status"></span></div>
         </form>`)}
+
+      ${instelBlok('Kamerdebatten (gehoord.de)', 'gehoord.de transcribeert de debatten in de Tweede en Eerste Kamer live, met tijd, spreker en fractie. Koppel een account: je logt bij gehoord.de zelf in; de Regiochecker krijgt alleen een toegangssleutel, en die blijft op de server.', `
+        <p class="statusregel${i.gehoord.fout ? ' fout' : ''}">${i.gehoord.gekoppeld ? `Gekoppeld sinds ${esc(moment(i.gehoord.sinds))}.` : 'Niet gekoppeld.'}${i.gehoord.fout ? ` ${esc(i.gehoord.fout)}` : ''}</p>
+        <div class="knoppenrij">${i.gehoord.gekoppeld ? '<button type="button" class="knop zacht klein" id="gehoord-los">Ontkoppelen</button>' : '<button type="button" class="knop inkt klein" id="gehoord-koppel">Koppelen met gehoord.de</button>'}</div>
+        ${i.gehoord.gekoppeld ? '<div id="gehoord-tools"><p class="uitleg-klein">Wat gehoord.de aanbiedt, wordt opgehaald…</p></div>' : ''}`)}
     </div></div>`;
+    if (i.gehoord.gekoppeld) toonGehoordTools();
   };
+  // Wat de MCP-server van gehoord.de aanbiedt, ter controle.
+  async function toonGehoordTools() {
+    const doel = $('#gehoord-tools');
+    try {
+      const g = await vraag('GET', '/api/beheer/gehoord');
+      if (!doel.isConnected) return;
+      doel.innerHTML = g.tools ? `<p class="uitleg-klein">${esc(g.server?.name || 'gehoord.de')}: ${g.tools.length} ${g.tools.length === 1 ? 'functie' : 'functies'}.</p>
+        <ul class="uitleg-klein">${g.tools.map((t) => `<li><strong>${esc(t.titel || t.naam)}</strong>${t.omschrijving ? ` · ${esc(t.omschrijving.split('\n')[0].slice(0, 160))}` : ''}</li>`).join('')}</ul>`
+        : `<p class="statusregel fout">${esc(g.fout || 'Niet bereikbaar.')}</p>`;
+    } catch (fout) {
+      if (doel.isConnected) doel.innerHTML = `<p class="statusregel fout">${esc(fout.message)}</p>`;
+    }
+  }
+
   teken();
+  // Terug van het koppelen bij gehoord.de (?gehoord=… achter de hash).
+  const terug = new URLSearchParams(location.hash.split('?')[1] || '').get('gehoord');
+  if (terug) {
+    toast(terug === 'gekoppeld' ? 'Gekoppeld met gehoord.de' : `Koppelen mislukt: ${terug}`, terug === 'gekoppeld' ? 'ok' : 'fout');
+    history.replaceState(null, '', '#/beheer/instellingen');
+  }
 
   const bewaar = async (knop, wijziging, melding = 'Bewaard') => bezig(knop, async () => {
     i = await vraag('PUT', '/api/instellingen', wijziging);
@@ -999,6 +1025,21 @@ export async function toonInstellingen(hoofd) {
       });
     }
     if (knop.id === 'wis-token') bewaar(knop, { audio: { wisToken: true } }, 'Token gewist');
+    if (knop.id === 'gehoord-koppel') {
+      await bezig(knop, async () => {
+        const { url } = await vraag('POST', '/api/beheer/gehoord/koppel', {});
+        location.href = url;
+      });
+    }
+    if (knop.id === 'gehoord-los') {
+      if (!confirm('De koppeling met gehoord.de verwijderen?')) return;
+      await bezig(knop, async () => {
+        await vraag('DELETE', '/api/beheer/gehoord');
+        i = await vraag('GET', '/api/instellingen');
+        teken();
+        toast('Ontkoppeld');
+      });
+    }
     if (knop.id === 'worker-test') {
       const status = $('#worker-status');
       const f = $('#form-audio');

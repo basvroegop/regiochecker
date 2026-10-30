@@ -1,14 +1,16 @@
 // De instellingen die een beheerder in de webUI wijzigt: controle-interval,
 // standaardschema voor de weekmail van nieuwe gebruikers, SMTP, samenvatting
 // (Claude of Ollama) en de Whisper-worker voor audio en video. Geheimen
-// (SMTP-wachtwoord, Claude-sleutel, worker-token) gaan nooit terug naar de
-// browser; alleen of ze zijn ingevuld.
+// (SMTP-wachtwoord, Claude-sleutel, worker-token, de tokens van gehoord.de)
+// gaan nooit terug naar de browser; alleen of ze zijn ingevuld.
 
 import { samenvattingAanbieder } from './samenvatting.mjs';
+import { gehoordStatus } from './gehoord.mjs';
 import { InvoerFout } from './gebruikers.mjs';
 
 export function publiekeInstellingen(opslag) {
-  const { smtp, claude, audio, ...rest } = opslag.instellingen;
+  // gehoord: de OAuth-tokens van gehoord.de; alleen de status gaat mee.
+  const { smtp, claude, audio, gehoord, ...rest } = opslag.instellingen;
   const { workerToken, ...audioRest } = audio;
   return {
     ...rest,
@@ -21,6 +23,7 @@ export function publiekeInstellingen(opslag) {
     },
     // ollama bevat geen geheimen en gaat via ...rest mee.
     tailnetProxy: Boolean(process.env.REGIOCHECKER_TAILNET_PROXY),
+    gehoord: gehoordStatus(opslag),
     samenvatting: samenvattingAanbieder(opslag),
   };
 }
