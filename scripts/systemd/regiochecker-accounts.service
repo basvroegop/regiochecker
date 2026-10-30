@@ -1,0 +1,20 @@
+# Maakt Authelia-accounts aan voor uitnodigingen uit de Regiochecker; zie
+# scripts/authelia-accounts.py. Mag alleen in het gebruikersbestand van
+# Authelia en de map met aanvragen schrijven, en heeft geen netwerk nodig.
+[Unit]
+Description=Regiochecker: Authelia-accounts aanmaken
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/regiochecker/scripts/authelia-accounts.py
+ProtectSystem=strict
+ReadWritePaths=/opt/authelia/config -/opt/regiochecker/data/authelia
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes

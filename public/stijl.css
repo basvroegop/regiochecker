@@ -414,7 +414,9 @@ span.beurt-tijd { cursor: default; }
 .bronformulier h2 { font-size: 25px; margin: 0; }
 
 /* ---------- 1f: gebruikers ---------- */
-.gebruikersrij { grid-template-columns: 240px 110px 80px minmax(0, 1fr) 150px 120px 70px; gap: 16px; align-items: center; padding: 14px 0; }
+.gebruikersrij { grid-template-columns: 240px 110px 80px minmax(0, 1fr) 150px 120px 190px; gap: 16px; align-items: center; padding: 14px 0; }
+.naamcel .accountstatus { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.naamcel .accountstatus.fout { color: var(--color-accent-700); font-weight: 600; }
 .gebruikersrij .regiochip { padding: 3px 8px; border: 2px solid var(--color-text); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .regiochips-cel { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; position: relative; }
 .regiochips-cel .linkknop { font-size: 12px; }

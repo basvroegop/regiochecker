@@ -1,0 +1,12 @@
+# Start het accountscript zodra de Regiochecker een aanvraag neerzet
+# (src/accounts.mjs, scripts/authelia-accounts.py). Installeren:
+#   cp scripts/systemd/regiochecker-accounts.* /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now regiochecker-accounts.path
+[Unit]
+Description=Regiochecker: aanvragen voor Authelia-accounts
+
+[Path]
+DirectoryNotEmpty=/opt/regiochecker/data/authelia/aanvragen
+
+[Install]
+WantedBy=multi-user.target

@@ -469,17 +469,30 @@ export async function toonBronnen(hoofd, params) {
 
 // ---------- 1f: gebruikers ----------
 
+// Hoe ver het Authelia-account is (src/accounts.mjs): aangevraagd, klaar en
+// gemaild, of een fout van het accountscript of de mail.
+function accountTekst(g) {
+  const a = g.account;
+  if (!a) return '';
+  const regel = (tekst, fout) => `<small class="accountstatus${fout ? ' fout' : ''}" title="${esc(tekst)}">${esc(tekst)}</small>`;
+  if (a.status === 'aangevraagd') return regel('Account wordt aangemaakt…');
+  if (a.status === 'fout') return regel(`Account: ${a.melding}`, true);
+  if (a.mail?.fout) return regel(`Account klaar, mail mislukt: ${a.mail.fout}`, true);
+  if (a.mail?.verstuurd) return regel(`Uitnodiging gemaild ${geledenTekst(a.mail.verstuurd)}`);
+  return '';
+}
+
 function gebruikerRij(g) {
   const regios = g.regios.map((id) => app.ik.regios.find((r) => r.id === id)?.naam || id);
   const alle = regios.length && regios.length === app.ik.regios.length;
   return `<div class="tabelrij gebruikersrij" data-id="${esc(g.id)}">
-    <span class="naamcel"><strong>${esc(g.naam || g.login || g.email)}</strong><small>${esc(g.email || 'geen e-mailadres')}${g.login ? ` · inlog: ${esc(g.login)}` : ''}</small></span>
+    <span class="naamcel"><strong>${esc(g.naam || g.login || g.email)}</strong><small>${esc(g.email || 'geen e-mailadres')}${g.login ? ` · inlog: ${esc(g.login)}` : ''}</small>${accountTekst(g)}</span>
     <select class="keuzelijst klein" data-veld="rol" aria-label="Rol"><option value="journalist" ${g.rol === 'journalist' ? 'selected' : ''}>Journalist</option><option value="admin" ${g.rol === 'admin' ? 'selected' : ''}>Admin</option></select>
     <select class="keuzelijst klein" data-veld="titel" aria-label="Titel"><option ${g.titel === 'LC' ? 'selected' : ''}>LC</option><option ${g.titel === 'DVHN' ? 'selected' : ''}>DVHN</option></select>
     <div class="regiochips-cel">${alle ? '<span class="regiochip">Alle regio\'s</span>' : regios.map((r) => `<span class="regiochip">${esc(r)}</span>`).join('')}<button class="linkknop" data-actie="regios">${regios.length ? 'wijzig' : '+ regio\'s'}</button></div>
     <button class="schakelaar" role="switch" aria-checked="${Boolean(g.weekmail?.aan)}" data-actie="weekmail" title="Weekmail aan of uit" ${g.email ? '' : 'disabled'}><span class="baan"><i></i></span><span class="tekst">${esc(weekmailTekst(g.weekmail))}</span></button>
     <span class="klein zacht">${esc(geledenTekst(g.laatstActief))}</span>
-    <span class="rijacties"><button class="linkknop" data-actie="voorbeeld" title="Voorbeeld van de weekmail" ${g.email && g.regios.length ? '' : 'disabled'}>Mail</button><button class="linkknop" data-actie="bewerk">Wijzig</button><button class="verwijder" data-actie="verwijder" aria-label="${esc(g.naam || g.email)} verwijderen">×</button></span>
+    <span class="rijacties">${app.ik.autheliaAccounts && g.email ? '<button class="linkknop" data-actie="uitnodiging" title="Het Authelia-account aanmaken (als het er nog niet is) en de uitnodiging mailen">Uitnodigen</button>' : ''}<button class="linkknop" data-actie="voorbeeld" title="Voorbeeld van de weekmail" ${g.email && g.regios.length ? '' : 'disabled'}>Mail</button><button class="linkknop" data-actie="bewerk">Wijzig</button><button class="verwijder" data-actie="verwijder" aria-label="${esc(g.naam || g.email)} verwijderen">×</button></span>
   </div>`;
 }
 
@@ -524,9 +537,27 @@ export async function toonGebruikers(hoofd) {
       </form>
       <div class="tabelkop gebruikersrij"><span>Naam</span><span>Rol</span><span>Titel</span><span>Regio's</span><span>Weekmail</span><span>Laatst actief</span><span></span></div>
       ${gebruikers.map(gebruikerRij).join('')}
-      <p class="uitleg-klein" style="margin-top:20px;max-width:760px">Inloggen gaat via Authelia. Iemand die je uitnodigt, kan inloggen zodra er bij Authelia een account is met hetzelfde e-mailadres (of dezelfde inlognaam) en Authelia diegene toegang geeft tot deze site; dat regel je in Authelia zelf. De titel bepaalt de huisstijl (LC of DVHN). Gebruikers zonder inlog krijgen alleen de weekmail.</p>`;
+      <p class="uitleg-klein" style="margin-top:20px;max-width:760px">${app.ik.autheliaAccounts
+    ? 'Inloggen gaat via Authelia. Uitnodigen maakt daar ook het account aan (de inlognaam komt uit het e-mailadres als je er geen invult) en mailt de uitnodiging; het wachtwoord kiest de nieuwe gebruiker zelf. Heeft iemand met dat e-mailadres al een Authelia-account, dan wordt dat gebruikt. Verwijderen zet een account dat via de Regiochecker is gemaakt ook in Authelia uit.'
+    : 'Inloggen gaat via Authelia. Iemand die je uitnodigt, kan inloggen zodra er bij Authelia een account is met hetzelfde e-mailadres (of dezelfde inlognaam) en Authelia diegene toegang geeft tot deze site; dat regel je in Authelia zelf.'} De titel bepaalt de huisstijl (LC of DVHN). Gebruikers zonder inlog krijgen alleen de weekmail.</p>`;
   };
   teken();
+
+  // Zolang het accountscript nog bezig is, af en toe de lijst opnieuw ophalen.
+  let wachtTimer = null;
+  const volgAccounts = (keer = 0) => {
+    clearTimeout(wachtTimer);
+    if (keer > 20 || !gebruikers.some((g) => g.account?.status === 'aangevraagd')) return;
+    wachtTimer = setTimeout(async () => {
+      if (!$('#gebruikers')) return;
+      try {
+        gebruikers = await vraag('GET', '/api/beheer/gebruikers');
+        teken();
+      } catch { /* volgende keer */ }
+      volgAccounts(keer + 1);
+    }, 3000);
+  };
+  volgAccounts();
 
   const werkBij = async (g, wijziging) => {
     try {
@@ -577,6 +608,16 @@ export async function toonGebruikers(hoofd) {
         },
       });
     }
+    if (actie === 'uitnodiging') {
+      if (!confirm(`${g.naam || g.email} uitnodigen? ${g.login ? `Het Authelia-account ${g.login} wordt gecontroleerd` : 'Er komt een Authelia-account'} en er gaat een uitnodiging naar ${g.email}.`)) return;
+      try {
+        Object.assign(g, await vraag('POST', `/api/beheer/gebruikers/${encodeURIComponent(g.id)}/uitnodiging`));
+        teken();
+        volgAccounts();
+      } catch (fout) {
+        toast(fout.message, 'fout');
+      }
+    }
     if (actie === 'voorbeeld') toonVoorbeeld(g, { magVersturen: true });
     if (actie === 'bewerk') bewerkDialoog(g, (wijziging) => werkBij(g, wijziging));
     if (actie === 'verwijder') {
@@ -607,10 +648,16 @@ export async function toonGebruikers(hoofd) {
       });
       gebruikers.push(g);
       teken();
-      toast(`${g.naam} toegevoegd. Kies nu de regio's.`);
+      toast(app.ik.autheliaAccounts && g.account?.status === 'aangevraagd'
+        ? `${g.naam} uitgenodigd: het account wordt aangemaakt en de uitnodiging gemaild. Kies nu de regio's.`
+        : `${g.naam} toegevoegd. Kies nu de regio's.`);
+      volgAccounts();
     });
   });
-  app.opruimen = sluitPopovers;
+  app.opruimen = () => {
+    clearTimeout(wachtTimer);
+    sluitPopovers();
+  };
 }
 
 // ---------- Teams-kanalen ----------

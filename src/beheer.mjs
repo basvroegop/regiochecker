@@ -16,6 +16,7 @@ import { worker as audioWorker } from './audio/worker.mjs';
 import { gooiAudioWeg } from './audio/ophalen.mjs';
 import { isAudio } from './audio/verwerking.mjs';
 import { nieuweGebruiker, werkGebruikerBij, voorClient, InvoerFout } from './gebruikers.mjs';
+import { accountsAan, vraagAccount, zetAccountUit, verwerkAccounts } from './accounts.mjs';
 import { volgendeWeekmail } from './planning.mjs';
 import { controleerKanaal, nieuwKanaal, kanaalVoorClient, kanaalKeuzes, stuurNaarTeams, testKaart } from './kanalen.mjs';
 import { tokenVan, telegramVoorClient, schoneHandle } from './telegram.mjs';
@@ -557,7 +558,7 @@ async function audioOverzicht(k, verwerking) {
   };
 }
 
-export async function beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, telegram, stuur, leesJson, Fout }) {
+export async function beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, telegram, gebruiker, stuur, leesJson, Fout }) {
   const deel = url.pathname.split('/').filter(Boolean); // ['api', 'beheer', ...]
   const route = `${req.method} /${deel.slice(2).join('/')}`;
   const k = maakKader({ opslag, kdb, fdb, adb });
@@ -782,6 +783,8 @@ export async function beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, t
   }
 
   if (route === 'GET /gebruikers') {
+    // Wat het accountscript intussen heeft gedaan, meteen laten zien.
+    await verwerkAccounts(opslag);
     const nu = new Date();
     return stuur(opslag.gebruikers.map((g) => ({ ...voorClient(g), volgendeWeekmail: volgendeWeekmail(nu, g)?.toISOString() || null })));
   }
@@ -790,12 +793,21 @@ export async function beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, t
     const g = nieuweGebruiker(opslag.instellingen, { weekmail: { aan: false } });
     werkGebruikerBij(opslag, g, { ...invoer, weekmail: invoer.weekmail || { aan: false } }, { beheer: true, regioIds });
     opslag.gebruikers.push(g);
+    vraagAccount(opslag, g, gebruiker);
     opslag.bewaar('gebruikers');
     return stuur(voorClient(g), 201);
   }
   if (deel[2] === 'gebruikers' && deel[3]) {
     const g = opslag.gebruikers.find((x) => x.id === deel[3]);
     if (!g) throw new Fout(404, 'Gebruiker niet gevonden');
+    // Opnieuw uitnodigen: het account aanvragen (bestaat het al, dan geeft het
+    // script dat terug) en daarna de mail.
+    if (req.method === 'POST' && deel[4] === 'uitnodiging') {
+      if (!accountsAan()) throw new Fout(400, 'Accounts aanmaken in Authelia staat uit (REGIOCHECKER_AUTHELIA_ACCOUNTS)');
+      if (!vraagAccount(opslag, g, gebruiker)) throw new Fout(400, g.account?.melding || 'Uitnodigen lukte niet');
+      opslag.bewaar('gebruikers');
+      return stuur(voorClient(g));
+    }
     if (req.method === 'PUT') {
       werkGebruikerBij(opslag, g, await leesJson(req), { beheer: true, regioIds });
       opslag.bewaar('gebruikers');
@@ -805,6 +817,7 @@ export async function beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, t
       if (g.rol === 'admin' && !opslag.gebruikers.some((x) => x.id !== g.id && x.rol === 'admin' && x.login)) {
         throw new Fout(400, 'Er moet minstens één beheerder overblijven');
       }
+      zetAccountUit(opslag, g);
       opslag.gebruikers = opslag.gebruikers.filter((x) => x.id !== g.id);
       opslag.meldingen = opslag.meldingen.filter((m) => m.gebruiker !== g.id);
       fdb?.vergeetGebruiker(g.id);

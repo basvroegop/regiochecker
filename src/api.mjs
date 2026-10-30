@@ -34,6 +34,7 @@ import { worker as audioWorker } from './audio/worker.mjs';
 import { verstuur } from './mail.mjs';
 import { volgendeWeekmail } from './planning.mjs';
 import { documentOpVraag } from './inhoud.mjs';
+import { accountsAan } from './accounts.mjs';
 
 const EMAIL = /^[^\s@<>,;]+@[^\s@<>,;]+\.[a-z]{2,}$/i;
 const MEDIATYPE = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm' };
@@ -72,6 +73,8 @@ export async function api(req, res, url, ctx) {
       volgendeWeekmail: volgendeWeekmail(nu, gebruiker)?.toISOString() || null,
       laatsteVerzamelronde: opslag.status.laatsteVerzamelronde,
       audio: Boolean(adb),
+      // Maakt Uitnodigen ook het Authelia-account aan (src/accounts.mjs)?
+      autheliaAccounts: beheerder && accountsAan(),
     });
   }
   if (route === 'PUT /api/ik') {
@@ -230,7 +233,7 @@ export async function api(req, res, url, ctx) {
     res.writeHead(302, { Location: `/#/beheer/instellingen?gehoord=${encodeURIComponent(uitkomst)}` });
     return res.end();
   }
-  if (deel[1] === 'beheer') return beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, telegram: ctx.telegram, stuur, leesJson, Fout });
+  if (deel[1] === 'beheer') return beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, telegram: ctx.telegram, gebruiker, stuur, leesJson, Fout });
   if (route === 'GET /api/logboek') return stuur(opslag.logboek.slice(0, 200));
   if (route === 'GET /api/instellingen') return stuur(publiekeInstellingen(opslag));
   if (route === 'PUT /api/instellingen') {

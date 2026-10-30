@@ -718,10 +718,49 @@ inlognaam). Wie niet is uitgenodigd, krijgt een nette weigering. Is er nog geen
 beheerder, dan wordt de eerste die inlogt beheerder. Iemand zonder inlog kan
 alleen de weekmail krijgen.
 
-Het Authelia-account zelf regel je in Authelia (`/opt/authelia/config/`:
-`users_database.yml` voor de accounts, `configuration.yml` met de regel voor
-`checker.mh-n.nl`). Elk Authelia-account mag op de site; binnen komt alleen wie
-hier ook een account heeft. Op 30 oktober 2026 kreeg iedereen met een
+**Authelia-accounts bij uitnodigen** (sinds 30 oktober 2026, aan met
+`REGIOCHECKER_AUTHELIA_ACCOUNTS=1`). Uitnodigen maakt ook het account in
+Authelia aan en mailt daarna de uitnodiging (afzender: de SMTP onder
+Instellingen). Vul je geen inlognaam in, dan komt die uit het e-mailadres
+(`anneke.de.wit@…` → `anneke.de.wit`, bezet → `anneke.de.wit2`). Heeft iemand met
+dat e-mailadres al een Authelia-account, dan wordt dat gebruikt en zegt de mail
+dat. Het wachtwoord kiest de nieuwe gebruiker zelf: de mail legt uit hoe, via
+**Wachtwoord opnieuw instellen?** op het inlogscherm (Authelia mailt dan een
+link die vijf minuten werkt). Bij de gebruiker staat hoe ver het is (account
+wordt aangemaakt, uitnodiging gemaild, of de fout); de knop **Uitnodigen** in de
+rij doet het opnieuw. Verwijderen zet het Authelia-account uit, maar alleen als
+het in de groep `checker` zit; opnieuw uitnodigen zet het weer aan. Een
+gewijzigd e-mailadres of een andere naam gaat niet mee naar Authelia.
+
+Zo werkt het. De Regiochecker schrijft zelf niet in het gebruikersbestand van
+Authelia: daar logt ook de wiki op in, en wie de Regiochecker zou overnemen,
+kan dan elk account maken of wijzigen. De app zet een aanvraag in
+`data/authelia/aanvragen/` (`src/accounts.mjs`). Een systemd-pad-unit op de
+server start dan `scripts/authelia-accounts.py` (als root, zonder netwerk, en
+alleen met schrijfrecht op `/opt/authelia/config` en `data/authelia`). Dat
+script doet bewust weinig:
+- het maakt alleen nieuwe accounts, altijd in de groep `checker`, met een
+  willekeurig wachtwoord dat niemand kent;
+- het zet alleen `checker`-accounts uit of weer aan;
+- het controleert de aanvraag streng en volgt geen symlinks.
+
+Het script leest en schrijft het hele YAML-bestand, zoals Authelia zelf doet na
+een nieuw wachtwoord (opmerkingen in dat bestand verdwijnen dus), en laat de
+vorige versie staan als `users_database.yml.vorige`. Authelia leest het bestand
+vanzelf opnieuw in (`watch: true`). De uitslag komt in `data/authelia/klaar/`;
+de Regiochecker haalt die elke 15 seconden op. Installeren of bijwerken:
+
+```sh
+cp scripts/systemd/regiochecker-accounts.* /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now regiochecker-accounts.path
+journalctl -u regiochecker-accounts.service   # wat het script deed
+```
+
+Authelia zelf staat in `/opt/authelia/config/`: `users_database.yml` voor de
+accounts, `configuration.yml` met de regel voor `checker.mh-n.nl` en de SMTP
+voor de mails van Authelia (afzender Regiochecker, wachtwoord in
+`/opt/authelia/.env`). Elk Authelia-account mag op de site; binnen komt alleen
+wie hier ook een account heeft. Op 30 oktober 2026 kreeg iedereen met een
 Authelia-account er een, ook de gebruikers van de Verhalenplanner
 (verhalen.mh-n.nl): die zijn met hun wachtwoord van daar in Authelia gezet (de
 scrypt-hash van de Verhalenplanner, omgeschreven naar het `$scrypt$`-formaat dat
@@ -896,8 +935,11 @@ De Tailscale-identiteit van de sidecar staat apart in `./tailscale`.
   (groep `checker`), en zijn de cookie en inlogpagina voor `vroeg.app` van 26
   oktober weer weggehaald. Wiki.js logt via OIDC in op dezelfde Authelia en maakt
   bij elke inlog zelf een account aan; een eigen OIDC-beleid (`wiki`) houdt de
-  groep `checker` daarom buiten de wiki. Terugdraaien: de bestanden uit
-  `/opt/authelia/backups/checker-mhn-*` terugzetten en daar `docker compose up -d`.
+  groep `checker` daarom buiten de wiki. Daarna kwamen `watch: true` op het
+  gebruikersbestand en SMTP voor 'wachtwoord opnieuw instellen' erbij (het
+  accountscript hierboven). Terugdraaien: de bestanden uit
+  `/opt/authelia/backups/accounts-smtp-*` (of eerder `checker-mhn-*`)
+  terugzetten en daar `docker compose up -d --force-recreate`.
 - Vóór Authelia haalt Traefik de `Authorization`-kop weg (middleware
   `regiochecker-zonder-basic`), anders kreeg een browser met oude basic-auth-
   gegevens een wachtwoord-pop-up in plaats van het inlogscherm.

@@ -36,6 +36,10 @@ services:
       # die koptekst weigert de API alles; zo kan een verzoek dat de inlog omzeilt
       # (van binnen het Docker-netwerk) niets.
       - REGIOCHECKER_AUTH_KOP=remote-user
+      # Uitnodigen in Beheer › Gebruikers maakt ook het Authelia-account aan. De
+      # app zet daarvoor een aanvraag in data/authelia/; het hulpscript op de
+      # server (scripts/authelia-accounts.py, via systemd) schrijft in Authelia.
+      - REGIOCHECKER_AUTHELIA_ACCOUNTS=1
       # Ollama en de Whisper-worker draaien op een machine in het tailnet. Deze
       # server zit daar zelf niet in; de Tailscale-container hieronder wel. Alleen
       # dat verkeer gaat door zijn proxy.

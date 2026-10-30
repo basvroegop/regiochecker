@@ -101,6 +101,7 @@ What counts as "new" is `eersteGezien`, the moment of first sight, never the doc
 
 **Auth and secrets.**
 - Users are in `data/gebruikers.json`; the Authelia login arrives as the `Remote-User` header. The first login becomes admin.
+- Inviting a user also creates their Authelia account (`src/accounts.mjs`, on with `REGIOCHECKER_AUTHELIA_ACCOUNTS=1`). The app never writes to Authelia itself: it drops a request in `data/authelia/aanvragen/`, and a systemd path unit on the host runs `scripts/authelia-accounts.py` (root, only creates or disables accounts in group `checker`). Treat everything in that directory as untrusted input in the script. Its tests need Python with PyYAML, which the image lacks, so they run on the host: `node --test test/authelia-accounts.test.mjs`.
 - Secrets never go back to the browser: SMTP, the Claude key, the worker token, Teams webhook URLs and the Telegram token. See `publiekeInstellingen`, `kanaalVoorClient` and `telegramVoorClient`.
 
 **Frontend.** A vanilla ESM single-page app in `public/`:

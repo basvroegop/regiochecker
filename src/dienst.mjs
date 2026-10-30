@@ -11,6 +11,8 @@
 //                          Zonder deze instelling (alleen voor lokaal testen) is
 //                          iedereen de gebruiker "lokaal".
 //   REGIOCHECKER_SITE_URL  adres van de webUI, voor de links in de mails
+//   REGIOCHECKER_AUTHELIA_ACCOUNTS  1: Uitnodigen maakt ook het Authelia-account
+//                          aan, via het hulpscript op de server (src/accounts.mjs)
 //   ANTHROPIC_API_KEY      Claude-sleutel; mag ook in de webUI worden ingevuld
 //   REGIOCHECKER_TAILNET_PROXY  HTTP-proxy van de Tailscale-container, voor
 //                          Ollama en de Whisper-worker in het tailnet (src/tailnet.mjs)
@@ -30,6 +32,7 @@ import { verwerkMeldingen } from './meldingen.mjs';
 import { verwerkKanalen } from './kanalen.mjs';
 import { TelegramBot } from './telegram.mjs';
 import { herken } from './gebruikers.mjs';
+import { accountsAan, maakMappen, verwerkAccounts } from './accounts.mjs';
 import { openKamerDb } from './kamer/db.mjs';
 import { kamerRonde } from './kamer/ronde.mjs';
 import { openFeedDb } from './feeddb.mjs';
@@ -341,6 +344,12 @@ server.listen(POORT, () => {
   setInterval(kamerTik, KAMER_INTERVAL_MS);
   verwerking?.start();
   telegram.start();
+  // Uitslagen van het accountscript op de server (src/accounts.mjs): een
+  // uitnodiging moet niet wachten op een verzamelronde in tik().
+  if (accountsAan()) {
+    maakMappen(opslag);
+    setInterval(() => verwerkAccounts(opslag).catch((fout) => console.error('Accounts:', fout.message)), 15_000);
+  }
   // De locatie-index (11 MB) alvast inlezen, zodat Audio-archief › Namen meteen opent.
   setTimeout(() => deelLocatieIn('Drachten'), 20_000);
 });
