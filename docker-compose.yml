@@ -2,11 +2,12 @@
 # kamerstukken, audio en video) met feed, meldingen en weekmail.
 # Pad op VPS: /opt/regiochecker/
 #
-# Zelfde patroon als /opt/suikerbroodindex en /opt/prijspeiler: Traefik pakt de
-# container op via de labels, traefik-cloudflare-companion maakt het DNS-record
-# regiochecker.vroeg.app -> vps.vroeg.app aan, en het certificaat komt via de
-# cloudflare-resolver. Die companion scant alleen bij het opstarten, dus een
-# nieuwe hostnaam vraagt `docker restart traefik-companion`.
+# Traefik pakt de container op via de labels. De site staat op checker.mh-n.nl
+# (DNS wijst naar deze server, certificaat via de letsencrypt-resolver, net als
+# de andere mh-n.nl-sites). De oude adressen regiochecker.vroeg.app en
+# checker.vroeg.app verwijzen door; hun DNS-records maakt
+# traefik-cloudflare-companion, die alleen bij het opstarten scant (een nieuwe
+# hostnaam vraagt `docker restart traefik-companion`).
 
 services:
   regiochecker:
@@ -29,7 +30,7 @@ services:
       - path: .env
         required: false
     environment:
-      - REGIOCHECKER_SITE_URL=https://regiochecker.vroeg.app
+      - REGIOCHECKER_SITE_URL=https://checker.mh-n.nl
       # Na inloggen via Authelia zet Traefik de gebruiker in Remote-User (de
       # forward-auth-middleware overschrijft wat de browser zelf meestuurt). Zonder
       # die koptekst weigert de API alles; zo kan een verzoek dat de inlog omzeilt
@@ -42,15 +43,26 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik"
-      - "traefik.http.routers.regiochecker.rule=Host(`regiochecker.vroeg.app`)"
+      - "traefik.http.routers.regiochecker.rule=Host(`checker.mh-n.nl`)"
       - "traefik.http.routers.regiochecker.entrypoints=websecure"
       - "traefik.http.routers.regiochecker.tls=true"
-      - "traefik.http.routers.regiochecker.tls.certresolver=cloudflare"
+      - "traefik.http.routers.regiochecker.tls.certresolver=letsencrypt"
       - "traefik.http.routers.regiochecker.service=regiochecker"
       - "traefik.http.services.regiochecker.loadbalancer.server.port=3000"
-      # Inloggen via de gedeelde Authelia (/opt/authelia). De middleware staat in
-      # de labels van die container; de cookie voor vroeg.app en de toegangsregel
-      # voor deze site in /opt/authelia/config/configuration.yml.
+      # De oude adressen (vroeg.app, certificaat via de cloudflare-resolver)
+      # verwijzen permanent door, met behoud van pad en #-route.
+      - "traefik.http.routers.regiochecker-oud.rule=Host(`regiochecker.vroeg.app`) || Host(`checker.vroeg.app`)"
+      - "traefik.http.routers.regiochecker-oud.entrypoints=websecure"
+      - "traefik.http.routers.regiochecker-oud.tls=true"
+      - "traefik.http.routers.regiochecker-oud.tls.certresolver=cloudflare"
+      - "traefik.http.routers.regiochecker-oud.service=regiochecker"
+      - "traefik.http.routers.regiochecker-oud.middlewares=regiochecker-naar-mhn"
+      - "traefik.http.middlewares.regiochecker-naar-mhn.redirectregex.regex=^https://[^/]+/(.*)"
+      - "traefik.http.middlewares.regiochecker-naar-mhn.redirectregex.replacement=https://checker.mh-n.nl/$${1}"
+      - "traefik.http.middlewares.regiochecker-naar-mhn.redirectregex.permanent=true"
+      # Inloggen via de gedeelde Authelia op authelia.mh-n.nl (/opt/authelia). De
+      # middleware staat in de labels van die container; de cookie voor mh-n.nl en
+      # de toegangsregel voor deze site in /opt/authelia/config/configuration.yml.
       #
       # Eerst de Authorization-kop weghalen. Authelia accepteert op forward-auth
       # ook basic auth; een browser die nog de oude basic-auth-gegevens van deze
