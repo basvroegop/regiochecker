@@ -407,7 +407,10 @@ die je met `start` en `end` (de tijden van het debat) tot het debat beperkt,
 zoals hun eigen speler doet. De stream heeft kloktijden, de fragmenten van
 gehoord.de ook: een tijd in het transcript wordt zo een plek in de video (drie
 seconden ervoor). De browser speelt de stream met hls.js (`public/vendor/`,
-Apache-2.0, pas geladen als er een debat opengaat; Safari kan HLS zelf). Een
+Apache-2.0, pas geladen als er een debat opengaat), ook als de browser zegt dat
+hij HLS zelf kan: Chrome antwoordt "maybe" maar speelt deze stream (fMP4 met een
+apart geluidsspoor) niet af. Alleen zonder Media Source Extensions (iPhone) de
+eigen speler van de browser. Een
 debat van de Eerste Kamer heeft geen Debat Direct; dan openen de tijden het
 fragment bij gehoord.de. Het opzoeken gebeurt één keer per debat
 (`GET /api/stuk/video`), daarna staat het bij de aflevering. Debatten met minder dan twee fragmenten ("Regeling van werkzaamheden")

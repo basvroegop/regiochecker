@@ -691,7 +691,8 @@ const fragmentSpeler = new Audio();
 //
 // De Tweede Kamer zendt elk debat uit via Debat Direct; de server zoekt de
 // stream op (/api/stuk/video, src/gehoord.mjs). Die speelt hier met hls.js
-// (public/vendor/, pas geladen als er een debat opengaat; Safari kan HLS zelf).
+// (public/vendor/, pas geladen als er een debat opengaat; alleen zonder MSE,
+// zoals op een iPhone, de eigen HLS-speler van de browser).
 // Tijden in het transcript tellen vanaf het eerste fragment van gehoord.de;
 // met de kloktijd daarvan en die van de stream (EXT-X-PROGRAM-DATE-TIME) wordt
 // dat een plek in de video. Drie seconden ervoor, want de sprekers van
@@ -745,22 +746,42 @@ async function laadDebatVideo(d) {
   const video = vak.querySelector('video');
   const db = { id: d.id, vak, video, hls: null, klokBegin: Date.parse(r.klokBegin), begin: Date.parse(r.video.begin), eerstePdt: null };
   try {
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    // Eerst hls.js (Media Source Extensions: Chrome, Edge, Firefox, Safari op de
+    // Mac). Chrome zegt tegenwoordig ook "maybe" op HLS, maar speelt deze stream
+    // (fMP4 met een aparte geluidsspoor) zelf niet af: een grijze afspeelknop.
+    // Alleen zonder MSE (iPhone) de eigen HLS-speler van de browser.
+    const Hls = await laadHls().catch(() => null);
+    if (Hls?.isSupported()) {
+      db.hls = new Hls({ startPosition: 0 });
+      db.hls.on(Hls.Events.LEVEL_LOADED, (_, data) => {
+        const f = data.details.fragments[0];
+        if (f?.programDateTime) db.eerstePdt = f.programDateTime - f.start * 1000;
+      });
+      let herstel = 0;
+      db.hls.on(Hls.Events.ERROR, (_, data) => {
+        if (!data.fatal) return;
+        // Twee keer opnieuw proberen bij een netwerk- of mediafout, daarna een melding.
+        if (herstel < 2 && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          herstel++;
+          return db.hls.startLoad();
+        }
+        if (herstel < 2 && data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          herstel++;
+          return db.hls.recoverMediaError();
+        }
+        db.hls.destroy();
+        vak.innerHTML = geenDebatVideo(`De video kon niet worden afgespeeld (${esc(data.details || data.type)}).`);
+      });
+      db.hls.loadSource(r.video.hls);
+      db.hls.attachMedia(video);
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = r.video.hls;
       video.addEventListener('loadedmetadata', () => {
         const start = video.getStartDate?.();
         if (start && !Number.isNaN(+start)) db.eerstePdt = +start;
       });
     } else {
-      const Hls = await laadHls();
-      if (!Hls.isSupported()) throw new Error('Deze browser kan de video niet afspelen.');
-      db.hls = new Hls({ startPosition: 0 });
-      db.hls.on(Hls.Events.LEVEL_LOADED, (_, data) => {
-        const f = data.details.fragments[0];
-        if (f?.programDateTime) db.eerstePdt = f.programDateTime - f.start * 1000;
-      });
-      db.hls.loadSource(r.video.hls);
-      db.hls.attachMedia(video);
+      throw new Error('Deze browser kan de video niet afspelen.');
     }
   } catch (fout) {
     if (plek.isConnected) plek.outerHTML = geenDebatVideo(esc(fout.message));
