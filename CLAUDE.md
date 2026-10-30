@@ -21,6 +21,7 @@ docker compose run --rm --no-deps -T -v /opt/regiochecker/src:/app/src:ro -v /op
 - **Build and deploy:** `docker compose build && docker compose up -d`, then wait until `docker inspect -f '{{.State.Health.Status}}' regiochecker` says `healthy`. `public/` and `src/` are baked into the image, so frontend changes also need a rebuild.
 - **Calling the live API:** the app listens on `127.0.0.1:3056` and trusts the `Remote-User` header that Traefik/Authelia sets, e.g. `curl -H 'Remote-User: <admin-login>' http://127.0.0.1:3056/api/beheer/status`.
 - **Trial collection round:** `npm run verzamel` (`src/verzamel-eenmalig.mjs`) runs on a temporary copy of `data/`.
+- **Trying a reader on a live site:** put a script in a scratch dir that imports from `/app/src/…`, then `docker run --rm -v /opt/regiochecker/src:/app/src:ro -v <dir>:/proef --entrypoint node regiochecker:latest /proef/x.mjs`. All traffic goes through the SSRF guard in `src/netwerk.mjs`, as in production.
 - There is no linter configured.
 
 ## Operational rules
@@ -60,13 +61,17 @@ docker compose run --rm --no-deps -T -v /opt/regiochecker/src:/app/src:ro -v /op
 
 A source's `type` maps to a reader in `src/bronnen/index.mjs` `TYPES`. A reader returns `[{ sleutel, titel, url, datum, tekst, … }]`. `src/verzamel.mjs` `verwerk()` stores these as items keyed `${bron.id}:${sleutel}`.
 
+Sites without a feed use configurable readers rather than one reader per site: `html-lijst` (`src/bronnen/htmllijst.mjs`, a link regex plus options), `ibabs-agenda` (`src/bronnen/ibabsagenda.mjs`) and the Woo platforms in `src/bronnen/woo.mjs`. They can only be added via `POST /api/beheer/bronnen`; their settings are validated by `LEZER_INSTELLINGEN` in `src/beheer.mjs`. Try a config first with a one-off script (see Commands) or `POST /api/beheer/bronnen/proef`.
+
 What counts as "new" is `eersteGezien`, the moment of first sight, never the document date. A source's first round is a baseline (`basislijn`), and old stories are filtered out. Behaviour is driven by flags on the source object:
 - `bereik` (`regio` or `landelijk`);
 - `geo`, `straalKm`, `plaatsen`, `vestiging`, `alleenSamenvatting`;
 - `intervalMinuten`, `alleenInRegio`, `bijwerken`, `inMail`, `bewaarDagen`;
 - `perGemeente`: a national source whose items carry `gemeenten`; an item for a municipality that is a region becomes that region's item (`item.regio`), everything else stays national. Check national-ness with `isLandelijk(item, bron)`, not `bron.bereik` alone;
 - `archief`: on the first round, items from the last 30 days go into the feed at their own date;
-- `leegKan`, `sleutel` (name of an env var; the source is skipped without it), `inhoud`.
+- `datumBijEersteZicht`: an item without a date gets the day it was first seen, except on the baseline round;
+- `vervangend`: a stand-in for a list the municipality doesn't publish;
+- `leegKan`, `sleutel` (name of an env var; the source is skipped without it), `inhoud` (`false` for platforms whose links lead to an app, not the document).
 
 **Routing to regions** (`src/feed.mjs`). A region is a municipality, matched by name.
 - Regional items belong to `item.regio`.

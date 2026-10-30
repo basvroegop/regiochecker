@@ -410,8 +410,9 @@ export function zoekFeed(ctx, gebruiker, vraag) {
     const regios = isLandelijk(item, bron) ? routeerItem(k, item, bron).map((r) => r.regio) : [item.regio];
     const regel = itemRegel(item, regios, { term: t.term, zoek: true });
     // Ook wat bij de eerste ronde van een bron al bestond (de nulmeting): niet
-    // nieuw, wel archief. Op de datum van het stuk, niet op die eerste ronde.
-    if (item.basislijn && item.datum) Object.assign(regel, { tijd: `${item.datum}T12:00:00.000Z`, tijdBekend: false });
+    // nieuw, wel archief. Op de datum van het stuk, niet op die eerste ronde;
+    // een stuk zonder datum (Meppel, Westerveld) onderaan, met een streepje.
+    if (item.basislijn) Object.assign(regel, { tijd: item.datum ? `${item.datum}T12:00:00.000Z` : '', tijdBekend: false });
     voegToe(lijst, regel);
   }
   if (k.kdb) {

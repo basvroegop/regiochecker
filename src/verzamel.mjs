@@ -14,7 +14,7 @@
 import { teVerzamelen, alleBronnen, alleRegios } from './register.mjs';
 import { gemeente, afstandKm } from './geo.mjs';
 import { haalBron } from './bronnen/index.mjs';
-import { dagenGeleden } from './datum.mjs';
+import { dagenGeleden, lokaleDatum } from './datum.mjs';
 import { vulInhoud } from './inhoud.mjs';
 import { vindVestiging } from './locatie.mjs';
 import { gooiMediaWeg } from './telegram.mjs';
@@ -118,7 +118,10 @@ export function verwerk(opslag, bron, gevonden, nu = new Date()) {
       soort: bron.soort,
       titel: g.titel,
       url: g.url,
-      datum: g.datum ?? null,
+      // Een pagina zonder datums (`datumBijEersteZicht`): de dag dat we het stuk
+      // voor het eerst zagen. Niet bij de eerste ronde, want wat er dan al
+      // stond, kan van veel eerder zijn.
+      datum: g.datum ?? (bron.datumBijEersteZicht && !eersteKeer ? lokaleDatum(nu) : null),
       tekst: g.tekst ?? null,
       afzender: g.afzender ?? null,
       soortStuk: g.soortStuk ?? null,

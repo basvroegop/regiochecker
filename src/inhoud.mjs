@@ -17,6 +17,7 @@
 // Per soort bron een eigen route, want de link zelf is niet altijd het stuk:
 //   iBabs        pagina met bijlagen; de pdf staat op /Document/View/<id>
 //   Notubiz      het hoofddocument via api.notubiz.nl (het portaal blokkeert ons)
+//   iBabs-agenda de pdf van de brief, die de lezer meegaf
 //   GPP-Woo      documenten via /api/v2/documenten; het besluit eerst
 //   de rest      de pagina zelf: pdf, of HTML (plus de pdf-bijlagen)
 // Bronnen met `inhoud: false` (src/regios.mjs) slaan we over: daar staat
@@ -143,7 +144,8 @@ async function ibabs(item) {
   return pdfs?.blokken.length ? pdfs : samen([{ blokken: htmlBlokken(hoofdHtml(pagina)) }]);
 }
 
-async function notubiz(item) {
+// Notubiz, en een iBabs-agenda (src/bronnen/ibabsagenda.mjs): de lezer gaf het hoofddocument mee.
+async function hoofddocument(item) {
   if (!item.document) return null;
   return samen([await pdfDeel(item.document)]);
 }
@@ -165,7 +167,7 @@ async function gppWoo(item, bron) {
 export async function documentVoor(item, bron) {
   if (bron?.inhoud === false) return null;
   if (bron?.type === 'ibabs') return ibabs(item);
-  if (bron?.type === 'notubiz-ingekomen') return notubiz(item);
+  if (bron?.type === 'notubiz-ingekomen' || bron?.type === 'ibabs-agenda') return hoofddocument(item);
   if (bron?.type === 'gpp-woo') return gppWoo(item, bron);
   return algemeen(item.url);
 }

@@ -130,13 +130,20 @@ Twee vangnetten tegen een mail vol oud nieuws:
   weken oud telt ook niet mee. Dat vangt een omgebouwde site op waarbij ineens
   alle links veranderen. Voor Woo geldt deze grens niet.
 
+Sommige overzichten hebben geen datums (Westerveld, het iBabs-overzicht van
+Meppel en Stadskanaal, de Woo-pagina's van onder meer Leeuwarden en Meppel). Een
+stuk daarvan krijgt de dag waarop de Regiochecker het voor het eerst zag
+(`datumBijEersteZicht`). Wat er bij de nulmeting al stond, kan van veel eerder
+zijn en houdt geen datum; in de zoekresultaten staat het onderaan, met een
+streepje in plaats van een datum.
+
 ## Bronnen
 
 | Gemeente | Nieuws | Ingekomen stukken | Woo-publicaties |
 |---|---|---|---|
 | Smallingerland | `/Nieuwsarchief` (HTML) | Notubiz-module Ingekomen stukken | Subpagina's van de Woo-pagina (geen datums) |
 | Opsterland | RSS | **Vervangend:** iBabs Raadsinformatiebrieven | **Niet gevonden** |
-| Heerenveen | RSS `/nieuws/feed/` | iBabs Ingekomen stukken 2026-2030 | **Niet gevonden** (gemeente publiceert ze nog niet) |
+| Heerenveen | RSS `/nieuws/feed/` | iBabs Ingekomen stukken 2026-2030 | **Vervangend:** de pdf's die de gemeente zelf op de Woo-pagina zet (vooral over het azc; geen datums) |
 | Súdwest-Fryslân | `/publicaties/nieuws` (HTML) | Weeklijst als pdf (alleen datum, indiener, onderwerp) | Tabel op `/onderwerp/woo-verzoeken/` (alleen datum en onderwerp) |
 | Ooststellingwerf | RSS | iBabs Ingekomen stukken 2026-2030 | **Niet gevonden** |
 | Weststellingwerf | RSS | iBabs Ingekomen stukken extern + intern | **Niet gevonden** |
@@ -160,11 +167,41 @@ echte lijst vraagt een uitzondering in de botcontrole, aan te vragen bij de
 griffie. (Voor de opnames van raadsvergaderingen op datzelfde portaal gaat de
 Regiochecker wél langs de poort; zie Audio en video.)
 
+Voor sites zonder feed zijn er lezers die je per bron instelt, in plaats van
+een lezer per site:
+
+- `html-lijst` (`src/bronnen/htmllijst.mjs`): de links op een gewone pagina, met
+  een patroon voor het pad (`link`). De titel is de linktekst of de kop erbij,
+  de datum de datum die het dichtst bij de link staat. Opties: `inKop`,
+  `vanaf`/`tot`, `zonderDatum`, `extern`, `via` (eerst de pagina's per jaar) en
+  `perKop` (een stuk per kop). Zo lezen we het nieuws van Leeuwarden, De Fryske
+  Marren, De Wolden, Westerveld, Tynaarlo en Coevorden, en de Woo-pagina's van
+  Leeuwarden, Dantumadiel, Noardeast-Fryslân, Terschelling, Heerenveen, Meppel,
+  Veendam, Westerkwartier en Het Hogeland (Woogle).
+- `ibabs-agenda` (`src/bronnen/ibabsagenda.mjs`): ingekomen stukken die alleen
+  in een iBabs-agenda staan. Borger-Odoorn heeft bij elke raad een vergadering
+  "Lijst ingekomen stukken" met een agendapunt per brief (het kopje erboven,
+  zoals "Ter kennisname", is het advies); Schiermonnikoog zet de brieven als
+  bijlagen bij het agendapunt "Lijst van Ingekomen Stukken" van de
+  raadsvergadering. We lezen de vergaderingen van twee maanden terug tot
+  anderhalve maand vooruit; de lijst groeit tot de vergadering.
+- Woo-platforms (`src/bronnen/woo.mjs`): eData-loket (Midden-Drenthe,
+  Westerveld, Hoogeveen, De Wolden), Divault (Oldambt), het publicatieplatform
+  van Stadskanaal, een STACK-map (Aa en Hunze), Djuma (Midden-Groningen), het
+  Mozard-zaakloket (Ameland, Vlieland, Tynaarlo) en de statische site van
+  Coevorden. Per platform staat in het bestand hoe de lijst op te halen is.
+
+Coevorden weerde ons eerst: de site zit achter een firewall (Azure Front Door)
+die korte of onbekende user-agents tegenhoudt. Met de gewone user-agent van de
+Regiochecker (een browser-UA met "Regiochecker/1.0" erachter) komen we er gewoon
+in; er wordt niets omzeild.
+
 Deze ingebouwde bronnen staan in `src/regios.mjs`, de lezers per brontype in
 `src/bronnen/`. Een bron met een standaardlezer (RSS-feed, iBabs-overzicht,
 Woo-platform) of een audio- of videobron voeg je toe in de webUI (Beheer ›
-Bronnen); die staan in `data/bronnen.json`. Een site met een eigen opbouw vraagt
-een nieuwe lezer in de code. Verander het `id` van een bestaande bron niet,
+Bronnen); die staan in `data/bronnen.json`. Een site met een eigen opbouw lukt
+vaak met `html-lijst` (via de API, zie Beheer); anders vraagt die een nieuwe
+lezer in de code. Verander het `id` van een bestaande bron niet,
 anders komt alles opnieuw binnen (al vangt de nulmeting dat op).
 
 ## Landelijke bronnen en sleutelwoorden
@@ -449,6 +486,9 @@ het document alsnog op (`GET /api/stuk/document`).
 | Woo Groningen | omschrijving plus het besluit (pdf), via de API van het portaal |
 | Woo Smallingerland | de pagina plus de pdf's erop |
 | Súdwest-Fryslân, ingekomen en Woo | niets: alleen het onderwerp staat online |
+| iBabs-agenda (Borger-Odoorn, Schiermonnikoog) | de pdf van de brief (`/Document/View/<id>`) |
+| HTML-lijst (nieuws en Woo-pagina's) | de pagina of de pdf achter de link |
+| Woo via eData-loket, publicatieplatform, STACK, Djuma, Mozard | niets: de link gaat naar een app, niet naar het stuk (`inhoud: false`) |
 
 Het document (`src/document.mjs`) is een lijst blokken: koppen, alinea's,
 opsommingen en het begin van elke bijlage, tot 300.000 tekens en vijf bijlagen
@@ -553,17 +593,14 @@ Het Authelia-account zelf, en toegang tot deze site, regel je in Authelia
   toevoegen kan; de zeven ingebouwde staan in de code, met hun eigen bronnen.
   Sinds 30 oktober 2026 zijn alle gemeenten van Fryslân, Groningen en Drenthe
   een regio (40). De 33 toegevoegde staan niet in de code maar in
-  `data/regios.json` en `data/bronnen.json` (toegevoegd via Beheer), met wat er
-  met de bestaande lezers te halen viel: nieuws via RSS bij 27, ingekomen
-  stukken (of als vervangende bron raadsinformatiebrieven en memo's) uit iBabs
-  of Notubiz bij 27, Woo bij Assen (GPP) en Westerwolde (iBabs), en de
-  vergaderingen van 27 gemeenten (22 Company Webcast, 4 Notubiz, Stadskanaal
-  via iBabs) met eerste import "alleen nieuwe". Geen RSS hebben Leeuwarden en De
-  Fryske Marren (feed uit), De Wolden en Westerveld (feed leeg), Tynaarlo, en
-  Coevorden (de site weert ons). Daarnaast krijgen ze de bekendmakingen van de
-  provincie Fryslân voor hun gemeente, de signalen met een plek (KNMI,
-  ransomware, Raad van State, verkeer, inzendingen) en wat via hun
-  sleutelwoorden binnenkomt. Een regio heet naar de gemeente: hernoem hem niet,
+  `data/regios.json` en `data/bronnen.json` (toegevoegd via Beheer): nieuws bij
+  alle 33 (27 via RSS, 6 via `html-lijst`), ingekomen stukken (of als
+  vervangende bron raadsinformatiebrieven en memo's) uit iBabs of Notubiz bij
+  32, Woo bij 22, en de vergaderingen van 27 gemeenten (22 Company Webcast, 4
+  Notubiz, Stadskanaal via iBabs) met eerste import "alleen nieuwe". Daarnaast
+  krijgen ze de bekendmakingen van de provincie Fryslân voor hun gemeente, de
+  signalen met een plek (KNMI, ransomware, Raad van State, verkeer,
+  inzendingen) en wat via hun sleutelwoorden binnenkomt. Een regio heet naar de gemeente: hernoem hem niet,
   anders vindt de routering de gemeentegrens niet meer. Een nieuwe regio krijgt
   meteen de bekendmakingen die al voor die gemeente binnen waren.
 - **Bronnen**: het register van alle bronnen, landelijk en gemeentelijk, met
@@ -574,7 +611,14 @@ Het Authelia-account zelf, en toegang tot deze site, regel je in Authelia
   'notubiz-ingekomen'` met `organisatie`, `module` en `moduleNaam`, uit
   `api.notubiz.nl/organisations/<id>/modules`), een vervangende bron
   (`vervangend: true`) en een Notubiz-vergaderarchief met de organisatie vooraf
-  (`organisatie`; het portaal zelf zit achter een Cloudflare-controle).
+  (`organisatie`; het portaal zelf zit achter een Cloudflare-controle). Ook de
+  lezers voor sites zonder feed gaan alleen via de API: `html-lijst` (met
+  `link` en de opties hierboven bij Bronnen), `ibabs-agenda` (`agendatype`, de
+  id uit `agendatype-<id>` in de iBabs-kalender, en eventueel `punt`),
+  `divault` (`organisatie`, `categorie`), `publicaties` (`subdomein`) en
+  `edataloket`, `stack`, `djuma`, `mozard`, `recentjson` (alleen het adres).
+  `datumBijEersteZicht: true` geeft stukken zonder datum de dag waarop ze
+  verschijnen; dat kan ook achteraf, met `PUT /api/beheer/bronnen/<id>`.
 - **Audio**: workerstatus, wat er nu gebeurt, de wachtrij, mislukte afleveringen
   en de volgorde van de bronnen.
 - **Teams**: kanalen in Microsoft Teams die meekrijgen wat er binnenkomt (zie

@@ -89,7 +89,7 @@ test('beheer: regio\'s, sleutelwoorden, landelijke bronnen aan en uit, gebruiker
   const { ctx, jan, sanne } = await opzet();
   let r = await roep(ctx, jan, 'GET', '/api/beheer/regios');
   const heerenveen = r.data.find((x) => x.id === 'heerenveen');
-  assert.deepEqual(heerenveen, { id: 'heerenveen', naam: 'Heerenveen', eigen: false, bronnen: 2, termen: 0, waarschuwing: 'Woo ontbreekt' });
+  assert.deepEqual(heerenveen, { id: 'heerenveen', naam: 'Heerenveen', eigen: false, bronnen: 3, termen: 0, waarschuwing: 'Vervangend' });
   assert.equal(r.data.find((x) => x.id === 'opsterland').waarschuwing, 'Woo ontbreekt');
   assert.equal(r.data.find((x) => x.id === 'groningen').waarschuwing, 'Vervangend');
 
@@ -151,6 +151,13 @@ test('beheer: bron toevoegen met proefronde, landelijk via sleutelwoorden', metS
     assert.match(r.data.nulmeting, /nulmeting/);
     assert.equal((await roep(ctx, jan, 'POST', '/api/beheer/bronnen/proef', { bereik: 'regio', lezer: 'rss', soort: 'nieuws', url })).status, 400, 'regio ontbreekt');
     assert.match((await roep(ctx, jan, 'POST', '/api/beheer/bronnen/proef', { bereik: 'regio', regio: 'opsterland', lezer: 'ibabs', soort: 'ingekomen', url: 'https://x.nl/iets' })).data.fout, /iBabs-overzicht/);
+    // De lezers voor eigen sites (alleen via de API): hun instellingen worden gecontroleerd.
+    const proefFout = async (invoer) => (await roep(ctx, jan, 'POST', '/api/beheer/bronnen/proef', { bereik: 'regio', regio: 'opsterland', ...invoer })).data.fout;
+    assert.match(await proefFout({ lezer: 'html-lijst', soort: 'nieuws', url: 'https://x.nl/nieuws' }), /"link"/);
+    assert.match(await proefFout({ lezer: 'html-lijst', soort: 'nieuws', url: 'https://x.nl/nieuws', link: '^/nieuws/([' }), /reguliere expressie/);
+    assert.match(await proefFout({ lezer: 'html-lijst', soort: 'woo', url: 'https://x.nl/woo', link: '\\.pdf$', perKop: 'div' }), /h2 tot h6/);
+    assert.match(await proefFout({ lezer: 'ibabs-agenda', soort: 'ingekomen', url: 'https://x.bestuurlijkeinformatie.nl' }), /"agendatype"/);
+    assert.match(await proefFout({ lezer: 'ibabs-agenda', soort: 'ingekomen', url: 'https://x.nl', agendatype: '100000044' }), /iBabs-portaal/);
     r = await roep(ctx, jan, 'POST', '/api/beheer/bronnen/proef', { bereik: 'landelijk', lezer: 'rss', soort: 'nieuws', url: 'http://127.0.0.1:1/rss' });
     assert.match(r.data.tekst, /^Ophalen mislukt/);
 

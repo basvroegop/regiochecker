@@ -83,6 +83,7 @@ export const REGIOS = [
         url: 'https://www.smallingerland.nl/Onderwerpen/Klacht_en_bezwaar/Verzoek_informatie_Wet_open_overheid_Woo',
         label: 'Woo-verzoeken op smallingerland.nl',
         toelichting: 'De lijst heeft geen datums: een verzoek telt als nieuw op de dag dat het op de pagina verschijnt.',
+        datumBijEersteZicht: true,
       },
     ],
   },
@@ -132,10 +133,13 @@ export const REGIOS = [
         label: 'Ingekomen stukken 2026-2030 (iBabs)',
       },
       {
-        id: 'heerenveen-woo', soort: 'woo', type: 'ontbreekt',
+        id: 'heerenveen-woo', soort: 'woo', type: 'html-lijst',
         url: 'https://www.heerenveen.nl/gemeentebestuur/wet-open-overheid/',
-        label: 'Woo-publicaties',
-        toelichting: 'Niet gevonden. Heerenveen schrijft op de Woo-pagina dat het publiceren van Woo-besluiten "op dit moment nog niet aan de orde" is; ook open.overheid.nl heeft niets.',
+        link: '^/wp-content/uploads/.+\\.pdf$', zonderDatum: true, datumBijEersteZicht: true,
+        label: 'Woo-stukken op heerenveen.nl',
+        vervangend: true,
+        mailnotitie: 'alleen wat de gemeente zelf op de Woo-pagina zet',
+        toelichting: 'Vervangende bron. Heerenveen publiceert Woo-besluiten niet structureel; op de Woo-pagina zet de gemeente met de hand enkele stukken (vooral over het azc). De pagina heeft geen datums: een stuk telt als nieuw op de dag dat het verschijnt.',
       },
     ],
   },
@@ -162,6 +166,8 @@ export const REGIOS = [
         url: 'https://sudwestfryslan.nl/onderwerp/woo-verzoeken/',
         label: 'Openbaar gemaakte documenten (Woo)',
         toelichting: 'Alleen datum en onderwerp staan online; de documenten zelf vraag je op via het formulier op de pagina.',
+        // Niet elke regel heeft een datum.
+        datumBijEersteZicht: true,
         // Geen inhoud op te halen: alleen datum en onderwerp staan online.
         inhoud: false,
       },

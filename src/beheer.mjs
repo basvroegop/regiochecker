@@ -35,6 +35,15 @@ export const LEZERS = {
   'swf-woo': 'HTML-tabel',
   'gpp-woo': 'Woo-platform (GPP)',
   'groningen-bw-besluiten': 'HTML',
+  'html-lijst': 'HTML-lijst',
+  'ibabs-agenda': 'iBabs-agenda',
+  edataloket: 'eData-loket',
+  divault: 'Divault',
+  publicaties: 'Publicatieplatform',
+  stack: 'STACK-map',
+  djuma: 'Djuma',
+  mozard: 'Mozard',
+  recentjson: 'Woo-site (recent.json)',
   ontbreekt: 'Niet online',
   'tweede-kamer': 'Gegevensmagazijn OData',
 };
@@ -206,7 +215,55 @@ function regioDetail(k, id) {
 // ---------- bronnen toevoegen ----------
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-const LEZERS_TOEVOEGEN = ['rss', 'ibabs', 'notubiz-ingekomen', 'gpp-woo', 'audio'];
+const LEZERS_TOEVOEGEN = ['rss', 'ibabs', 'notubiz-ingekomen', 'gpp-woo', 'audio', 'html-lijst', 'ibabs-agenda',
+  'edataloket', 'divault', 'publicaties', 'stack', 'djuma', 'mozard', 'recentjson'];
+
+// Instellingen van de lezers voor eigen sites en Woo-platforms (alleen via de
+// API; zie src/bronnen/htmllijst.mjs, ibabsagenda.mjs en woo.mjs). Een ! is verplicht.
+const LEZER_INSTELLINGEN = {
+  'html-lijst': { link: 'patroon!', inKop: 'ja', vanaf: 'tekst', tot: 'tekst', zonderDatum: 'ja', extern: 'ja', via: 'patroon', viaAantal: 'getal', perKop: 'kop' },
+  'ibabs-agenda': { agendatype: 'id!', punt: 'tekst' },
+  divault: { organisatie: 'tekst!', categorie: 'tekst' },
+  publicaties: { subdomein: 'id!' },
+};
+// Platforms waar de link naar een app gaat, niet naar het stuk: geen tekst ophalen.
+const ZONDER_INHOUD = ['edataloket', 'publicaties', 'stack', 'djuma', 'mozard'];
+
+function lezerInstellingen(lezer, invoer) {
+  const uit = {};
+  for (const [veld, soort] of Object.entries(LEZER_INSTELLINGEN[lezer] || {})) {
+    const verplicht = soort.endsWith('!');
+    const type = soort.replace('!', '');
+    const w = invoer[veld];
+    if (w === undefined || w === null || w === '' || w === false) {
+      if (verplicht) throw new InvoerFout(`Geef bij deze lezer ook "${veld}" op`);
+      continue;
+    }
+    if (type === 'ja') uit[veld] = true;
+    else if (type === 'getal') {
+      const n = Number(w);
+      if (!Number.isInteger(n) || n < 1 || n > 10) throw new InvoerFout(`"${veld}" moet een getal van 1 tot 10 zijn`);
+      uit[veld] = n;
+    } else if (type === 'kop') {
+      if (!/^h[2-6]$/.test(String(w))) throw new InvoerFout(`"${veld}" moet h2 tot h6 zijn`);
+      uit[veld] = String(w);
+    } else if (type === 'id') {
+      if (!/^[\w-]{1,80}$/.test(String(w))) throw new InvoerFout(`"${veld}" is geen geldige code`);
+      uit[veld] = String(w);
+    } else {
+      const t = String(w).slice(0, 200);
+      if (type === 'patroon') {
+        try {
+          new RegExp(t, 'i');
+        } catch {
+          throw new InvoerFout(`"${veld}" is geen geldige reguliere expressie`);
+        }
+      }
+      uit[veld] = t;
+    }
+  }
+  return uit;
+}
 
 function bronNaam(regio, label, url, eigenNaam) {
   return regio ? `${regio.naam} · ${label}` : `${label}${eigenNaam ? '' : ` · ${host(url)}`}`;
@@ -250,8 +307,17 @@ async function maakBron(opslag, invoer) {
     // Het adres van de module zelf: twee modules van één gemeente zijn twee bronnen.
     Object.assign(bron, { organisatie, module, moduleNaam, basis: url.origin, url: `${url.origin}/modules/${module}/${encodeURIComponent(moduleNaam)}` });
   }
+  if (LEZER_INSTELLINGEN[lezer]) Object.assign(bron, lezerInstellingen(lezer, invoer));
+  if (lezer === 'ibabs-agenda') {
+    if (!/\.bestuurlijkeinformatie\.nl$/i.test(url.hostname)) throw new InvoerFout('Gebruik het adres van het iBabs-portaal: https://<gemeente>.bestuurlijkeinformatie.nl');
+    // Het adres van de vergadersoort zelf: twee soorten van één portaal zijn twee bronnen.
+    Object.assign(bron, { basis: url.origin, url: `${url.origin}/Calendar/OpenCategory/${bron.agendatype}` });
+  }
+  if (ZONDER_INHOUD.includes(lezer)) bron.inhoud = false;
   // Een vervangende bron: de gemeente heeft het gewone overzicht niet (online).
   if (invoer.vervangend) bron.vervangend = true;
+  // Een pagina zonder datums: de dag dat we een stuk voor het eerst zien (src/verzamel.mjs).
+  if (invoer.datumBijEersteZicht) bron.datumBijEersteZicht = true;
   if (audio) {
     // Welk platform of welke YouTube-tab? Dit zoekt het adres ook na.
     let herkend;
@@ -410,6 +476,11 @@ function werkBronBij(k, id, invoer) {
   }
   bron.naam = bronNaam(bron.regio ? k.regioMap.get(bron.regio) : null, bron.label, bron.url, true);
   if (isAudio(bron) && invoer.actief !== undefined) bron.audio.actief = Boolean(invoer.actief);
+  // Een overzicht zonder datums: voortaan de dag dat we een stuk voor het eerst zien.
+  if (invoer.datumBijEersteZicht !== undefined && !isAudio(bron)) {
+    if (invoer.datumBijEersteZicht) bron.datumBijEersteZicht = true;
+    else delete bron.datumBijEersteZicht;
+  }
   k.opslag.bewaar('bronnen');
   return bron;
 }

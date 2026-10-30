@@ -8,6 +8,9 @@ import { haalBwBesluiten } from './groningen.mjs';
 import { haalAardbevingen, haalWaarschuwingen, haalUitspraken, haalRansomware } from './signalen.mjs';
 import { haalFiles, haalStoringen } from './verkeer.mjs';
 import { haalBekendmakingen } from './provincie.mjs';
+import { haalHtmlLijst } from './htmllijst.mjs';
+import { haalIbabsAgenda } from './ibabsagenda.mjs';
+import * as woo from './woo.mjs';
 
 // type in src/regios.mjs → functie die een lijst items teruggeeft.
 export const TYPES = {
@@ -28,6 +31,15 @@ export const TYPES = {
   'ndw-files': haalFiles,
   'ns-storingen': haalStoringen,
   'provincie-bekendmakingen': haalBekendmakingen,
+  'html-lijst': haalHtmlLijst,
+  'ibabs-agenda': haalIbabsAgenda,
+  edataloket: woo.haalEdataloket,
+  divault: woo.haalDivault,
+  publicaties: woo.haalPublicaties,
+  stack: woo.haalStack,
+  djuma: woo.haalDjuma,
+  mozard: woo.haalMozard,
+  recentjson: woo.haalRecentJson,
 };
 
 // `opties.eersteKeer`: de allereerste ronde van de bron (een archief kan dan verder terug).

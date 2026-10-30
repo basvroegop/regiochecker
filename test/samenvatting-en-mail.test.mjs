@@ -117,7 +117,7 @@ test('zonder sleutel: geen aanroep, mail zegt waarom er geen samenvatting is', a
   assert.equal(mail.aantal, 2);
   assert.match(mail.onderwerp, /^Heerenveen: 2 nieuwe berichten/);
   assert.match(mail.html, /Geen samenvatting: er is nog geen Claude-API-sleutel ingesteld/);
-  assert.match(mail.html, /Niet gecontroleerd: de gemeente publiceert deze niet/);
+  assert.match(mail.html, /Vervangende bron: Woo-stukken op heerenveen\.nl; alleen wat de gemeente zelf op de Woo-pagina zet\./);
   assert.match(mail.tekst, /Brief Plaatselijk Belang Oude- en Nieuwehorne/);
   assert.equal(mail.tot, '2026-10-20T05:00:00.000Z');
 });
@@ -232,7 +232,7 @@ test('opbouw: H2 per gemeente, daaronder H3 Gemeentenieuws, Ingekomen stukken, W
   };
   assert.ok(onder('Gemeentenieuws', 'Bericht hv-nieuws'));
   assert.ok(onder('Ingekomen stukken', 'Bericht hv-ingekomen'));
-  assert.ok(onder('Woo-publicaties', 'Niet gecontroleerd'));
+  assert.ok(onder('Woo-publicaties', 'Vervangende bron'));
   assert.ok(!heerenveen.includes('hv-woo-ontbreekt-dus-niet'), 'geen berichten van een andere gemeente');
 
   // Een lege categorie met een werkende bron zegt dat er niets nieuws is.
