@@ -18,8 +18,8 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { isBeheerder, werkGebruikerBij, voorClient } from './gebruikers.mjs';
-import { alleRegios } from './register.mjs';
-import { GROEPEN, ENKELVOUD } from './regios.mjs';
+import { alleRegios, alleBronnen } from './register.mjs';
+import { zichtbareGroepen, ENKELVOUD } from './regios.mjs';
 import { maakKader, bouwFeed, bewaardeFeed, zoekFeed, detail, momentopname, meldingTreffers } from './feed.mjs';
 import { controleerMelding, BRONNEN } from './meldingen.mjs';
 import { zoekvraagTekst } from './termen.mjs';
@@ -65,7 +65,7 @@ export async function api(req, res, url, ctx) {
       gebruiker: voorClient(gebruiker),
       beheerder,
       regios: alleRegios(opslag).map((r) => ({ id: r.id, naam: r.naam })),
-      groepen: GROEPEN,
+      groepen: zichtbareGroepen(alleBronnen(opslag)),
       soorten: ENKELVOUD,
       bewaard: fdb ? fdb.aantalBewaard(gebruiker.id) : 0,
       volgendeWeekmail: volgendeWeekmail(nu, gebruiker)?.toISOString() || null,

@@ -714,6 +714,8 @@ export function detail(ctx, gebruiker, id) {
     ...d,
     soortNaam: ENKELVOUD[d.soort] || d.soort,
     groep: groepVan(d.soort),
+    // Audio en video (vergadering, debat, YouTube, podcast): het leespaneel met transcript.
+    audio: soort === 'a:',
     regioNaam: regio ? k.regioMap.get(regio)?.naam || regio : 'Landelijk',
     status: k.fdb ? k.fdb.status(gebruiker.id, id) : { gelezen: null, bewaard: null, notitie: '' },
   };

@@ -107,7 +107,13 @@ test('feed: eigen regio, landelijk via sleutelwoord, kamerstuk, audio en melding
   assert.deepEqual(per[`a:${E1}`].match, { term: 'huisartsenpost', melding: 'm1', tijd: 10 });
   assert.deepEqual(per[`a:${E2}`].match, { term: 'Drachten', regio: 'smallingerland', tijd: 20 });
   assert.ok(!per[`a:${E3}`]);
-  assert.deepEqual(feed.tellingen, { alles: 7, nieuws: 4, ingekomen: 0, woo: 0, kamerstuk: 1, audio: 2, knmi: 0, rvs: 0, ransomware: 0, verkeer: 0, ingezonden: 0, bekendmaking: 0 });
+  assert.deepEqual(feed.tellingen, { alles: 7, nieuws: 4, ingekomen: 0, woo: 0, kamerstuk: 1, raadsvergadering: 1, kamerdebat: 0, youtube: 0, podcast: 1, knmi: 0, rvs: 0, ransomware: 0, verkeer: 0, ingezonden: 0, bekendmaking: 0 });
+  assert.deepEqual([per[`a:${E1}`].groep, per[`a:${E2}`].groep], ['raadsvergadering', 'podcast'], 'audio niet op één hoop');
+
+  // Een tabblad per soort bron, in vaste volgorde, en alleen als er een bron van die soort is.
+  const { zichtbareGroepen } = await import('../src/regios.mjs');
+  assert.deepEqual(Object.entries(zichtbareGroepen([{ soort: 'kamerdebat' }, { soort: 'nieuws' }, { soort: 'aardbeving' }, { soort: 'raadsvergadering' }, { soort: 'kamerstuk' }])),
+    [['nieuws', 'Gemeentenieuws'], ['raadsvergadering', 'Raadsvergaderingen'], ['kamerstuk', 'Kamerstukken'], ['kamerdebat', 'Kamerdebatten'], ['knmi', 'KNMI']]);
 
   assert.deepEqual(bouwFeed(ctx, sanne, { groep: 'kamerstuk' }).items.map((i) => i.id), ['k:doc1']);
   assert.deepEqual(bouwFeed(ctx, sanne, { regio: 'heerenveen' }).items.map((i) => i.id), ['i:rijk:d']);

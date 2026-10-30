@@ -14,7 +14,7 @@
 // iedere gebruiker zelf in (src/planning.mjs).
 
 import nodemailer from 'nodemailer';
-import { SOORTEN, ENKELVOUD } from './regios.mjs';
+import { SOORTEN, ENKELVOUD, GROEPEN, groepVan } from './regios.mjs';
 import { alleRegios, bronnenVanRegio, geldtVoor, actieveTermen, TWEEDE_KAMER, isAudioBron } from './register.mjs';
 import { maakSamenvatting, samenvattingAanbieder } from './samenvatting.mjs';
 import { vatVergaderingSamen, tijdcode } from './vergadering.mjs';
@@ -127,9 +127,9 @@ function regioHtml(blok, opslag) {
       : `<p style="${STIJL.item};color:#6b6b66;">Geen nieuwe kamerstukken met ${html(blok.kamerTermen.join(', '))}.</p>`;
     if (blok.kamerstukken.meer) uit += `<p style="${STIJL.item};color:#6b6b66;">${html(meerKamerstukken(blok.kamerstukken.meer))}${process.env.REGIOCHECKER_SITE_URL ? ` <a href="${html(process.env.REGIOCHECKER_SITE_URL)}/#/feed?groep=kamerstuk" style="color:#6b6b66;">Bekijk ze in de Regiochecker</a>.` : ''}</p>`;
   }
-  if (blok.audio.length) {
-    uit += `<h3 style="${STIJL.h3}">Raadsvergaderingen, audio en video <span style="font-weight:normal;color:#6b6b66;">(${blok.audio.length})</span></h3>`;
-    uit += blok.audio.map(audioHtml).join('');
+  for (const [kop, lijst] of audioPerSoort(blok.audio)) {
+    uit += `<h3 style="${STIJL.h3}">${html(kop)} <span style="font-weight:normal;color:#6b6b66;">(${lijst.length})</span></h3>`;
+    uit += lijst.map(audioHtml).join('');
   }
   return `${uit}</div>`;
 }
@@ -142,6 +142,12 @@ function landelijkHtml({ item, bron, gevonden }) {
     <br><span style="${STIJL.klein}">${html(bron.naam)} · gevonden: <strong>${html(termen)}</strong></span>
     <div style="margin:4px 0 0 10px;padding-left:8px;border-left:2px solid #e3e1da;font-size:13px;color:#3b3b38;">${fragmentHtml(gevonden[0].fragment)}</div></div>`;
 }
+
+// Audio per soort een eigen kop (Raadsvergaderingen, Kamerdebatten, …), zoals
+// de tabbladen van de feed: [[kop, lijst], …].
+const audioPerSoort = (lijst) => Object.entries(GROEPEN)
+  .map(([id, kop]) => [kop, lijst.filter((x) => groepVan(x.aflevering.soort) === id)])
+  .filter(([, l]) => l.length);
 
 function audioHtml({ aflevering: a, bron, gevonden, samenvatting, samenvattingFout }) {
   const kenmerk = [ENKELVOUD[a.soort], duurTekst(a.duur)].filter(Boolean).join(' · ');
@@ -190,9 +196,9 @@ function regioTekst(blok, opslag) {
     if (blok.kamerstukken.meer) r.push(meerKamerstukken(blok.kamerstukken.meer) + (process.env.REGIOCHECKER_SITE_URL ? ` ${process.env.REGIOCHECKER_SITE_URL}/#/feed?groep=kamerstuk` : ''));
     r.push('');
   }
-  if (blok.audio.length) {
-    r.push(`-- Raadsvergaderingen, audio en video (${blok.audio.length}) --`);
-    for (const { aflevering: a, bron, gevonden, samenvatting } of blok.audio) {
+  for (const [kop, lijst] of audioPerSoort(blok.audio)) {
+    r.push(`-- ${kop} (${lijst.length}) --`);
+    for (const { aflevering: a, bron, gevonden, samenvatting } of lijst) {
       r.push(`* ${korteDatum(String(a.gepubliceerd || '').slice(0, 10)) || 'z.d.'}  ${a.titel}`, `  ${bron.naam}`);
       for (const g of gevonden || []) r.push(`  ${tijdcode(g.treffers[0].tijd)} "${g.treffers[0].fragment.tekst}"`);
       for (const o of samenvatting?.onderwerpen || []) r.push(`  ${o.kop}`, ...o.punten.map((p) => `   - ${p}`));

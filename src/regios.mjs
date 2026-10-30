@@ -39,18 +39,25 @@ export const ENKELVOUD = {
   bekendmaking: 'Bekendmaking',
 };
 
+// De tabbladen van de feed, in deze volgorde: één per soort bron. Audio
+// (raadsvergaderingen, Kamerdebatten, YouTube, podcasts) staat dus niet op één
+// hoop; een tab verschijnt alleen als er een bron van die soort is (zie
+// zichtbareGroepen). De signalen hebben eigen groepen (SIGNAALGROEP).
 export const GROEPEN = {
   nieuws: 'Gemeentenieuws',
   ingekomen: 'Ingekomen',
   woo: 'Woo',
+  bekendmaking: 'Bekendmakingen',
+  raadsvergadering: 'Raadsvergaderingen',
   kamerstuk: 'Kamerstukken',
-  audio: 'Audio & video',
+  kamerdebat: 'Kamerdebatten',
+  youtube: 'YouTube',
+  podcast: 'Podcasts',
   knmi: 'KNMI',
   rvs: 'Raad van State',
   ransomware: 'Ransomware',
   verkeer: 'Verkeer',
   ingezonden: 'Ingezonden',
-  bekendmaking: 'Bekendmakingen',
 };
 
 // kamerdebat: de transcripten van gehoord.de (src/gehoord.mjs), in het audioarchief.
@@ -60,7 +67,13 @@ export const AUDIOSOORTEN = ['raadsvergadering', 'youtube', 'podcast', 'kamerdeb
 // treinstoringen: landelijke signalen uit de checker (src/bronnen/signalen.mjs
 // en src/bronnen/verkeer.mjs), met eigen tabbladen.
 export const SIGNAALGROEP = { aardbeving: 'knmi', weerwaarschuwing: 'knmi', uitspraak: 'rvs', ransomware: 'ransomware', file: 'verkeer', treinstoring: 'verkeer' };
-export const groepVan = (soort) => (AUDIOSOORTEN.includes(soort) ? 'audio' : SIGNAALGROEP[soort] || soort);
+export const groepVan = (soort) => SIGNAALGROEP[soort] || soort;
+
+// De tabbladen waarvoor er een bron is, in de volgorde van GROEPEN: { id: naam }.
+export function zichtbareGroepen(bronnen) {
+  const aanwezig = new Set(bronnen.map((b) => groepVan(b.soort)));
+  return Object.fromEntries(Object.entries(GROEPEN).filter(([id]) => aanwezig.has(id)));
+}
 
 export const REGIOS = [
   {

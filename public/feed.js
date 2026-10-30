@@ -9,8 +9,10 @@ import { archiefFilters, archiefBalkHtml, koppelArchiefBalk, laadBronnen } from 
 
 const STATUSNAAM = { wacht: 'in de wachtrij', downloaden: 'wordt gedownload', transcriberen: 'wordt getranscribeerd', getranscribeerd: 'wordt geanalyseerd', analyseren: 'wordt geanalyseerd', mislukt: 'mislukt' };
 
-const GROEPEN = ['alles', 'nieuws', 'ingekomen', 'woo', 'bekendmaking', 'kamerstuk', 'audio', 'knmi', 'rvs', 'ransomware', 'verkeer', 'ingezonden'];
-const GROEPNAAM = { alles: 'Alles', nieuws: 'Gemeentenieuws', ingekomen: 'Ingekomen', woo: 'Woo', kamerstuk: 'Kamerstukken', audio: 'Audio & video', knmi: 'KNMI', rvs: 'Raad van State', ransomware: 'Ransomware', verkeer: 'Verkeer', ingezonden: 'Ingezonden', bekendmaking: 'Bekendmakingen' };
+// De tabbladen: één per soort bron, alleen als er een bron van die soort is.
+// Welke en in welke volgorde bepaalt de server (GROEPEN in src/regios.mjs).
+const groepen = () => ['alles', ...Object.keys(app.ik.groepen || {})];
+const groepNaam = (g) => (g === 'alles' ? 'Alles' : app.ik.groepen?.[g] || g);
 
 // Filters blijven staan als je even naar een andere pagina gaat.
 const filters = { groep: 'alles', regio: '', ongelezen: false };
@@ -66,7 +68,9 @@ function tekenFilters() {
     if (!balk.classList.contains('archiefbalk')) balk.outerHTML = archiefBalkHtml('').replace('<div class="archiefbalk">', '<div class="archiefbalk" id="filterbalk">');
     return;
   }
-  const tellingen = Object.fromEntries(GROEPEN.map((g) => [g, 0]));
+  // Een tab die er niet (meer) is (zoals het oude "Audio & video"): terug naar Alles.
+  if (!groepen().includes(filters.groep)) filters.groep = 'alles';
+  const tellingen = Object.fromEntries(groepen().map((g) => [g, 0]));
   for (const i of voorFilters()) {
     tellingen.alles++;
     tellingen[i.groep] = (tellingen[i.groep] || 0) + 1;
@@ -83,7 +87,7 @@ function tekenFilters() {
   balk.innerHTML = `
     <div class="regiochips">${links}</div>
     <div class="soorttabs" role="tablist">
-      ${GROEPEN.map((g) => `<button class="soorttab" role="tab" data-groep="${g}" aria-selected="${filters.groep === g}">${GROEPNAAM[g]} <span class="n">${tellingen[g] || 0}</span></button>`).join('')}
+      ${groepen().map((g) => `<button class="soorttab" role="tab" data-groep="${g}" aria-selected="${filters.groep === g}">${esc(groepNaam(g))} <span class="n">${tellingen[g] || 0}</span></button>`).join('')}
       <label class="ongelezen-schakel"><input type="checkbox" id="alleen-ongelezen" ${filters.ongelezen ? 'checked' : ''}><span class="vakje"></span>Alleen ongelezen</label>
     </div>`;
 }
@@ -240,7 +244,7 @@ const archiefLink = (url) => `https://web.archive.org/web/*/${url}`;
 
 function actiesHtml(d) {
   const s = d.status || {};
-  const audio = d.groep === 'audio';
+  const audio = Boolean(d.audio);
   const rechts = [];
   rechts.push(`<button class="tekstlink" data-actie="volledig">${staat.volledig ? 'Terug naar de lijst' : 'Volledig scherm ↗'}</button>`);
   return `
@@ -289,7 +293,7 @@ function waaromHtml(d) {
   const viaMelding = treffers.filter((t) => t.melding);
   // Bij een gemeentelijke bron is alleen een melding een reden.
   if (!viaMelding.length && (!d.landelijk || !viaRegio.length)) return '';
-  const audio = d.groep === 'audio';
+  const audio = Boolean(d.audio);
   const zinnen = [];
   // Via de plek (aardbeving, file, station, gedeelde locatie) of via een sleutelwoord.
   const viaPlek = viaRegio.filter((t) => t.plek);
@@ -797,7 +801,7 @@ function tekenPaneel() {
       <p>Kies links een stuk om het hier te lezen. Met <strong>j</strong> en <strong>k</strong> (of de pijltjes) ga je door de lijst.</p></div>`;
     return;
   }
-  if (d.groep === 'audio') {
+  if (d.audio) {
     paneel.innerHTML = audioPaneel(d);
     koppelSpeler(d);
     if (staat.springNaar !== null && staat.springNaar !== undefined) {

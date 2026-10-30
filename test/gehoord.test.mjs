@@ -262,7 +262,7 @@ test('Kamerdebatten als landelijke bron: catalogus, transcript zonder Whisper, e
 
     // Een landelijke bron: via het sleutelwoord naar Heerenveen, met de tijd en een link naar dat fragment.
     const d = detail({ opslag, fdb, adb }, jan, `a:${a.id}`);
-    assert.deepEqual([d.soort, d.soortNaam, d.groep, d.gehoord, d.regios], ['kamerdebat', 'Kamerdebat', 'audio', true, ['heerenveen']]);
+    assert.deepEqual([d.soort, d.soortNaam, d.groep, d.audio, d.gehoord, d.regios], ['kamerdebat', 'Kamerdebat', 'kamerdebat', true, true, ['heerenveen']]);
     assert.equal(d.treffers.find((t) => t.term === 'N31').tijd, 80);
     assert.equal(d.segmenten[2].link, `${BASIS}/beraadslagingen/307215?segment=13`);
     assert.equal(d.speler, null);

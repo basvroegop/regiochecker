@@ -23,8 +23,11 @@ thuisnetwerk, via Tailscale.
 ### Feed
 
 Links de lijst, rechts het leespaneel. Bovenaan de gevolgde regio's (klik er een
-om alleen die te tonen; met **+** volg je er meer) en tabbladen per soort met
-aantallen, plus **Alleen ongelezen**. Een stuk openen markeert het als gelezen;
+om alleen die te tonen; met **+** volg je er meer) en tabbladen per soort bron
+met aantallen (Gemeentenieuws, Ingekomen, Woo, Bekendmakingen,
+Raadsvergaderingen, Kamerstukken, Kamerdebatten, YouTube, Podcasts, KNMI, Raad
+van State, Ransomware, Verkeer, Ingezonden; alleen de soorten waarvan er een bron
+is), plus **Alleen ongelezen**. Een stuk openen markeert het als gelezen;
 **j**/**k** of de pijltjes lopen door de lijst, **s** bewaart.
 
 - Elk stuk dat via een sleutelwoord of een melding binnenkwam, heeft het blok
@@ -93,8 +96,8 @@ Per gemeente een H2-kop. Daaronder:
    dezelfde plek staat. Kon een categorie niet gecontroleerd worden (niet online,
    vervangende bron, of een fout bij de laatste ronde), dan staat dat onder die kop.
 3. Als er iets is: **Landelijke bronnen** en **Kamerstukken** met een sleutelwoord
-   van de regio (met de zin waarin het staat), en **Raadsvergaderingen, audio en
-   video**. Bij een raadsvergadering van de gemeente zelf staat een samenvatting
+   van de regio (met de zin waarin het staat), en audio per soort:
+   **Raadsvergaderingen**, **Kamerdebatten**, **YouTube**, **Podcasts**. Bij een raadsvergadering van de gemeente zelf staat een samenvatting
    van wat er besproken is: per onderwerp een tussenkop met punten
    (`src/vergadering.mjs`).
 
@@ -733,7 +736,8 @@ Teams een kanaal en kiest wat erheen gaat:
   wat via een sleutelwoord of plek bij een van die regio's hoort, net als in de
   feed.
 - **Bronnen**: per soort (de tabbladen van de feed: Gemeentenieuws, Ingekomen,
-  Woo, Kamerstukken, Audio & video, KNMI, Raad van State, Ransomware) "Alles uit",
+  Woo, Raadsvergaderingen, Kamerstukken, Kamerdebatten, KNMI, Raad van State,
+  Ransomware, …) "Alles uit",
   wat ook geldt voor bronnen die er later bij komen; of losse bronnen. Niets
   aangevinkt is alle bronnen.
 

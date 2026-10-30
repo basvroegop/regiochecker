@@ -412,7 +412,7 @@ test('verwerking: van podcastfeed tot transcript, namen, stemmen en telefoonnumm
     // De feed van een journalist die Smallingerland volgt.
     const sanne = nieuweGebruiker(opslag.instellingen, { login: 'sanne', email: 'sanne@lc.nl', regios: ['smallingerland'] });
     opslag.gebruikers.push(sanne);
-    r = await roep(ctx, sanne, 'GET', '/api/feed?groep=audio');
+    r = await roep(ctx, sanne, 'GET', '/api/feed?groep=podcast');
     assert.deepEqual(r.data.items.map((i) => i.titel), ['Aflevering 5: Drachten en de N31', 'Aflevering 4: Drachten en de N31']);
     r = await roep(ctx, sanne, 'GET', `/api/stuk?id=a%3A${nieuwste.id}`);
     assert.deepEqual(r.data.sprekers.map((s) => [s.label, s.heeftNaam, s.suggestie?.naam ?? null]), [['Voorzitter Bos', true, null], ['Anke Postma', true, null], ['Spreker 1', false, null], ['Spreker 2', false, null]], 'geen voorstellen uit namen van het taalmodel');
@@ -998,7 +998,7 @@ test('raadsvergadering in de weekmail: per onderwerp een kop met punten', metSql
     // De weekmail haalt hem uit de cache: geen tweede aanroep.
     const mail = await stelMailSamen(opslag, { email: 'x@lc.nl', regios: ['smallingerland'], laatsteMail: new Date(Date.now() - 2 * 86400000).toISOString() });
     assert.equal(nep.verzoeken.length, 1);
-    assert.match(mail.html, /<h3[^>]*>Raadsvergaderingen, audio en video <span[^>]*>\(1\)<\/span><\/h3>/);
+    assert.match(mail.html, /<h3[^>]*>Raadsvergaderingen <span[^>]*>\(1\)<\/span><\/h3>/, 'per soort een eigen kop, zoals de tabbladen');
     assert.match(mail.html, /<h4[^>]*>Programmabegroting 2027<\/h4><ul[^>]*><li[^>]*>Gemeentebelangen dient een motie in/);
     assert.match(mail.html, /De motie wordt &lt;unaniem&gt; aangenomen\./);
     assert.match(mail.tekst, /\n {2}Programmabegroting 2027\n {3}- Gemeentebelangen/);

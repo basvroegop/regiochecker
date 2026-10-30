@@ -82,7 +82,7 @@ What counts as "new" is `eersteGezien`, the moment of first sight, never the doc
 
 **One selection, many consumers.** The feed, weekly mail (`src/mail.mjs`), alerts (`src/meldingen.mjs`) and Teams channels (`src/kanalen.mjs`) share their selection logic in `src/feed.mjs` (`regioRegels`, `meldingTreffers`, `kanaalRegels`). Change selection there, not in the consumers.
 
-**Feed tabs.** A tab is defined in `src/regios.mjs` (`ENKELVOUD`, `GROEPEN`, `SIGNAALGROEP` / `groepVan`) *and* in the `GROEPEN` list in `public/feed.js`. Keep both in sync; tests assert the tab counts.
+**Feed tabs.** One tab per source kind, defined only in `src/regios.mjs` (`ENKELVOUD`, `GROEPEN`, `SIGNAALGROEP` / `groepVan`). `GET /api/ik` sends `zichtbareGroepen()` (only kinds that have a source, in `GROEPEN` order) and `public/feed.js` builds the tab bar from it. Audio kinds each have their own tab; audio behaviour in the reading panel hangs on `detail().audio`, not on the group. The weekmail groups audio per kind the same way. Tests assert the tab counts.
 
 **Audio** (`src/audio/`).
 - `catalogus.mjs` and `vergaderingen.mjs` discover episodes from YouTube (yt-dlp), podcast RSS, Company Webcast, Notubiz, iBabs/babscast and GemeenteOplossingen.
