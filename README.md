@@ -596,7 +596,7 @@ Het Authelia-account zelf, en toegang tot deze site, regel je in Authelia
   `data/regios.json` en `data/bronnen.json` (toegevoegd via Beheer): nieuws bij
   alle 33 (27 via RSS, 6 via `html-lijst`), ingekomen stukken (of als
   vervangende bron raadsinformatiebrieven en memo's) uit iBabs of Notubiz bij
-  32, Woo bij 22, en de vergaderingen van 27 gemeenten (22 Company Webcast, 4
+  32, Woo bij 22, en de vergaderingen van 28 gemeenten (22 Company Webcast, 5
   Notubiz, Stadskanaal via iBabs) met eerste import "alleen nieuwe". Daarnaast
   krijgen ze de bekendmakingen van de provincie Fryslân voor hun gemeente, de
   signalen met een plek (KNMI, ransomware, Raad van State, verkeer,
