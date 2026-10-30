@@ -242,6 +242,10 @@ input:focus-visible + .vakje { outline: 2px solid var(--color-accent); outline-o
 .spelerknoppen button { padding: 6px 8px; border: 2px solid var(--color-neutral-300); background: none; font-size: 13px; font-weight: 600; white-space: nowrap; }
 .spelerknoppen button:hover { border-color: var(--color-text); }
 .geen-speler { padding: 12px 14px; border-top: 2px solid var(--color-text); border-bottom: 2px solid var(--color-text); font-size: 13px; color: var(--color-neutral-700); }
+/* De video van een Kamerdebat (Debat Direct), boven het transcript. */
+.debatvideo { display: grid; gap: 6px; }
+.debatvideo video { width: 100%; aspect-ratio: 16 / 9; background: #000; display: block; }
+.debatvideo.laden { aspect-ratio: 16 / 9; place-items: center; background: var(--color-neutral-100, #f2f2ef); }
 
 .in-stuk { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
 .in-stuk > span:first-child { color: var(--color-neutral-700); margin-right: 4px; }
@@ -284,6 +288,7 @@ span.beurt-tijd { cursor: default; }
 .transcript-voet { padding-top: 12px; font-size: 12px; color: var(--color-neutral-700); }
 .sprekerlijst .beurt { grid-template-columns: 200px 90px minmax(0, 1fr); align-items: start; }
 .sprekerlijst .spreker-invoer { max-width: 360px; }
+.sprekerlijst.debatsprekers .beurt { grid-template-columns: 60px minmax(0, 1fr) auto; }
 
 /* ---------- beheer: algemene bouwstenen ---------- */
 .pagina { padding: 28px 32px 48px; }

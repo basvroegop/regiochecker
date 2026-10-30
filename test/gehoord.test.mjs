@@ -12,7 +12,7 @@ import path from 'node:path';
 import { MockAgent } from 'undici';
 import { zetOpenbaarDispatcher } from '../src/netwerk.mjs';
 import { Opslag } from '../src/opslag.mjs';
-import { koppelAdres, rondKoppelingAf, toegang, gehoordStatus, gehoordTools, ontkoppel, leesDebatten, leesTranscript, debatSegmenten } from '../src/gehoord.mjs';
+import { koppelAdres, rondKoppelingAf, toegang, gehoordStatus, gehoordTools, ontkoppel, leesDebatten, leesTranscript, debatSegmenten, leesDebat, klokVan } from '../src/gehoord.mjs';
 import { publiekeInstellingen } from '../src/instellingen.mjs';
 import { leesStroom } from '../src/mcp.mjs';
 import { herken, nieuweGebruiker } from '../src/gebruikers.mjs';
@@ -20,11 +20,12 @@ import { roep } from './api-hulp.mjs';
 
 const BASIS = 'https://gehoord.test';
 process.env.GEHOORD_URL = BASIS;
+process.env.DEBAT_DIRECT_API = 'https://dd.test/api';
 const TERUG = 'https://regiochecker.test/api/beheer/gehoord/terug';
 const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
 function nepGehoord() {
-  const staat = { registraties: [], tokens: [], mcp: [], aanroepen: [], ververs: 'goed', uitgedeeld: 0, challenge: null };
+  const staat = { registraties: [], tokens: [], mcp: [], aanroepen: [], dd: [], ververs: 'goed', uitgedeeld: 0, challenge: null };
   const agent = new MockAgent();
   agent.disableNetConnect();
   const server = agent.get(BASIS);
@@ -47,6 +48,17 @@ function nepGehoord() {
     return json({ access_token: `toegang-${staat.uitgedeeld}`, refresh_token: `ververs-${staat.uitgedeeld}`, expires_in: 3600, token_type: 'Bearer' });
   }).persist();
   server.intercept({ path: '/api/oauth/revoke', method: 'POST' }).reply(() => ({ statusCode: 200, data: '' })).persist();
+  // Debat Direct: de dagagenda en het debat met de stream van de zaal.
+  const dd = agent.get('https://dd.test');
+  dd.intercept({ path: '/api/agenda/2026-10-29', method: 'GET' }).reply(() => {
+    staat.dd.push('agenda');
+    return json({ debates: [{ id: 'dd-1', slug: 'begroting-iw-23-58' }, { id: 'dd-2', slug: 'iets-anders' }] });
+  }).persist();
+  dd.intercept({ path: '/api/debates/dd-1', method: 'GET' }).reply(() => {
+    staat.dd.push('debat');
+    return json({ id: 'dd-1', startedAt: '2026-10-29T23:58:00+0100', endedAt: '2026-10-30T01:00:00+0100',
+      video: { imageUrl: 'https://dd.test/zaal.jpg', vodUrl: 'https://stream.test/2026-10-29/plenairezaal/index.m3u8?hd=1', catchup: { vodUrl: 'https://stream.test/2026-10-29/plenairezaal/index.m3u8?hd=1&subtitles=vod' } } });
+  }).persist();
   server.intercept({ path: '/api/mcp', method: () => true }).reply(({ method, body, headers }) => {
     const h = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
     if (method === 'DELETE') return { statusCode: 204, data: '' };
@@ -66,7 +78,7 @@ function nepGehoord() {
     if (b.method === 'tools/call') {
       staat.aanroepen.push([b.params.name, b.params.arguments]);
       const a = b.params.arguments || {};
-      const tekst = b.params.name === 'search_debates' ? DEBATTEN(a.offset || 0) : b.params.name === 'get_transcript' ? TRANSCRIPT(a.offset || 0) : null;
+      const tekst = b.params.name === 'search_debates' ? DEBATTEN(a.offset || 0) : b.params.name === 'get_transcript' ? TRANSCRIPT(a.offset || 0) : b.params.name === 'get_debate' ? DEBAT : null;
       if (tekst) return json({ jsonrpc: '2.0', id: b.id, result: { content: [{ type: 'text', text: tekst }] } });
     }
     return json({ jsonrpc: '2.0', id: b.id, error: { code: -32601, message: 'onbekend' } });
@@ -91,6 +103,20 @@ const DEBATTEN = (offset) => (offset ? `3 debat(ten) gevonden.
   https://gehoord.de/beraadslagingen/307214
 
 Nog 1 meer: offset=2.`);
+const DEBAT = `# Begrotingen Infrastructuur en Waterstaat · Mobiliteitsfonds 2027 (voortzetting)
+Debat #307215 · Tweede Kamer, Plenaire zaal · 29-10-2026 23:58 · afgelopen
+Soort: Plenair debat
+Op gehoord.de: https://gehoord.de/beraadslagingen/307215
+Bron: https://debatdirect.tweedekamer.nl/2026-10-29/infrastructuur-waterstaat/plenaire-zaal/begroting-iw-23-58
+Fragmenten: 4 (lees ze met get_transcript)
+
+## Sprekers
+- Thom van Campen (VVD)
+- Hidde Heutink (Groep Markuszower)
+
+## Let op
+- Eerste Kamer: spraakherkenning zonder hoofdletters en leestekens.
+`;
 const TRANSCRIPT = (offset) => (offset ? `# Begrotingen Infrastructuur en Waterstaat · Mobiliteitsfonds 2027 (voortzetting)
 Fragmenten 3–4 van 4.
 
@@ -134,6 +160,15 @@ test('gehoord.de: de debattenlijst en het transcript lezen, ook na middernacht',
   assert.deepEqual(debatSegmenten([...een.fragmenten, ...twee.fragmenten]).map((x) => [x.start, x.end, x.speaker || null, x.fragment]), [
     [0, 30, 'Voorzitter', 11], [30, 80, 'Hidde Heutink (Groep Markuszower)', 12], [80, 100, 'Thom van Campen (VVD)', 13], [100, 105, null, 14],
   ], 'de tijden lopen over middernacht door');
+
+  assert.deepEqual(leesDebat(DEBAT), {
+    soort: 'Plenair debat', bron: 'https://debatdirect.tweedekamer.nl/2026-10-29/infrastructuur-waterstaat/plenaire-zaal/begroting-iw-23-58',
+    letOp: ['Eerste Kamer: spraakherkenning zonder hoofdletters en leestekens.'], sprekers: ['Thom van Campen (VVD)', 'Hidde Heutink (Groep Markuszower)'],
+  });
+  // De kloktijd van het eerste fragment, ook als dat na middernacht valt.
+  const gepland = new Date(2026, 9, 29, 23, 58).toISOString();
+  assert.equal(klokVan({ gepubliceerd: gepland }, 23 * 3600 + 59 * 60 + 50), new Date(2026, 9, 29, 23, 59, 50).toISOString());
+  assert.equal(klokVan({ gepubliceerd: gepland }, 10), new Date(2026, 9, 30, 0, 0, 10).toISOString());
 });
 
 test('MCP: berichten uit een eventstroom', () => {
@@ -266,6 +301,21 @@ test('Kamerdebatten als landelijke bron: catalogus, transcript zonder Whisper, e
     assert.equal(d.treffers.find((t) => t.term === 'N31').tijd, 80);
     assert.equal(d.segmenten[2].link, `${BASIS}/beraadslagingen/307215?segment=13`);
     assert.equal(d.speler, null);
+    assert.equal(d.meta.find((m) => m.k === 'Soort debat').v, 'Plenair debat');
+    assert.match(d.meta.find((m) => m.k === 'Let op').v, /zonder hoofdletters/);
+
+    // De video: de stream van Debat Direct, beperkt tot het debat, en de kloktijd
+    // van het eerste fragment; één keer opgezocht en daarna bewaard.
+    const { roep: roepApi } = await import('./api-hulp.mjs');
+    let r = await roepApi({ opslag, fdb, adb }, jan, 'GET', `/api/stuk/video?id=a:${a.id}`);
+    const hls = new URL(r.data.video.hls);
+    assert.deepEqual([hls.origin + hls.pathname, hls.searchParams.get('subtitles'), hls.searchParams.get('start'), hls.searchParams.get('end')],
+      ['https://stream.test/2026-10-29/plenairezaal/index.m3u8', 'vod', '2026-10-29T23:58:00+0100', '2026-10-30T01:00:00+0100']);
+    assert.equal(r.data.video.begin, '2026-10-29T22:58:00.000Z');
+    assert.equal(r.data.klokBegin, new Date(2026, 9, 29, 23, 59, 50).toISOString());
+    r = await roepApi({ opslag, fdb, adb }, jan, 'GET', `/api/stuk/video?id=a:${a.id}`);
+    assert.deepEqual(net.staat.dd, ['agenda', 'debat'], 'de tweede keer uit de opslag');
+    assert.equal((await roepApi({ opslag, fdb, adb }, jan, 'GET', '/api/stuk/video?id=a:bestaatniet')).status, 404);
   } finally {
     net.herstel();
   }

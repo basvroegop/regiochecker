@@ -392,8 +392,21 @@ tekens). De tools geven tekst, geen JSON; `src/gehoord.mjs` leest de regels
 de tijd vanaf het begin van het debat (ook na middernacht), en het fragment-id.
 Zo werkt alles van audio mee: zoeken in het transcript, een debat naar een regio
 als een sleutelwoord valt (met het tijdstip), de AI-samenvatting, de weekmail.
-In het leespaneel openen de tijden het fragment bij gehoord.de, met de video van
-de Kamer. Debatten met minder dan twee fragmenten ("Regeling van werkzaamheden")
+In het leespaneel staat de video van het debat (Tweede Kamer, via Debat Direct)
+en springt een klik op een tijd daarheen; de tabs zijn Transcript, Sprekers (wie
+van gehoord.de, met fractie of functie, beurten en spreektijd) en Notitie. Bij
+het debat staan ook de soort ("Plenair debat") en de waarschuwingen van
+gehoord.de ("Let op"). **De video**: gehoord.de noemt bij een debat de pagina
+op Debat Direct; de openbare API daarvan (`cdn.debatdirect.tweedekamer.nl/api`,
+`/agenda/<datum>` en `/debates/<id>`) geeft de HLS-stream van de zaal op die dag,
+die je met `start` en `end` (de tijden van het debat) tot het debat beperkt,
+zoals hun eigen speler doet. De stream heeft kloktijden, de fragmenten van
+gehoord.de ook: een tijd in het transcript wordt zo een plek in de video (drie
+seconden ervoor). De browser speelt de stream met hls.js (`public/vendor/`,
+Apache-2.0, pas geladen als er een debat opengaat; Safari kan HLS zelf). Een
+debat van de Eerste Kamer heeft geen Debat Direct; dan openen de tijden het
+fragment bij gehoord.de. Het opzoeken gebeurt één keer per debat
+(`GET /api/stuk/video`), daarna staat het bij de aflevering. Debatten met minder dan twee fragmenten ("Regeling van werkzaamheden")
 slaan we over. De eerste import nam alle debatten mee (vanaf 30 maart 2026, toen
 ruim 1000) als archief. Een debat kost geen GPU: in het archief gaat het voor de
 opnames die door Whisper moeten, maar een nieuwe vergadering gaat altijd voor. gehoord.de waarschuwt: automatische

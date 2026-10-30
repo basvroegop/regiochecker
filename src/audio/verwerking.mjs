@@ -414,6 +414,8 @@ export class Verwerking {
       transcript: d.tekst, segmenten: d.segmenten, taal: 'nl', duur: d.duur, sprekerFout: null,
       sprekersGevraagd: false, entiteiten: null, entiteitDelen: null, transcriptDelen: null, samenvatting: null, pogingen: 0,
       eersteGezien: verder.eersteGezien || (verder.nulmeting && verder.gepubliceerd ? verder.gepubliceerd : new Date().toISOString()),
+      // Wat gehoord.de over het debat zegt (soort, bron, waarschuwingen), in het vak van het vergaderplatform.
+      platform: { agenda: [], sprekers: [], debat: d.debat, klokBegin: d.klokBegin, opgehaald: Date.now() / 1000 },
     });
     this.scanNummers(af.id, d.segmenten);
     werk({ status: 'getranscribeerd', stap: 'Transcript klaar · samenvatting volgt', fout: null });

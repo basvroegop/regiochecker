@@ -24,7 +24,7 @@ import { maakKader, bouwFeed, bewaardeFeed, zoekFeed, detail, momentopname, meld
 import { controleerMelding, BRONNEN } from './meldingen.mjs';
 import { zoekvraagTekst } from './termen.mjs';
 import { beheerApi } from './beheer.mjs';
-import { rondKoppelingAf } from './gehoord.mjs';
+import { rondKoppelingAf, debatVideo } from './gehoord.mjs';
 import { kamerApi } from './kamer/api.mjs';
 import { publiekeInstellingen, werkInstellingenBij } from './instellingen.mjs';
 import { ollamaInfo } from './ollama.mjs';
@@ -94,6 +94,23 @@ export async function api(req, res, url, ctx) {
     const d = detail(k(), gebruiker, String(z.get('id') || ''));
     if (!d) throw new Fout(404, 'Dit stuk bestaat niet (meer)');
     return stuur(d);
+  }
+  // De video van een Kamerdebat (Debat Direct), met de kloktijd van het eerste
+  // fragment om tijden in het transcript naar de video om te rekenen. Eén keer
+  // opgezocht en bij de aflevering bewaard (src/gehoord.mjs).
+  if (route === 'GET /api/stuk/video') {
+    const af = adb?.aflevering(String(z.get('id') || '').replace(/^a:/, ''));
+    if (!af || af.vorm !== 'gehoord') throw new Fout(404, 'Dit is geen Kamerdebat');
+    if (af.platform?.video !== undefined && af.platform?.klokBegin) return stuur({ video: af.platform.video, klokBegin: af.platform.klokBegin });
+    let r;
+    try {
+      r = await debatVideo(opslag, af);
+    } catch (fout) {
+      // Tijdelijk niet te bereiken: niets bewaren, de volgende keer opnieuw.
+      return stuur({ video: null, klokBegin: af.platform?.klokBegin || null, fout: fout.message });
+    }
+    adb.werkBij(af.id, { platform: { agenda: [], sprekers: [], ...af.platform, debat: r.debat, klokBegin: r.klokBegin, video: r.video } });
+    return stuur({ video: r.video, klokBegin: r.klokBegin });
   }
   if (route === 'GET /api/stuk/document') {
     const id = String(z.get('id') || '');

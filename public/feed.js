@@ -275,7 +275,8 @@ function tijdLink(d, t, inhoud, klasse) {
   // Een Kamerdebat: het fragment op gehoord.de waarin die tijd valt.
   if (d.gehoord) {
     const s = (d.segmenten || []).filter((x) => x.link && x.start <= t + 0.5).at(-1) || d.segmenten?.find((x) => x.link);
-    if (s) return `<a class="${klasse}" href="${esc(s.link)}" target="_blank" rel="noopener noreferrer" title="Openen bij gehoord.de op deze plek">${inhoud}</a>`;
+    // Met de video erbij springt een klik daarin (koppelPaneel); anders gaat de link naar gehoord.de.
+    if (s) return `<a class="${klasse}" href="${esc(s.link)}" data-debattijd="${t}" target="_blank" rel="noopener noreferrer" title="Naar dit moment in het debat">${inhoud}</a>`;
   }
   if (d.youtube && d.url) {
     try {
@@ -315,7 +316,7 @@ function waaromHtml(d) {
     zinnen.push(`${esc(opsomming(termen.map(aanhalen)))} ${termen.length === 1 ? 'is een zoekterm' : 'zijn zoektermen'} van je meldingen.`);
   }
   if (audio && (d.speler || d.youtube)) zinnen.push('Klik op een tijd om vanaf daar te luisteren.');
-  else if (audio && d.gehoord) zinnen.push('Klik op een tijd om dat fragment bij gehoord.de te openen.');
+  else if (audio && d.gehoord) zinnen.push('Klik op een tijd om naar dat moment in het debat te gaan.');
   // Eén rij per term, ook als hij er zowel als sleutelwoord als via een melding in staat.
   const getoond = new Set();
   const rijen = treffers.filter((t) => (t.melding || d.landelijk) && !getoond.has(t.term) && getoond.add(t.term)).map((t) => {
@@ -504,7 +505,25 @@ function transcriptHtml(d) {
     <a href="/api/audio/afleveringen/${esc(d.episode)}/transcript.txt" target="_blank" rel="noopener">Transcript downloaden</a></span></div>`;
 }
 
+// Een Kamerdebat: de sprekers komen van gehoord.de (met fractie of functie);
+// geen stemmen om te herkennen. Wie het langst sprak bovenaan.
+function debatSprekersHtml(d) {
+  const sprekers = [...(d.sprekers || [])].filter((sp) => sp.heeftNaam).sort((a, b) => b.duur - a.duur);
+  if (!sprekers.length) return '<p class="leeg">Geen sprekers bekend.</p>';
+  const rijen = sprekers.map((sp) => {
+    const eerste = d.segmenten?.[sp.eerste]?.start ?? 0;
+    return `<div class="beurt">
+      ${tijdLink(d, eerste, tijdcode(eerste), 'beurt-tijd')}
+      <div class="spreker"><span class="spreker-naam">${esc(sp.label)}</span></div>
+      <span class="zacht klein">${sp.beurten} ${sp.beurten === 1 ? 'beurt' : 'beurten'} · ${sp.duur < 60 ? '< 1 min' : duurTekst(sp.duur)}</span>
+    </div>`;
+  }).join('');
+  return `<div class="transcript sprekerlijst debatsprekers">${rijen}
+    <span class="transcript-voet">Sprekers volgens gehoord.de, afgeleid uit de gegevens van de Kamer; soms zitten ze er een paar seconden naast. De tijd is de eerste beurt.</span></div>`;
+}
+
 function sprekersHtml(d) {
+  if (d.gehoord) return debatSprekersHtml(d);
   if (!d.stemmenHerkend) {
     return `<div class="document"><p>Stemmen nog niet herkend: het transcript zegt niet wie er spreekt.</p>
       <div><button class="knop" data-actie="stemmen">Stemmen laten herkennen</button></div>
@@ -552,7 +571,11 @@ function agendaHtml(d) {
     <span class="transcript-voet">Agenda en tijden van het vergaderplatform.</span></div>`;
 }
 
+// Een Kamerdebat heeft geen namen (AI) en geen agenda met tijden.
+const tabsVan = (d) => (d.gehoord ? ['transcript', 'sprekers', 'notitie'] : ['transcript', 'sprekers', 'namen', 'agenda', 'notitie']);
+
 function tabInhoud(d) {
+  if (!tabsVan(d).includes(audioTab.tab)) audioTab.tab = 'transcript';
   if (audioTab.tab === 'sprekers') return sprekersHtml(d);
   if (audioTab.tab === 'agenda') return agendaHtml(d);
   if (audioTab.tab === 'namen') return namenHtml(d);
@@ -572,6 +595,7 @@ function samenvattingHtml(d) {
 }
 
 function audioPaneel(d) {
+  if (!tabsVan(d).includes(audioTab.tab)) audioTab.tab = 'transcript';
   const onbekend = (d.sprekers || []).filter((s) => !s.heeftNaam).length;
   const kicker = d.landelijk ? [d.soortNaam, 'landelijk', 'transcript'] : [d.regioNaam, d.soortNaam, d.soort === 'podcast' ? 'audio' : 'video'];
   const sub = [
@@ -591,7 +615,8 @@ function audioPaneel(d) {
         </div>
         <div class="spelerknoppen"><button id="terug15" title="15 seconden terug">−15 s</button><button id="tempo" title="Afspeelsnelheid">1×</button></div>
       </div>`
-    : `<div class="geen-speler">${d.youtube ? 'De tijden openen de video bij YouTube op dat moment.' : d.gehoord ? 'De tijden openen het debat bij gehoord.de op die plek, met de video van de Kamer.' : 'De audio van deze aflevering is niet bewaard; de tijden zijn ter oriëntatie. Luister terug bij de bron.'}</div>`;
+    : d.gehoord ? '<div id="debatvideo" class="debatvideo laden"><span class="zacht klein">De video van het debat wordt geladen…</span></div>'
+      : `<div class="geen-speler">${d.youtube ? 'De tijden openen de video bij YouTube op dat moment.' : 'De audio van deze aflevering is niet bewaard; de tijden zijn ter oriëntatie. Luister terug bij de bron.'}</div>`;
   const kop = `<div class="acties" id="acties">${actiesHtml(d)}</div>
     <div class="kopblok" style="gap:8px"><div class="kicker">${esc(kicker.filter(Boolean).join(' · '))}</div><h2>${esc(d.titel)}</h2>${sub ? `<span class="subregel">${esc(sub)}</span>` : ''}</div>`;
   // Nog geen transcript: zeggen waar de aflevering in de verwerking staat.
@@ -613,8 +638,8 @@ function audioPaneel(d) {
     <div class="subtabs" role="tablist">
       <button class="subtab" role="tab" data-tab="transcript" aria-selected="${audioTab.tab === 'transcript'}">Transcript</button>
       <button class="subtab" role="tab" data-tab="sprekers" aria-selected="${audioTab.tab === 'sprekers'}">Sprekers${onbekend ? ` <span class="badge">${onbekend} zonder naam</span>` : ''}</button>
-      <button class="subtab" role="tab" data-tab="namen" aria-selected="${audioTab.tab === 'namen'}">Namen${aantalNamen ? ` <span class="zacht" style="font-weight:400">${aantalNamen}</span>` : ''}</button>
-      <button class="subtab" role="tab" data-tab="agenda" aria-selected="${audioTab.tab === 'agenda'}">Agenda</button>
+      ${tabsVan(d).includes('namen') ? `<button class="subtab" role="tab" data-tab="namen" aria-selected="${audioTab.tab === 'namen'}">Namen${aantalNamen ? ` <span class="zacht" style="font-weight:400">${aantalNamen}</span>` : ''}</button>` : ''}
+      ${tabsVan(d).includes('agenda') ? `<button class="subtab" role="tab" data-tab="agenda" aria-selected="${audioTab.tab === 'agenda'}">Agenda</button>` : ''}
       <button class="subtab" role="tab" data-tab="notitie" aria-selected="${audioTab.tab === 'notitie'}">Notitie</button>
       <label class="subtab-zoek">${icoon('search', 14)}<input id="transcript-zoek" type="search" placeholder="Zoeken" value="${esc(audioTab.zoek)}" aria-label="Zoeken in het transcript"></label>
     </div>
@@ -636,6 +661,7 @@ function tekenTab() {
 // ---------- de speler ----------
 
 function stopSpeler() {
+  stopDebat();
   if (staat.speler) {
     staat.speler.audio.pause();
     staat.speler.audio.removeAttribute('src');
@@ -646,6 +672,104 @@ function stopSpeler() {
 }
 
 const fragmentSpeler = new Audio();
+
+// ---------- de video van een Kamerdebat ----------
+//
+// De Tweede Kamer zendt elk debat uit via Debat Direct; de server zoekt de
+// stream op (/api/stuk/video, src/gehoord.mjs). Die speelt hier met hls.js
+// (public/vendor/, pas geladen als er een debat opengaat; Safari kan HLS zelf).
+// Tijden in het transcript tellen vanaf het eerste fragment van gehoord.de;
+// met de kloktijd daarvan en die van de stream (EXT-X-PROGRAM-DATE-TIME) wordt
+// dat een plek in de video. Drie seconden ervoor, want de sprekers van
+// gehoord.de zitten er soms een paar seconden naast.
+
+let hlsBelofte = null;
+const laadHls = () => (hlsBelofte ||= new Promise((klaar, mislukt) => {
+  if (window.Hls) return klaar(window.Hls);
+  const script = document.createElement('script');
+  script.src = '/vendor/hls.min.js';
+  script.onload = () => klaar(window.Hls);
+  script.onerror = () => {
+    hlsBelofte = null;
+    mislukt(new Error('De videospeler kon niet worden geladen.'));
+  };
+  document.head.append(script);
+}));
+
+function stopDebat() {
+  const db = staat.debat;
+  if (!db) return;
+  db.video.pause();
+  db.hls?.destroy();
+  staat.debat = null;
+}
+
+const geenDebatVideo = (tekst) => `<div class="geen-speler">${tekst} De tijden openen het debat bij gehoord.de op die plek.</div>`;
+
+async function laadDebatVideo(d) {
+  const plek = $('#debatvideo');
+  if (!plek) return;
+  // Hetzelfde debat opnieuw getekend: de speler blijft, en speelt door.
+  if (staat.debat?.id === d.id) {
+    plek.replaceWith(staat.debat.vak);
+    return;
+  }
+  stopDebat();
+  let r = null;
+  try {
+    r = await vraag('GET', `/api/stuk/video?id=${encodeURIComponent(d.id)}`);
+  } catch { /* geen video */ }
+  if (!plek.isConnected || staat.detail?.id !== d.id) return;
+  if (!r?.video || !r.klokBegin) {
+    plek.outerHTML = geenDebatVideo(r && !r.fout ? 'Bij dit debat is geen video van Debat Direct (zoals bij de Eerste Kamer).' : 'De video van dit debat kon niet worden geladen.');
+    return;
+  }
+  const vak = document.createElement('div');
+  vak.className = 'debatvideo';
+  vak.innerHTML = `<video controls playsinline preload="metadata"${r.video.poster ? ` poster="${esc(r.video.poster)}"` : ''}></video>
+    <span class="zacht klein">Video: <a href="${esc(r.video.pagina)}" target="_blank" rel="noopener noreferrer">Debat Direct, Tweede Kamer</a>. Klik op een tijd om daar te kijken.</span>`;
+  const video = vak.querySelector('video');
+  const db = { id: d.id, vak, video, hls: null, klokBegin: Date.parse(r.klokBegin), begin: Date.parse(r.video.begin), eerstePdt: null };
+  try {
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = r.video.hls;
+      video.addEventListener('loadedmetadata', () => {
+        const start = video.getStartDate?.();
+        if (start && !Number.isNaN(+start)) db.eerstePdt = +start;
+      });
+    } else {
+      const Hls = await laadHls();
+      if (!Hls.isSupported()) throw new Error('Deze browser kan de video niet afspelen.');
+      db.hls = new Hls({ startPosition: 0 });
+      db.hls.on(Hls.Events.LEVEL_LOADED, (_, data) => {
+        const f = data.details.fragments[0];
+        if (f?.programDateTime) db.eerstePdt = f.programDateTime - f.start * 1000;
+      });
+      db.hls.loadSource(r.video.hls);
+      db.hls.attachMedia(video);
+    }
+  } catch (fout) {
+    if (plek.isConnected) plek.outerHTML = geenDebatVideo(esc(fout.message));
+    return;
+  }
+  if (!plek.isConnected || staat.detail?.id !== d.id) {
+    db.hls?.destroy();
+    return;
+  }
+  plek.replaceWith(vak);
+  staat.debat = db;
+}
+
+// Naar een tijd in het transcript (seconden vanaf het eerste fragment).
+function springDebat(t) {
+  const db = staat.debat;
+  if (!db) return false;
+  const nul = db.eerstePdt ?? db.begin;
+  db.video.currentTime = Math.max(0, (db.klokBegin + t * 1000 - nul) / 1000 - 3);
+  db.video.play().catch(() => {});
+  db.vak.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  return true;
+}
 
 function koppelSpeler(d) {
   if (!d.speler) return;
@@ -804,6 +928,7 @@ function tekenPaneel() {
   if (d.audio) {
     paneel.innerHTML = audioPaneel(d);
     koppelSpeler(d);
+    if (d.gehoord) laadDebatVideo(d);
     if (staat.springNaar !== null && staat.springNaar !== undefined) {
       markeerTijd(staat.springNaar);
       staat.springNaar = null;
@@ -875,6 +1000,10 @@ function koppelPaneel(paneel) {
       const zoekveld = $('#transcript-zoek');
       if (zoekveld) zoekveld.value = audioTab.zoek;
       tekenTab();
+    } else if (knop.dataset.debattijd !== undefined && staat.debat) {
+      // Een tijd in een Kamerdebat: de video op die plek, niet gehoord.de.
+      e.preventDefault();
+      springDebat(Number(knop.dataset.debattijd));
     } else if (knop.dataset.tijd !== undefined && knop.tagName === 'BUTTON') {
       spring(Number(knop.dataset.tijd));
     } else if (knop.dataset.fragment) {

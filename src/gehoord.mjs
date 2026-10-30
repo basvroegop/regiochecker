@@ -14,6 +14,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { fetch } from 'undici';
 import { controleerUrl, openbaarDispatcher } from './netwerk.mjs';
 import { McpKlant } from './mcp.mjs';
+import { haalJson } from './ophalen.mjs';
 
 const basis = () => (process.env.GEHOORD_URL || 'https://gehoord.de').replace(/\/$/, '');
 const mcpAdres = () => `${basis()}/api/mcp`;
@@ -285,11 +286,25 @@ export function debatSegmenten(fragmenten) {
   });
 }
 
-// Het hele transcript van één debat (alle pagina's): { segmenten, tekst, duur }.
+// get_debate: "Soort: Plenair debat", "Bron: https://debatdirect…", en onder
+// "## Let op" waarschuwingen over de tekst (Eerste Kamer zonder hoofdletters,
+// een samengevatte ondertiteling).
+export function leesDebat(tekst) {
+  const t = String(tekst);
+  const regel = (naam) => new RegExp(`^${naam}: (.+)$`, 'm').exec(t)?.[1]?.trim() || null;
+  const blok = (kop) => {
+    const m = new RegExp(`^## ${kop}\\s*\\n([\\s\\S]*?)(?=^## |(?![\\s\\S]))`, 'm').exec(t);
+    return m ? [...m[1].matchAll(/^- (.+)$/gm)].map((x) => x[1].trim()) : [];
+  };
+  return { soort: regel('Soort'), bron: regel('Bron'), letOp: blok('Let op'), sprekers: blok('Sprekers') };
+}
+
+// Het hele transcript van één debat (alle pagina's): { segmenten, tekst, duur, debat }.
 export async function gehoordDebat(opslag, af) {
   const id = /^gh:(\d+)$/.exec(af.extern || '')?.[1];
   if (!id) throw new GehoordFout('Dit debat heeft geen herkenbaar nummer van gehoord.de.');
   return metGehoord(opslag, async (klant) => {
+    const debat = leesDebat((await klant.roep('get_debate', { debate_id: Number(id) })).tekst);
     const fragmenten = [];
     let offset = 0;
     for (let p = 0; p < MAX_TRANSCRIPT_PAGINAS; p++) {
@@ -301,6 +316,66 @@ export async function gehoordDebat(opslag, af) {
     }
     if (!fragmenten.length) throw new GehoordFout('gehoord.de heeft (nog) geen tekst bij dit debat.');
     const segmenten = debatSegmenten(fragmenten);
-    return { segmenten, tekst: segmenten.map((s) => s.text).join(' '), duur: segmenten.at(-1).end };
+    return { segmenten, tekst: segmenten.map((s) => s.text).join(' '), duur: segmenten.at(-1).end, debat, klokBegin: klokVan(af, fragmenten[0].seconde) };
   });
+}
+
+// ---------- de video van het debat (Debat Direct) ----------
+//
+// De Tweede Kamer zendt elk debat uit via Debat Direct. gehoord.de noemt bij
+// een debat de pagina daar ("Bron: https://debatdirect.tweedekamer.nl/<datum>/
+// <categorie>/<zaal>/<debat>"); de openbare API van Debat Direct geeft bij het
+// debat de HLS-stream van die zaal op die dag, die je met start en eind (de
+// tijden van het debat) tot het debat beperkt, net als hun eigen speler. De
+// stream heeft kloktijden (EXT-X-PROGRAM-DATE-TIME), en de fragmenten van
+// gehoord.de ook: zo opent een tijd in het transcript de video op die plek. Een
+// debat van de Eerste Kamer heeft geen Debat Direct; dan blijven de tijden naar
+// gehoord.de wijzen.
+
+const DEBAT_DIRECT = () => process.env.DEBAT_DIRECT_API || 'https://cdn.debatdirect.tweedekamer.nl/api';
+const DD_PAGINA = /^https:\/\/debatdirect\.tweedekamer\.nl\/(\d{4}-\d{2}-\d{2})\/[^/]+\/[^/]+\/([^/?#]+)/;
+
+// De kloktijd van het eerste fragment: de dag van het debat (een fragment ruim
+// voor de geplande aanvang hoort bij de volgende dag, na middernacht).
+export function klokVan(af, seconde) {
+  const gepland = new Date(af.gepubliceerd || (af.gepubliceerdOp ? af.gepubliceerdOp * 1000 : Date.now()));
+  const dag = new Date(gepland.getFullYear(), gepland.getMonth(), gepland.getDate());
+  const geplandSeconde = gepland.getHours() * 3600 + gepland.getMinutes() * 60;
+  const extra = seconde < geplandSeconde - 6 * 3600 ? 86400 : 0;
+  return new Date(+dag + (seconde + extra) * 1000).toISOString();
+}
+
+// "2026-10-29T19:01:26+0100" → ISO; Date.parse wil een dubbele punt in de zone.
+const ddTijd = (t) => (t ? new Date(Date.parse(String(t).replace(/([+-]\d{2})(\d{2})$/, '$1:$2'))).toISOString() : null);
+
+// Wat het leespaneel nodig heeft: { hls, begin, klokBegin, poster, pagina } of null.
+export async function debatVideo(opslag, af) {
+  let { debat, klokBegin } = af.platform || {};
+  // Een debat van vóór deze functie: de gegevens eenmalig ophalen bij gehoord.de.
+  if (!debat || !klokBegin) {
+    const id = Number(/^gh:(\d+)$/.exec(af.extern || '')?.[1]);
+    ({ debat, klokBegin } = await metGehoord(opslag, async (klant) => {
+      const d = leesDebat((await klant.roep('get_debate', { debate_id: id })).tekst);
+      const [eerste] = leesTranscript((await klant.roep('get_transcript', { debate_id: id, max_chars: 5000 })).tekst).fragmenten;
+      return { debat: d, klokBegin: eerste ? klokVan(af, eerste.seconde) : null };
+    }));
+  }
+  const m = DD_PAGINA.exec(debat?.bron || '');
+  if (!m || !klokBegin) return { debat, klokBegin, video: null };
+  const agenda = await haalJson(`${DEBAT_DIRECT()}/agenda/${m[1]}`);
+  const gevonden = (agenda.debates || []).find((d) => d.slug === m[2]);
+  if (!gevonden) return { debat, klokBegin, video: null };
+  const info = await haalJson(`${DEBAT_DIRECT()}/debates/${encodeURIComponent(gevonden.id)}`);
+  const v = info.video || {};
+  const bron = info.endedAt ? v.catchup?.vodUrl || v.vodUrl : v.url;
+  if (!bron || !info.startedAt) return { debat, klokBegin, video: null };
+  // Zoals de speler van Debat Direct: de stream van de zaal, beperkt tot het debat.
+  const hls = new URL(bron);
+  hls.searchParams.set('start', info.startedAt);
+  if (info.endedAt) hls.searchParams.set('end', info.endedAt);
+  return {
+    debat,
+    klokBegin,
+    video: { hls: hls.href, begin: ddTijd(info.startedAt), poster: v.imageUrl || null, pagina: debat.bron },
+  };
 }

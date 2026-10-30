@@ -685,6 +685,8 @@ function audioDetail(k, gebruiker, id) {
       meta('Aflevering', a.auteur),
       meta('Gepubliceerd', a.gepubliceerd),
       meta('Eerst gezien', a.eersteGezien),
+      meta('Soort debat', a.platform?.debat?.soort),
+      meta('Let op', a.platform?.debat?.letOp?.join(' ') || null),
       meta('Transcript', a.transcript ? (a.vorm === 'gehoord' ? 'Automatisch, door gehoord.de; niet citeren als officieel verslag (dat zijn de Handelingen)' : `Automatisch${a.taal ? ` · ${a.taal.toUpperCase()}` : ''}`) : null),
       meta('Regio', regios.filter(Boolean).map((r) => k.regioMap.get(r)?.naam || r).join(', ') || null),
     ].filter(Boolean),
