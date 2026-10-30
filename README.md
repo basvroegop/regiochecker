@@ -405,8 +405,13 @@ op Debat Direct; de openbare API daarvan (`cdn.debatdirect.tweedekamer.nl/api`,
 `/agenda/<datum>` en `/debates/<id>`) geeft de HLS-stream van de zaal op die dag,
 die je met `start` en `end` (de tijden van het debat) tot het debat beperkt,
 zoals hun eigen speler doet. De stream heeft kloktijden, de fragmenten van
-gehoord.de ook: een tijd in het transcript wordt zo een plek in de video (drie
-seconden ervoor). De browser speelt de stream met hls.js (`public/vendor/`,
+gehoord.de ook (die kloppen op de seconde met de sprekerswissels van Debat
+Direct). Bij een debat met video staan alle tijden (transcript, sprekers,
+treffers, feed en mail) daarom op de klok van de video: 0:00 is het eerste beeld
+(de eerste EXT-X-PROGRAM-DATE-TIME), en een klik op 2:42 zet de video op 2:42.
+Dat gebeurt bij het binnenhalen; een debat van daarvoor is één keer omgezet
+(`platform.tijdbasis`). Wat gehoord.de al had vóór het eerste beeld, staat op
+0:00. De browser speelt de stream met hls.js (`public/vendor/`,
 Apache-2.0, pas geladen als er een debat opengaat), ook als de browser zegt dat
 hij HLS zelf kan: Chrome antwoordt "maybe" maar speelt deze stream (fMP4 met een
 apart geluidsspoor) niet af. Alleen zonder Media Source Extensions (iPhone) de

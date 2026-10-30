@@ -29,7 +29,7 @@ import { vindNummers, nummerlijst, contextVenster, namenInBuurt, controleerDuidi
 import { vatKortSamen } from '../vergadering.mjs';
 import { samenvattingAanbieder } from '../samenvatting.mjs';
 import { sprekersVan } from '../feed.mjs';
-import { gehoordDebat } from '../gehoord.mjs';
+import { gehoordDebat, ddVideo, naarVideoTijd } from '../gehoord.mjs';
 
 const BRON_INTERVAL_MS = 60 * 60_000;
 const ARCHIEF_TUSSEN_MS = 15 * 60_000;
@@ -409,15 +409,26 @@ export class Verwerking {
   async haalDebat(af, werk) {
     werk({ status: 'downloaden', stap: 'Transcript ophalen bij gehoord.de', fout: null });
     const d = await gehoordDebat(this.opslag, af);
+    // De video van Debat Direct erbij, en dan de tijden op de klok van die
+    // video. Lukt het opzoeken nu niet, dan doet het leespaneel het later
+    // (/api/stuk/video); geen video (Eerste Kamer) wordt onthouden als null.
+    let video;
+    try {
+      video = await ddVideo(d.debat);
+    } catch { /* later */ }
+    const segmenten = video ? naarVideoTijd(d.segmenten, d.klokBegin, video.begin) : d.segmenten;
     const verder = this.adb.aflevering(af.id);
     werk({
-      transcript: d.tekst, segmenten: d.segmenten, taal: 'nl', duur: d.duur, sprekerFout: null,
+      transcript: d.tekst, segmenten, taal: 'nl', duur: segmenten.at(-1)?.end ?? d.duur, sprekerFout: null,
       sprekersGevraagd: false, entiteiten: null, entiteitDelen: null, transcriptDelen: null, samenvatting: null, pogingen: 0,
       eersteGezien: verder.eersteGezien || (verder.nulmeting && verder.gepubliceerd ? verder.gepubliceerd : new Date().toISOString()),
       // Wat gehoord.de over het debat zegt (soort, bron, waarschuwingen), in het vak van het vergaderplatform.
-      platform: { agenda: [], sprekers: [], debat: d.debat, klokBegin: d.klokBegin, opgehaald: Date.now() / 1000 },
+      platform: {
+        agenda: [], sprekers: [], debat: d.debat, klokBegin: d.klokBegin, opgehaald: Date.now() / 1000,
+        ...(video !== undefined ? { video, tijdbasis: video ? 'video' : 'gehoord' } : {}),
+      },
     });
-    this.scanNummers(af.id, d.segmenten);
+    this.scanNummers(af.id, segmenten);
     werk({ status: 'getranscribeerd', stap: 'Transcript klaar · samenvatting volgt', fout: null });
     this.bijBeschikbaar?.(this.adb.aflevering(af.id));
   }

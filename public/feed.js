@@ -693,10 +693,10 @@ const fragmentSpeler = new Audio();
 // stream op (/api/stuk/video, src/gehoord.mjs). Die speelt hier met hls.js
 // (public/vendor/, pas geladen als er een debat opengaat; alleen zonder MSE,
 // zoals op een iPhone, de eigen HLS-speler van de browser).
-// Tijden in het transcript tellen vanaf het eerste fragment van gehoord.de;
-// met de kloktijd daarvan en die van de stream (EXT-X-PROGRAM-DATE-TIME) wordt
-// dat een plek in de video. Drie seconden ervoor, want de sprekers van
-// gehoord.de zitten er soms een paar seconden naast.
+// Bij een debat met video staan de tijden in het transcript op de klok van de
+// video (0:00 is het eerste beeld; de server zet ze om, src/gehoord.mjs): een
+// klik op 2:41 zet de video op 2:41. `nul` is de kloktijd van 0:00, en met de
+// kloktijden in de stream (EXT-X-PROGRAM-DATE-TIME) klopt dat op de seconde.
 
 let hlsBelofte = null;
 const laadHls = () => (hlsBelofte ||= new Promise((klaar, mislukt) => {
@@ -735,7 +735,7 @@ async function laadDebatVideo(d) {
     r = await vraag('GET', `/api/stuk/video?id=${encodeURIComponent(d.id)}`);
   } catch { /* geen video */ }
   if (!plek.isConnected || staat.detail?.id !== d.id) return;
-  if (!r?.video || !r.klokBegin) {
+  if (!r?.video || !r.nul) {
     plek.outerHTML = geenDebatVideo(r && !r.fout ? 'Bij dit debat is geen video van Debat Direct (zoals bij de Eerste Kamer).' : 'De video van dit debat kon niet worden geladen.');
     return;
   }
@@ -744,7 +744,7 @@ async function laadDebatVideo(d) {
   vak.innerHTML = `<video controls playsinline preload="metadata"${r.video.poster ? ` poster="${esc(r.video.poster)}"` : ''}></video>
     <span class="zacht klein">Video: <a href="${esc(r.video.pagina)}" target="_blank" rel="noopener noreferrer">Debat Direct, Tweede Kamer</a>. Klik op een tijd om daar te kijken.</span>`;
   const video = vak.querySelector('video');
-  const db = { id: d.id, vak, video, hls: null, klokBegin: Date.parse(r.klokBegin), begin: Date.parse(r.video.begin), eerstePdt: null };
+  const db = { id: d.id, vak, video, hls: null, nul: Date.parse(r.nul), begin: Date.parse(r.video.begin), eerstePdt: null };
   try {
     // Eerst hls.js (Media Source Extensions: Chrome, Edge, Firefox, Safari op de
     // Mac). Chrome zegt tegenwoordig ook "maybe" op HLS, maar speelt deze stream
@@ -793,14 +793,23 @@ async function laadDebatVideo(d) {
   }
   plek.replaceWith(vak);
   staat.debat = db;
+  // Net omgezet naar de klok van de video: het stuk opnieuw ophalen, zodat de tijden kloppen.
+  if (r.omgezet) {
+    try {
+      const nieuw = await vraag('GET', `/api/stuk?id=${encodeURIComponent(d.id)}`);
+      if (staat.detail?.id === d.id) {
+        staat.detail = nieuw;
+        tekenPaneel();
+      }
+    } catch { /* dan bij de volgende keer openen */ }
+  }
 }
 
 // Naar een tijd in het transcript (seconden vanaf het eerste fragment).
 function springDebat(t) {
   const db = staat.debat;
   if (!db) return false;
-  const nul = db.eerstePdt ?? db.begin;
-  db.video.currentTime = Math.max(0, (db.klokBegin + t * 1000 - nul) / 1000 - 3);
+  db.video.currentTime = Math.max(0, (db.nul + t * 1000 - (db.eerstePdt ?? db.begin)) / 1000);
   db.video.play().catch(() => {});
   db.vak.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   return true;

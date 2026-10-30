@@ -14,7 +14,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { fetch } from 'undici';
 import { controleerUrl, openbaarDispatcher } from './netwerk.mjs';
 import { McpKlant } from './mcp.mjs';
-import { haalJson } from './ophalen.mjs';
+import { haalJson, haalTekst } from './ophalen.mjs';
 
 const basis = () => (process.env.GEHOORD_URL || 'https://gehoord.de').replace(/\/$/, '');
 const mcpAdres = () => `${basis()}/api/mcp`;
@@ -348,10 +348,49 @@ export function klokVan(af, seconde) {
 // "2026-10-29T19:01:26+0100" → ISO; Date.parse wil een dubbele punt in de zone.
 const ddTijd = (t) => (t ? new Date(Date.parse(String(t).replace(/([+-]\d{2})(\d{2})$/, '$1:$2'))).toISOString() : null);
 
-// Wat het leespaneel nodig heeft: { hls, begin, klokBegin, poster, pagina } of null.
+// De video bij een debat van gehoord.de: { hls, begin, poster, pagina }, of null
+// als er geen Debat Direct is (Eerste Kamer). `begin` is de kloktijd van het
+// eerste beeld: de eerste EXT-X-PROGRAM-DATE-TIME in de stream (zo'n seconde voor
+// "startedAt" van Debat Direct), anders startedAt.
+export async function ddVideo(debat) {
+  const m = DD_PAGINA.exec(debat?.bron || '');
+  if (!m) return null;
+  const agenda = await haalJson(`${DEBAT_DIRECT()}/agenda/${m[1]}`);
+  const gevonden = (agenda.debates || []).find((d) => d.slug === m[2]);
+  if (!gevonden) return null;
+  const info = await haalJson(`${DEBAT_DIRECT()}/debates/${encodeURIComponent(gevonden.id)}`);
+  const v = info.video || {};
+  const bron = info.endedAt ? v.catchup?.vodUrl || v.vodUrl : v.url;
+  if (!bron || !info.startedAt) return null;
+  // Zoals de speler van Debat Direct: de stream van de zaal, beperkt tot het debat.
+  const hls = new URL(bron);
+  hls.searchParams.set('start', info.startedAt);
+  if (info.endedAt) hls.searchParams.set('end', info.endedAt);
+  let begin = ddTijd(info.startedAt);
+  try {
+    const hoofd = await haalTekst(hls.href);
+    const variant = hoofd.split('\n').map((r) => r.trim()).find((r) => r && !r.startsWith('#'));
+    const lijst = variant ? await haalTekst(new URL(variant, hls).href) : '';
+    const pdt = /#EXT-X-PROGRAM-DATE-TIME:(\S+)/.exec(lijst)?.[1];
+    if (pdt && Number.isFinite(Date.parse(pdt))) begin = new Date(Date.parse(pdt)).toISOString();
+  } catch { /* dan startedAt */ }
+  return { hls: hls.href, begin, poster: v.imageUrl || null, pagina: debat.bron };
+}
+
+// Tijden op de klok van de video: 0:00 is het eerste beeld, zodat 2:41 in het
+// transcript 2:41 in de video is. Wat gehoord.de vóór het eerste beeld had,
+// staat op 0:00.
+export function naarVideoTijd(segmenten, klokBegin, begin) {
+  const schuif = (Date.parse(klokBegin) - Date.parse(begin)) / 1000;
+  if (!Number.isFinite(schuif)) return segmenten;
+  return segmenten.map((s) => ({ ...s, start: Math.max(0, s.start + schuif), end: Math.max(0, s.end + schuif) }));
+}
+
+// Voor een debat dat er al was: de gegevens eenmalig bij gehoord.de ophalen
+// (soort, bron, kloktijd van het eerste fragment) en de video zoeken.
+// Geeft { debat, klokBegin, video }.
 export async function debatVideo(opslag, af) {
   let { debat, klokBegin } = af.platform || {};
-  // Een debat van vóór deze functie: de gegevens eenmalig ophalen bij gehoord.de.
   if (!debat || !klokBegin) {
     const id = Number(/^gh:(\d+)$/.exec(af.extern || '')?.[1]);
     ({ debat, klokBegin } = await metGehoord(opslag, async (klant) => {
@@ -360,22 +399,5 @@ export async function debatVideo(opslag, af) {
       return { debat: d, klokBegin: eerste ? klokVan(af, eerste.seconde) : null };
     }));
   }
-  const m = DD_PAGINA.exec(debat?.bron || '');
-  if (!m || !klokBegin) return { debat, klokBegin, video: null };
-  const agenda = await haalJson(`${DEBAT_DIRECT()}/agenda/${m[1]}`);
-  const gevonden = (agenda.debates || []).find((d) => d.slug === m[2]);
-  if (!gevonden) return { debat, klokBegin, video: null };
-  const info = await haalJson(`${DEBAT_DIRECT()}/debates/${encodeURIComponent(gevonden.id)}`);
-  const v = info.video || {};
-  const bron = info.endedAt ? v.catchup?.vodUrl || v.vodUrl : v.url;
-  if (!bron || !info.startedAt) return { debat, klokBegin, video: null };
-  // Zoals de speler van Debat Direct: de stream van de zaal, beperkt tot het debat.
-  const hls = new URL(bron);
-  hls.searchParams.set('start', info.startedAt);
-  if (info.endedAt) hls.searchParams.set('end', info.endedAt);
-  return {
-    debat,
-    klokBegin,
-    video: { hls: hls.href, begin: ddTijd(info.startedAt), poster: v.imageUrl || null, pagina: debat.bron },
-  };
+  return { debat, klokBegin, video: klokBegin ? await ddVideo(debat) : null };
 }

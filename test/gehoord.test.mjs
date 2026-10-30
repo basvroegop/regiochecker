@@ -59,6 +59,12 @@ function nepGehoord() {
     return json({ id: 'dd-1', startedAt: '2026-10-29T23:58:00+0100', endedAt: '2026-10-30T01:00:00+0100',
       video: { imageUrl: 'https://dd.test/zaal.jpg', vodUrl: 'https://stream.test/2026-10-29/plenairezaal/index.m3u8?hd=1', catchup: { vodUrl: 'https://stream.test/2026-10-29/plenairezaal/index.m3u8?hd=1&subtitles=vod' } } });
   }).persist();
+  // De stream van de zaal: het eerste beeld een halve seconde voor startedAt.
+  const stream = agent.get('https://stream.test');
+  stream.intercept({ path: (p) => p.startsWith('/2026-10-29/plenairezaal/index.m3u8'), method: 'GET' })
+    .reply(200, '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nstream_01/prog_index.m3u8?x=1\n').persist();
+  stream.intercept({ path: (p) => p.startsWith('/2026-10-29/plenairezaal/stream_01/prog_index.m3u8'), method: 'GET' })
+    .reply(200, '#EXTM3U\n#EXT-X-PROGRAM-DATE-TIME:2026-10-29T22:57:59.500Z\n#EXTINF:2,\nseg.m4v\n').persist();
   server.intercept({ path: '/api/mcp', method: () => true }).reply(({ method, body, headers }) => {
     const h = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
     if (method === 'DELETE') return { statusCode: 204, data: '' };
@@ -292,13 +298,16 @@ test('Kamerdebatten als landelijke bron: catalogus, transcript zonder Whisper, e
     assert.equal(a.status, 'getranscribeerd');
     assert.match(a.transcript, /^Ik open de vergadering\. .* Dan de N31 bij Leeuwarden/);
     assert.deepEqual(a.segmenten.map((x) => x.fragment), [11, 12, 13, 14]);
-    assert.equal(a.duur, 105);
+    // Op de klok van de video: het eerste fragment (23:59:50) is 110,5 s na het eerste beeld (23:57:59,5).
+    assert.deepEqual(a.segmenten.map((x) => x.start), [110.5, 140.5, 190.5, 210.5]);
+    assert.equal(a.duur, 215.5);
+    assert.equal(a.platform.tijdbasis, 'video');
     assert.deepEqual(net.staat.aanroepen.filter(([n]) => n === 'get_transcript').map(([, x]) => [x.debate_id, x.offset]), [[307215, 0], [307215, 2]]);
 
     // Een landelijke bron: via het sleutelwoord naar Heerenveen, met de tijd en een link naar dat fragment.
     const d = detail({ opslag, fdb, adb }, jan, `a:${a.id}`);
     assert.deepEqual([d.soort, d.soortNaam, d.groep, d.audio, d.gehoord, d.regios], ['kamerdebat', 'Kamerdebat', 'kamerdebat', true, true, ['heerenveen']]);
-    assert.equal(d.treffers.find((t) => t.term === 'N31').tijd, 80);
+    assert.equal(d.treffers.find((t) => t.term === 'N31').tijd, 190.5, 'de tijd in de video');
     assert.equal(d.segmenten[2].link, `${BASIS}/beraadslagingen/307215?segment=13`);
     assert.equal(d.speler, null);
     assert.equal(d.meta.find((m) => m.k === 'Soort debat').v, 'Plenair debat');
@@ -311,10 +320,21 @@ test('Kamerdebatten als landelijke bron: catalogus, transcript zonder Whisper, e
     const hls = new URL(r.data.video.hls);
     assert.deepEqual([hls.origin + hls.pathname, hls.searchParams.get('subtitles'), hls.searchParams.get('start'), hls.searchParams.get('end')],
       ['https://stream.test/2026-10-29/plenairezaal/index.m3u8', 'vod', '2026-10-29T23:58:00+0100', '2026-10-30T01:00:00+0100']);
-    assert.equal(r.data.video.begin, '2026-10-29T22:58:00.000Z');
+    assert.deepEqual([r.data.video.begin, r.data.nul], ['2026-10-29T22:57:59.500Z', '2026-10-29T22:57:59.500Z'], 'het eerste beeld uit de stream, niet startedAt');
     assert.equal(r.data.klokBegin, new Date(2026, 9, 29, 23, 59, 50).toISOString());
+    assert.deepEqual(net.staat.dd, ['agenda', 'debat'], 'al opgezocht bij het binnenhalen');
+
+    // Een debat van vóór de klok van de video: één keer omgezet bij het openen.
+    const oud = { ...a.platform };
+    delete oud.tijdbasis;
+    delete oud.video;
+    adb.werkBij(a.id, { platform: oud, segmenten: a.segmenten.map((x) => ({ ...x, start: x.start - 110.5, end: x.end - 110.5 })) });
     r = await roepApi({ opslag, fdb, adb }, jan, 'GET', `/api/stuk/video?id=a:${a.id}`);
-    assert.deepEqual(net.staat.dd, ['agenda', 'debat'], 'de tweede keer uit de opslag');
+    assert.equal(r.data.omgezet, true);
+    assert.deepEqual(adb.aflevering(a.id).segmenten.map((x) => x.start), [110.5, 140.5, 190.5, 210.5]);
+    r = await roepApi({ opslag, fdb, adb }, jan, 'GET', `/api/stuk/video?id=a:${a.id}`);
+    assert.equal(r.data.omgezet, undefined, 'daarna uit de opslag');
+    assert.deepEqual(adb.aflevering(a.id).segmenten.map((x) => x.start), [110.5, 140.5, 190.5, 210.5], 'niet nog eens verschoven');
     assert.equal((await roepApi({ opslag, fdb, adb }, jan, 'GET', '/api/stuk/video?id=a:bestaatniet')).status, 404);
   } finally {
     net.herstel();

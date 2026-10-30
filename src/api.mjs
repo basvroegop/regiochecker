@@ -24,7 +24,7 @@ import { maakKader, bouwFeed, bewaardeFeed, zoekFeed, detail, momentopname, meld
 import { controleerMelding, BRONNEN } from './meldingen.mjs';
 import { zoekvraagTekst } from './termen.mjs';
 import { beheerApi } from './beheer.mjs';
-import { rondKoppelingAf, debatVideo } from './gehoord.mjs';
+import { rondKoppelingAf, debatVideo, naarVideoTijd } from './gehoord.mjs';
 import { kamerApi } from './kamer/api.mjs';
 import { publiekeInstellingen, werkInstellingenBij } from './instellingen.mjs';
 import { ollamaInfo } from './ollama.mjs';
@@ -95,22 +95,27 @@ export async function api(req, res, url, ctx) {
     if (!d) throw new Fout(404, 'Dit stuk bestaat niet (meer)');
     return stuur(d);
   }
-  // De video van een Kamerdebat (Debat Direct), met de kloktijd van het eerste
-  // fragment om tijden in het transcript naar de video om te rekenen. Eén keer
-  // opgezocht en bij de aflevering bewaard (src/gehoord.mjs).
+  // De video van een Kamerdebat (Debat Direct). De tijden in het transcript
+  // staan dan op de klok van de video (`tijdbasis`); een debat van vóór die
+  // regel wordt hier één keer omgezet. `nul`: de kloktijd van 0:00 in het
+  // transcript, waarmee de speler een tijd in de video vindt (src/gehoord.mjs).
   if (route === 'GET /api/stuk/video') {
     const af = adb?.aflevering(String(z.get('id') || '').replace(/^a:/, ''));
     if (!af || af.vorm !== 'gehoord') throw new Fout(404, 'Dit is geen Kamerdebat');
-    if (af.platform?.video !== undefined && af.platform?.klokBegin) return stuur({ video: af.platform.video, klokBegin: af.platform.klokBegin });
+    const antwoord = (p) => ({ video: p.video, nul: p.tijdbasis === 'video' ? p.video.begin : p.klokBegin, klokBegin: p.klokBegin });
+    const p = af.platform || {};
+    if (p.video !== undefined && p.klokBegin && (p.video === null || p.tijdbasis === 'video')) return stuur(antwoord(p));
     let r;
     try {
       r = await debatVideo(opslag, af);
     } catch (fout) {
       // Tijdelijk niet te bereiken: niets bewaren, de volgende keer opnieuw.
-      return stuur({ video: null, klokBegin: af.platform?.klokBegin || null, fout: fout.message });
+      return stuur({ video: null, nul: p.klokBegin || null, fout: fout.message });
     }
-    adb.werkBij(af.id, { platform: { agenda: [], sprekers: [], ...af.platform, debat: r.debat, klokBegin: r.klokBegin, video: r.video } });
-    return stuur({ video: r.video, klokBegin: r.klokBegin });
+    const nieuw = { agenda: [], sprekers: [], ...p, debat: r.debat, klokBegin: r.klokBegin, video: r.video, tijdbasis: r.video ? 'video' : 'gehoord' };
+    const segmenten = r.video && p.tijdbasis !== 'video' ? naarVideoTijd(af.segmenten, r.klokBegin, r.video.begin) : null;
+    adb.werkBij(af.id, { platform: nieuw, ...(segmenten ? { segmenten, duur: segmenten.at(-1)?.end ?? af.duur } : {}) });
+    return stuur({ ...antwoord(nieuw), omgezet: Boolean(segmenten) });
   }
   if (route === 'GET /api/stuk/document') {
     const id = String(z.get('id') || '');
