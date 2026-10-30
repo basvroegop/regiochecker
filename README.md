@@ -50,8 +50,9 @@ aantallen, plus **Alleen ongelezen**. Een stuk openen markeert het als gelezen;
 ### Zoeken en audio-archief
 
 **Zoeken** (rechtsboven) doorzoekt alles: alle regio's, kamerstukken en
-transcripten. Woorden moeten allemaal voorkomen, `"woordgroep"` als geheel, `OR`
-voor alternatieven.
+transcripten, ook wat er bij de eerste ronde van een bron al stond (de
+nulmeting; dat staat op de datum van het stuk). Woorden moeten allemaal
+voorkomen, `"woordgroep"` als geheel, `OR` voor alternatieven.
 
 **Audio-archief** is alles van audio en video, ook wat nog in de wachtrij staat:
 
@@ -180,6 +181,34 @@ De Tweede Kamer is de ingebouwde landelijke bron; een RSS-feed, Woo-platform of
 podcast voeg je als landelijke bron toe in Beheer › Bronnen, met een
 proefronde die laat zien hoeveel stukken er naar welke regio zouden gaan. Bij
 audio wordt het transcript doorzocht en staat bij elke treffer de tijd.
+
+### Bekendmakingen van de provincie Fryslân
+
+De provincie zet elke zaterdag een pagina met bekendmakingen op fryslan.frl
+(`/24-oktober-2026`, index per jaar op `/bekendmakingen-2026`;
+`src/bronnen/provincie.mjs`). Bovenaan staat nieuws van de provincie zelf
+("Vastgoed – bekendmaking", "Brug Warns afgesloten …"), sinds eind mei 2026
+gevolgd door een uitklapblok per gemeente ("Gemeente Smallingerland", ook
+"Gemeente Leeuwarden en Tytsjerksteradiel") of per onderwerp ("Provincie
+Fryslân", "Diverse Natura 2000-gebieden"), met daarin de omgevingsvergunningen,
+beschikkingen, kennisgevingen en meldingen van die week.
+
+Elke bekendmaking wordt een stuk onder het tabblad **Bekendmakingen**, met een
+kop van soort, onderwerp en plek ("Aanvraag vergunning Omgevingswet: het
+uitvoeren van kadewerk (Troelstraweg te Idskenhuizen)"), de volledige tekst, en
+een link naar het blok op de pagina. De bron is landelijk, maar met
+`perGemeente`: een bekendmaking voor een gemeente die een regio is, wordt een stuk
+van die regio, zoals de eigen bronnen van de gemeente (in de feed zonder
+"Waarom", in de weekmail onder een eigen kopje **Bekendmakingen**). Voor twee
+regio's tegelijk komt hij bij allebei. Al het andere (andere gemeenten, de
+provincie zelf, het nieuws bovenaan) is landelijk en gaat via de sleutelwoorden.
+
+De eerste ronde haalt alle zaterdagen sinds 3 januari 2026 op (van eerder bestaan
+er geen pagina's), een seconde tussen de pagina's; daarna elk uur de index en de
+drie nieuwste weken. Wat die eerste ronde vindt van de laatste dertig dagen, staat
+meteen in de feed op de datum van de bekendmaking (`archief`); het oudere is
+nulmeting, alleen te vinden via Zoeken. De stukken blijven tien jaar bewaard
+(`bewaarDagen`).
 
 ## Signalen
 

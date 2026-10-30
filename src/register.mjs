@@ -94,8 +94,19 @@ export function alleRegios(opslag) {
 
 export const regioOpId = (opslag, id) => alleRegios(opslag).find((r) => r.id === id) || null;
 
+// Provinciale bronnen. De bekendmakingen van Fryslân staan per gemeente
+// (`perGemeente`): een stuk voor een gemeente die een regio is, wordt een stuk
+// van die regio; de rest is landelijk, via sleutelwoorden (src/bronnen/provincie.mjs).
+export const PROVINCIEBRONNEN = [
+  {
+    id: 'provincie-fryslan-bekendmakingen', naam: 'Provincie Fryslân · Bekendmakingen', label: 'Wekelijkse bekendmakingen op fryslan.frl · per gemeente naar de regio, de rest via sleutelwoorden',
+    soort: 'bekendmaking', bereik: 'landelijk', type: 'provincie-bekendmakingen', url: 'https://www.fryslan.frl/', vanaf: '2026-01-03',
+    perGemeente: true, archief: true, inhoud: false, bewaarDagen: 3650, ingebouwd: true,
+  },
+];
+
 export function alleBronnen(opslag) {
-  return [...ingebouwdeBronnen(), TWEEDE_KAMER, ...SIGNAALBRONNEN, ...opslag.bronnen];
+  return [...ingebouwdeBronnen(), TWEEDE_KAMER, ...SIGNAALBRONNEN, ...PROVINCIEBRONNEN, ...opslag.bronnen];
 }
 
 export const bronOpId = (opslag, id) => alleBronnen(opslag).find((b) => b.id === id) || null;

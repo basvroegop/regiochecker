@@ -21,6 +21,7 @@ import { gooiMediaWeg } from './telegram.mjs';
 
 const MAX_LEEFTIJD_DAGEN = { nieuws: 21, ingekomen: 21, woo: null };
 const NULMETING_RECENT_DAGEN = 2;
+const ARCHIEF_IN_FEED_DAGEN = 30;
 const OPRUIMEN_NA_DAGEN = 60;
 const GELIJKTIJDIG = 4;
 
@@ -31,12 +32,25 @@ export function telAlsNieuw(item, soort, eersteKeer, nu) {
   return !(max && leeftijd !== null && leeftijd > max);
 }
 
+// Een landelijke bron met stukken per gemeente (`perGemeente`, de
+// bekendmakingen van de provincie): een stuk voor een gemeente die een regio is,
+// wordt een stuk van die regio, zoals van de eigen bronnen van de gemeente. Bij
+// twee regio's (een bekendmaking voor "Leeuwarden en Tytsjerksteradiel") een stuk per regio.
+function perRegio(opslag, gevonden) {
+  const regioVan = new Map(alleRegios(opslag).map((r) => [gemeente(r.naam)?.naam, r.id]).filter(([naam]) => naam));
+  return gevonden.flatMap((g) => {
+    const ids = [...new Set((g.gemeenten || []).map((n) => regioVan.get(n)).filter(Boolean))];
+    if (ids.length <= 1) return [{ ...g, regio: ids[0] || null }];
+    return ids.map((id) => ({ ...g, sleutel: `${g.sleutel}@${id}`, regio: id }));
+  });
+}
+
 // Legt de gevonden items van één bron vast. Geeft de nieuwe items terug.
 export function verwerk(opslag, bron, gevonden, nu = new Date()) {
   const eersteKeer = !opslag.status.bronnen[bron.id]?.laatsteSucces;
   const tijd = nu.toISOString();
   const nieuw = [];
-  for (const g of gevonden) {
+  for (const g of bron.perGemeente ? perRegio(opslag, gevonden) : gevonden) {
     const sleutel = `${bron.id}:${g.sleutel}`;
     const bestaand = opslag.items[sleutel];
     if (bestaand) {
@@ -54,8 +68,10 @@ export function verwerk(opslag, bron, gevonden, nu = new Date()) {
       sleutel,
       bron: bron.id,
       // Een landelijk stuk hoort bij geen regio; het gaat naar de regio's
-      // waarvan een sleutelwoord erin staat (src/feed.mjs).
-      regio: bron.bereik === 'landelijk' ? null : bron.regio,
+      // waarvan een sleutelwoord erin staat (src/feed.mjs). Behalve als de bron
+      // het stuk zelf bij een regio zet (`perGemeente`, hierboven).
+      regio: bron.bereik === 'landelijk' ? g.regio || null : bron.regio,
+      ...(g.gemeenten?.length ? { gemeenten: g.gemeenten } : {}),
       soort: bron.soort,
       titel: g.titel,
       url: g.url,
@@ -74,6 +90,13 @@ export function verwerk(opslag, bron, gevonden, nu = new Date()) {
       laatstGezien: tijd,
       basislijn: !telAlsNieuw(g, bron.soort, eersteKeer, nu),
     };
+    // Een archiefbron (`archief`) haalt bij de eerste ronde ook oudere weken op.
+    // Wat van de laatste dertig dagen is, staat dan gewoon in de feed, op de
+    // datum van het stuk in plaats van als nieuw van vandaag; ouder is nulmeting.
+    const leeftijd = eersteKeer && bron.archief ? dagenGeleden(g.datum, nu) : null;
+    if (leeftijd !== null && leeftijd >= 0 && leeftijd <= ARCHIEF_IN_FEED_DAGEN) {
+      Object.assign(item, { basislijn: false, eersteGezien: new Date(Math.min(+nu, Date.parse(`${g.datum}T12:00:00Z`))).toISOString() });
+    }
     opslag.items[sleutel] = item;
     if (!item.basislijn) nieuw.push(item);
   }
@@ -137,7 +160,7 @@ async function verzamelBron(opslag, bron) {
   const begin = Date.now();
   const vorige = opslag.status.bronnen[bron.id] || {};
   try {
-    const opgehaald = await haalBron(bron);
+    const opgehaald = await haalBron(bron, { eersteKeer: !vorige.laatsteSucces });
     const gevonden = bron.alleenInRegio ? opgehaald.filter((g) => inEenRegio(opslag, bron, g)) : opgehaald;
     const { nieuw, eersteKeer } = verwerk(opslag, bron, gevonden);
     opslag.status.bronnen[bron.id] = {

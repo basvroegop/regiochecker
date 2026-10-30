@@ -14,6 +14,7 @@ export const SOORTEN = {
   nieuws: 'Gemeentenieuws',
   ingekomen: 'Ingekomen stukken',
   woo: 'Woo-publicaties',
+  bekendmaking: 'Bekendmakingen',
 };
 
 // Alle soorten stukken in de feed, met de naam van één stuk ("Ingekomen stuk")
@@ -34,6 +35,7 @@ export const ENKELVOUD = {
   file: 'File',
   treinstoring: 'Treinstoring',
   ingezonden: 'Inzending',
+  bekendmaking: 'Bekendmaking',
 };
 
 export const GROEPEN = {
@@ -47,6 +49,7 @@ export const GROEPEN = {
   ransomware: 'Ransomware',
   verkeer: 'Verkeer',
   ingezonden: 'Ingezonden',
+  bekendmaking: 'Bekendmakingen',
 };
 
 export const AUDIOSOORTEN = ['raadsvergadering', 'youtube', 'podcast'];

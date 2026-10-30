@@ -7,6 +7,7 @@ import { haalGppWoo } from './gppwoo.mjs';
 import { haalBwBesluiten } from './groningen.mjs';
 import { haalAardbevingen, haalWaarschuwingen, haalUitspraken, haalRansomware } from './signalen.mjs';
 import { haalFiles, haalStoringen } from './verkeer.mjs';
+import { haalBekendmakingen } from './provincie.mjs';
 
 // type in src/regios.mjs → functie die een lijst items teruggeeft.
 export const TYPES = {
@@ -26,10 +27,12 @@ export const TYPES = {
   ransomware: haalRansomware,
   'ndw-files': haalFiles,
   'ns-storingen': haalStoringen,
+  'provincie-bekendmakingen': haalBekendmakingen,
 };
 
-export async function haalBron(bron) {
+// `opties.eersteKeer`: de allereerste ronde van de bron (een archief kan dan verder terug).
+export async function haalBron(bron, opties = {}) {
   const haal = TYPES[bron.type];
   if (!haal) throw new Error(`Onbekend brontype "${bron.type}"`);
-  return haal(bron);
+  return haal(bron, opties);
 }

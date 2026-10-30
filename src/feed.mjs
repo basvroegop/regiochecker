@@ -174,6 +174,10 @@ export function kamerTijd(stuk) {
 
 // ---------- regels in de lijst ----------
 
+// Een stuk van een landelijke bron, tenzij de bron het zelf bij een regio zette
+// (de bekendmakingen van de provincie per gemeente, src/verzamel.mjs).
+const isLandelijk = (item, bron) => bron.bereik === 'landelijk' && !item.regio;
+
 function itemRegel(item, regios, match) {
   return { id: `i:${item.sleutel}`, soort: item.soort, titel: item.titel, regios, tijd: item.eersteGezien, tijdBekend: true, datum: item.datum || null, bron: item.bron, match, ...(item.verdwenen ? { verdwenen: item.verdwenen } : {}) };
 }
@@ -217,7 +221,7 @@ export function meldingTreffers(k, gebruiker, melding, { sinds, tot }) {
       if (item.basislijn || item.eersteGezien <= sinds || (tot && item.eersteGezien > tot)) continue;
       const bron = k.bronnen.get(item.bron);
       if (!bron) continue;
-      const regios = bron.bereik === 'landelijk' ? routeerItem(k, item, bron).map((r) => r.regio) : [item.regio];
+      const regios = isLandelijk(item, bron) ? routeerItem(k, item, bron).map((r) => r.regio) : [item.regio];
       if (scope && !regios.some((r) => scope.has(r))) continue;
       const gevonden = zoekInItem(k, item, termen);
       if (gevonden.length) uit.push({ ...itemRegel(item, scope ? regios.filter((r) => scope.has(r)) : regios, match(gevonden[0].term)), gevonden, url: item.url });
@@ -278,7 +282,7 @@ function regioRegels(k, volg, { sinds, tot = null, vanaf = sinds.slice(0, 10) })
     if (item.basislijn || item.eersteGezien <= grens || (tot && item.eersteGezien > tot)) continue;
     const bron = k.bronnen.get(item.bron);
     if (!bron) continue;
-    if (bron.bereik === 'landelijk') {
+    if (isLandelijk(item, bron)) {
       for (const r of routeerItem(k, item, bron)) {
         if (volg.has(r.regio)) voegToe(lijst, itemRegel(item, [r.regio], { term: r.gevonden[0].term, regio: r.regio, ...(r.gevonden[0].plek ? { plek: true } : {}) }));
       }
@@ -399,13 +403,16 @@ export function zoekFeed(ctx, gebruiker, vraag) {
   if (!zoeker) return { items: [], tellingen: tel([]), totaal: 0 };
   const lijst = new Map();
   for (const item of Object.values(k.opslag.items)) {
-    if (item.basislijn) continue;
     const bron = k.bronnen.get(item.bron);
     if (!bron) continue;
     const t = zoeker(tekstVan(k, item));
     if (!t) continue;
-    const regios = bron.bereik === 'landelijk' ? routeerItem(k, item, bron).map((r) => r.regio) : [item.regio];
-    voegToe(lijst, itemRegel(item, regios, { term: t.term, zoek: true }));
+    const regios = isLandelijk(item, bron) ? routeerItem(k, item, bron).map((r) => r.regio) : [item.regio];
+    const regel = itemRegel(item, regios, { term: t.term, zoek: true });
+    // Ook wat bij de eerste ronde van een bron al bestond (de nulmeting): niet
+    // nieuw, wel archief. Op de datum van het stuk, niet op die eerste ronde.
+    if (item.basislijn && item.datum) Object.assign(regel, { tijd: `${item.datum}T12:00:00.000Z`, tijdBekend: false });
+    voegToe(lijst, regel);
   }
   if (k.kdb) {
     try {
@@ -476,7 +483,7 @@ function itemDetail(k, gebruiker, sleutel) {
   const item = k.opslag.items[sleutel];
   if (!item) return null;
   const bron = k.bronnen.get(item.bron) || {};
-  const landelijk = bron.bereik === 'landelijk';
+  const landelijk = isLandelijk(item, bron);
   const regios = landelijk ? routeerItem(k, item, bron).map((r) => r.regio) : [item.regio];
   // Het hele document als het al is opgehaald; anders voorlopig de platte
   // inhoud, en haalt het leespaneel het document op (GET /api/stuk/document).

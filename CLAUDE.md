@@ -51,10 +51,11 @@ docker compose run --rm --no-deps -T -v /opt/regiochecker/src:/app/src:ro -v /op
 - `data/regiochecker.sqlite` (via `node:sqlite`) holds per-user read/saved/note state and the document cache (`src/feeddb.mjs`), and the audio archive (`src/audio/db.mjs`, table `afleveringen`).
 - `data/kamerstukken.sqlite` holds Tweede Kamer documents with FTS5 (`src/kamer/`).
 
-**Sources.** `src/register.mjs` `alleBronnen(opslag)` combines four sets:
+**Sources.** `src/register.mjs` `alleBronnen(opslag)` combines five sets:
 - built-in municipal sources (`REGIOS` in `src/regios.mjs`);
 - `TWEEDE_KAMER`;
 - `SIGNAALBRONNEN`, national sources ported from the old "checker" app;
+- `PROVINCIEBRONNEN`, the province of Fryslân's weekly announcements;
 - sources added in the UI (`data/bronnen.json`).
 
 A source's `type` maps to a reader in `src/bronnen/index.mjs` `TYPES`. A reader returns `[{ sleutel, titel, url, datum, tekst, … }]`. `src/verzamel.mjs` `verwerk()` stores these as items keyed `${bron.id}:${sleutel}`.
@@ -63,6 +64,8 @@ What counts as "new" is `eersteGezien`, the moment of first sight, never the doc
 - `bereik` (`regio` or `landelijk`);
 - `geo`, `straalKm`, `plaatsen`, `vestiging`, `alleenSamenvatting`;
 - `intervalMinuten`, `alleenInRegio`, `bijwerken`, `inMail`, `bewaarDagen`;
+- `perGemeente`: a national source whose items carry `gemeenten`; an item for a municipality that is a region becomes that region's item (`item.regio`), everything else stays national. Check national-ness with `isLandelijk(item, bron)`, not `bron.bereik` alone;
+- `archief`: on the first round, items from the last 30 days go into the feed at their own date;
 - `leegKan`, `sleutel` (name of an env var; the source is skipped without it), `inhoud`.
 
 **Routing to regions** (`src/feed.mjs`). A region is a municipality, matched by name.

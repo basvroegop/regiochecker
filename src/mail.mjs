@@ -28,7 +28,7 @@ import { weekmailNodig } from './planning.mjs';
 // Meer kamerstukken dan in een mail passen: dat zeggen, niet stilzwijgend weglaten.
 export const meerKamerstukken = (n) => `En nog zo'n ${n} ${n === 1 ? 'kamerstuk' : 'kamerstukken'} met deze termen, die niet meer in deze mail passen.`;
 
-const SOORT_VOLGORDE = ['nieuws', 'ingekomen', 'woo'];
+const SOORT_VOLGORDE = ['nieuws', 'ingekomen', 'woo', 'bekendmaking'];
 const DAG_MS = 86400000;
 const EERSTE_MAIL_DAGEN = 7;
 const HERKANSING_MS = 30 * 60000;
@@ -63,6 +63,8 @@ function bronOpmerkingen(opslag, regio, soort) {
 
 // Per categorie de items en de opmerkingen. "Geen nieuwe berichten" alleen als
 // er minstens één bron voor die categorie is; anders zegt de opmerking genoeg.
+// Een categorie zonder eigen bron en zonder stukken (Bekendmakingen buiten
+// Fryslân) blijft weg.
 function categorieen(opslag, regio, items) {
   return SOORT_VOLGORDE.map((soort) => ({
     soort,
@@ -70,7 +72,7 @@ function categorieen(opslag, regio, items) {
     items: items.filter((i) => i.soort === soort),
     opmerkingen: bronOpmerkingen(opslag, regio, soort),
     gecontroleerd: regio.bronnen.some((b) => b.soort === soort && b.type !== 'ontbreekt'),
-  }));
+  })).filter((c) => c.items.length || c.opmerkingen.length || c.gecontroleerd);
 }
 
 const STIJL = {
