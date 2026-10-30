@@ -19,6 +19,7 @@ import { nieuweGebruiker, werkGebruikerBij, voorClient, InvoerFout } from './geb
 import { volgendeWeekmail } from './planning.mjs';
 import { controleerKanaal, nieuwKanaal, kanaalVoorClient, kanaalKeuzes, stuurNaarTeams, testKaart } from './kanalen.mjs';
 import { tokenVan, telegramVoorClient, schoneHandle } from './telegram.mjs';
+import { verdeelOverRegio, haalRegioWeg } from './verzamel.mjs';
 
 const DAG_MS = 86400000;
 const RUIS = 25;
@@ -476,8 +477,10 @@ export async function beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, t
     if (k.regios.some((r) => r.naam.toLowerCase() === schoon.toLowerCase())) throw new Fout(400, `${schoon} bestaat al`);
     const id = maakId(schoon, new Set(k.regios.map((r) => r.id)));
     opslag.regios[id] = { naam: schoon, eigen: true, sleutelwoorden: [], landelijkUit: [] };
-    opslag.bewaar('regios');
-    return stuur({ id }, 201);
+    // Wat er al voor deze gemeente binnen was (de bekendmakingen van de provincie).
+    const stukken = verdeelOverRegio(opslag, id);
+    opslag.bewaar('regios', ...(stukken ? ['items'] : []));
+    return stuur({ id, stukken }, 201);
   }
   if (deel[2] === 'regios' && deel[3]) {
     const id = deel[3];
@@ -496,7 +499,8 @@ export async function beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, t
       if (bronnenVanRegio(opslag, id).length) throw new Fout(400, 'Verwijder eerst de bronnen van deze regio');
       delete opslag.regios[id];
       for (const g of opslag.gebruikers) g.regios = g.regios.filter((x) => x !== id);
-      opslag.bewaar('regios', 'gebruikers');
+      haalRegioWeg(opslag, id);
+      opslag.bewaar('regios', 'gebruikers', 'items');
       return stuur({ ok: true });
     }
   }

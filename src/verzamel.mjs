@@ -36,13 +36,54 @@ export function telAlsNieuw(item, soort, eersteKeer, nu) {
 // bekendmakingen van de provincie): een stuk voor een gemeente die een regio is,
 // wordt een stuk van die regio, zoals van de eigen bronnen van de gemeente. Bij
 // twee regio's (een bekendmaking voor "Leeuwarden en Tytsjerksteradiel") een stuk per regio.
+// `basis`: de sleutel zonder regio, voor een stuk dat al binnen was voordat de
+// tweede regio bestond (zie verdeelOverRegio).
 function perRegio(opslag, gevonden) {
   const regioVan = new Map(alleRegios(opslag).map((r) => [gemeente(r.naam)?.naam, r.id]).filter(([naam]) => naam));
   return gevonden.flatMap((g) => {
     const ids = [...new Set((g.gemeenten || []).map((n) => regioVan.get(n)).filter(Boolean))];
     if (ids.length <= 1) return [{ ...g, regio: ids[0] || null }];
-    return ids.map((id) => ({ ...g, sleutel: `${g.sleutel}@${id}`, regio: id }));
+    return ids.map((id) => ({ ...g, sleutel: `${g.sleutel}@${id}`, basis: g.sleutel, regio: id }));
   });
+}
+
+const perGemeenteBronnen = (opslag) => new Set(alleBronnen(opslag).filter((b) => b.perGemeente).map((b) => b.id));
+const zonderRegio = (sleutel) => sleutel.replace(/@[^@:]*$/, '');
+
+// Een nieuwe regio: wat een bron met `perGemeente` al voor die gemeente vond
+// (toen nog een landelijk stuk), wordt een stuk van die regio. Was het al van
+// een andere regio (een bekendmaking voor twee gemeenten), dan een kopie.
+// Geeft het aantal stukken.
+export function verdeelOverRegio(opslag, regioId) {
+  const regio = alleRegios(opslag).find((r) => r.id === regioId);
+  const naam = regio && gemeente(regio.naam)?.naam;
+  if (!naam) return 0;
+  const bronnen = perGemeenteBronnen(opslag);
+  let n = 0;
+  for (const item of Object.values(opslag.items)) {
+    if (!bronnen.has(item.bron) || !item.gemeenten?.includes(naam) || item.regio === regioId) continue;
+    if (!item.regio) {
+      item.regio = regioId;
+      n++;
+      continue;
+    }
+    const sleutel = `${zonderRegio(item.sleutel)}@${regioId}`;
+    if (!opslag.items[sleutel]) {
+      opslag.items[sleutel] = { ...item, sleutel, regio: regioId };
+      n++;
+    }
+  }
+  return n;
+}
+
+// Een regio weg: de stukken die hij zo kreeg, worden weer landelijk (een kopie verdwijnt).
+export function haalRegioWeg(opslag, regioId) {
+  const bronnen = perGemeenteBronnen(opslag);
+  for (const [sleutel, item] of Object.entries(opslag.items)) {
+    if (!bronnen.has(item.bron) || item.regio !== regioId) continue;
+    if (sleutel.endsWith(`@${regioId}`)) delete opslag.items[sleutel];
+    else item.regio = null;
+  }
 }
 
 // Legt de gevonden items van één bron vast. Geeft de nieuwe items terug.
@@ -52,7 +93,9 @@ export function verwerk(opslag, bron, gevonden, nu = new Date()) {
   const nieuw = [];
   for (const g of bron.perGemeente ? perRegio(opslag, gevonden) : gevonden) {
     const sleutel = `${bron.id}:${g.sleutel}`;
-    const bestaand = opslag.items[sleutel];
+    // Een stuk voor twee regio's dat al binnen was toen er nog maar één regio was.
+    const basis = g.basis && opslag.items[`${bron.id}:${g.basis}`];
+    const bestaand = opslag.items[sleutel] || (basis?.regio === g.regio ? basis : null);
     if (bestaand) {
       Object.assign(bestaand, {
         titel: g.titel || bestaand.titel,

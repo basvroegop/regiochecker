@@ -106,7 +106,7 @@ test('beheer: regio\'s, sleutelwoorden, landelijke bronnen aan en uit, gebruiker
 
   // Een eigen regio: maken, hernoemen, verwijderen (en volgers verliezen hem).
   r = await roep(ctx, jan, 'POST', '/api/beheer/regios', { naam: 'Leeuwarden' });
-  assert.deepEqual(r.data, { id: 'leeuwarden' });
+  assert.deepEqual(r.data, { id: 'leeuwarden', stukken: 0 });
   assert.equal((await roep(ctx, jan, 'POST', '/api/beheer/regios', { naam: 'leeuwarden' })).status, 400);
   await roep(ctx, jan, 'PUT', `/api/beheer/gebruikers/${sanne.id}`, { regios: ['heerenveen', 'leeuwarden'] });
   assert.equal((await roep(ctx, jan, 'PUT', '/api/beheer/regios/leeuwarden', { naam: 'Ljouwert' })).data.naam, 'Ljouwert');

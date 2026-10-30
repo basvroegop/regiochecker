@@ -547,7 +547,14 @@ Het Authelia-account zelf, en toegang tot deze site, regel je in Authelia
 
 - **Regio's**: per regio de lokale bronnen met hun status, de sleutelwoorden (met
   een live voorbeeld bij het intypen) en wie de regio volgt. Een eigen regio
-  toevoegen kan; de zeven ingebouwde staan in de code.
+  toevoegen kan; de zeven ingebouwde staan in de code, met hun eigen bronnen.
+  Sinds 30 oktober 2026 zijn alle gemeenten van Fryslân, Groningen en Drenthe
+  een regio (40). De 33 toegevoegde hebben (nog) geen eigen bronnen: ze krijgen
+  de bekendmakingen van de provincie Fryslân voor hun gemeente, de signalen met
+  een plek (KNMI, ransomware, Raad van State, verkeer, inzendingen) en wat via
+  hun sleutelwoorden binnenkomt. Een regio heet naar de gemeente: hernoem hem
+  niet, anders vindt de routering de gemeentegrens niet meer. Een nieuwe regio
+  krijgt meteen de bekendmakingen die al voor die gemeente binnen waren.
 - **Bronnen**: het register van alle bronnen, landelijk en gemeentelijk, met
   status en het aantal nieuwe stukken in zeven dagen. **Bron toevoegen**: bereik,
   soort, type, adres, proefronde, opslaan. Zelf toegevoegde bronnen zijn te

@@ -16,7 +16,8 @@ import { alleBronnen } from '../src/register.mjs';
 import { verwerk } from '../src/verzamel.mjs';
 import { maakKader, bouwFeed, detail, zoekFeed } from '../src/feed.mjs';
 import { stelMailSamen } from '../src/mail.mjs';
-import { nieuweGebruiker } from '../src/gebruikers.mjs';
+import { nieuweGebruiker, herken } from '../src/gebruikers.mjs';
+import { roep } from './api-hulp.mjs';
 
 process.env.PROVINCIE_WACHT_MS = '0';
 const fixture = (naam) => readFileSync(new URL(`./fixtures/${naam}`, import.meta.url), 'utf8');
@@ -157,4 +158,33 @@ test('provincie Fryslân: een bekendmaking voor een regiogemeente is een stuk va
   oud.basislijn = true;
   const gevonden = zoekFeed(k, sanne, 'Vrijburgh').items.find((i) => i.id === `i:${oud.sleutel}`);
   assert.deepEqual([gevonden?.tijd, gevonden?.tijdBekend], ['2026-10-24T12:00:00.000Z', false]);
+});
+
+test('provincie Fryslân: een nieuwe regio krijgt de bekendmakingen die al binnen waren', async () => {
+  const opslag = new Opslag(mkdtempSync(path.join(tmpdir(), 'rc-prov-')));
+  const jan = herken(opslag, { login: 'jan', email: 'jan@example.nl', naam: 'Jan' });
+  const ctx = { opslag, kdb: null, fdb: null };
+  const bron = alleBronnen(opslag).find((b) => b.id === 'provincie-fryslan-bekendmakingen');
+  opslag.status.bronnen[bron.id] = { ok: true, laatsteSucces: '2026-10-01T00:00:00Z' };
+  verwerk(opslag, bron, week('1-augustus-2026'));
+  const items = () => Object.values(opslag.items);
+  const samen = () => items().filter((i) => i.gemeenten?.join() === 'Leeuwarden,Tytsjerksteradiel');
+  const leeuwarden = items().filter((i) => i.gemeenten?.includes('Leeuwarden'));
+  assert.ok(leeuwarden.length >= 2 && leeuwarden.every((i) => i.regio === null), 'Leeuwarden is nog geen regio');
+
+  let r = await roep(ctx, jan, 'POST', '/api/beheer/regios', { naam: 'Leeuwarden' });
+  assert.deepEqual([r.status, r.data.id, r.data.stukken], [201, 'leeuwarden', leeuwarden.length]);
+  assert.ok(items().filter((i) => i.gemeenten?.includes('Leeuwarden')).every((i) => i.regio === 'leeuwarden'));
+  // De bekendmaking voor Leeuwarden en Tytsjerksteradiel: bij de tweede regio een kopie.
+  r = await roep(ctx, jan, 'POST', '/api/beheer/regios', { naam: 'Tytsjerksteradiel' });
+  assert.deepEqual(samen().map((i) => i.regio).sort(), ['leeuwarden', 'tytsjerksteradiel']);
+  // Dezelfde week opnieuw: niets dubbel.
+  const aantal = items().length;
+  verwerk(opslag, bron, week('1-augustus-2026'));
+  assert.equal(items().length, aantal);
+
+  // De regio weer weg: de kopie verdwijnt, de rest wordt weer landelijk.
+  await roep(ctx, jan, 'DELETE', '/api/beheer/regios/tytsjerksteradiel');
+  assert.deepEqual(samen().map((i) => i.regio), ['leeuwarden']);
+  assert.ok(items().filter((i) => i.gemeenten?.join() === 'Tytsjerksteradiel').every((i) => i.regio === null));
 });
