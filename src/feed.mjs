@@ -679,6 +679,9 @@ function audioDetail(k, gebruiker, id) {
     youtube: a.vorm === 'youtube',
     // Een Kamerdebat van gehoord.de: geen audio hier; een tijd opent dat fragment daar.
     gehoord: a.vorm === 'gehoord',
+    // Een video om erbij te tonen (/api/stuk/video): een Kamerdebat (Debat
+    // Direct) of een vergadering op een platform met beeld.
+    video: a.vorm === 'gehoord' || (a.vorm === 'vergadering' && /^(cwc|ntb|ibabs):/.test(a.extern || '')),
     speler,
     meta: [
       meta('Bron', bron.naam || a.bron),

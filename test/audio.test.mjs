@@ -253,6 +253,32 @@ test('iBabs zonder speler: de mp3 bij elk agendapunt samen één opname, met de 
   }
 });
 
+test('video van een vergadering voor het leespaneel: mp4 van Company Webcast, HLS van Notubiz, geen bij GemeenteOplossingen', async () => {
+  const { videoVoor } = await import('../src/audio/vergaderingen.mjs');
+  const net = await nepInternet((u) => {
+    if (u.host === 'channel.royalcast.com' && u.pathname === '/portal/api/1.0/gemeenteoost/webcasts/gemeenteoost/20261027_1') {
+      return { attachments: [
+        { contentType: 'audio/mpeg', location: 'https://cwc-download.s3.test/x/mp3/bb.mp3?Signature=a' },
+        { contentType: 'video/x-ms-wmv', location: 'http://player.companywebcast.com/x/wmv' },
+        { contentType: 'video/mp4', location: 'https://cwc-download.s3.test/x/mp4/bb.mp4?Signature=b' },
+      ] };
+    }
+    if (u.host === 'api.notubiz.nl' && u.pathname === '/media') {
+      return { media: [{ streamer: 'rtmp://wowza1.notubiz.nl/nbvod/_definst_', stream_name: 'Gemeente/bestanden/raad.mp4' }] };
+    }
+    return undefined;
+  });
+  try {
+    assert.deepEqual(await videoVoor({ extern: 'cwc:gemeenteoost/20261027_1', url: 'https://channel.royalcast.com/gemeenteoost/#!/gemeenteoost/20261027_1' }),
+      { type: 'mp4', src: 'https://cwc-download.s3.test/x/mp4/bb.mp4?Signature=b', poster: null });
+    assert.deepEqual(await videoVoor({ extern: 'ntb:1512/88', url: 'https://gemeente.raadsinformatie.nl/vergadering/88' }),
+      { type: 'hls', src: 'https://wowza1.notubiz.nl/nbvod/_definst_/Gemeente/bestanden/raad.mp4/playlist.m3u8', poster: null });
+    assert.equal(await videoVoor({ extern: 'go:gemeenteraad.groningen.nl/5711', url: 'https://gemeenteraad.groningen.nl/Vergaderingen/x' }), null, 'alleen geluid');
+  } finally {
+    net.herstel();
+  }
+});
+
 test('GemeenteOplossingen: agenda uit de open API, de opname via de poort, met hergebruik van de cookie', metSqlite, async () => {
   const pogingen = [];
   const server = http.createServer((req, res) => {

@@ -482,6 +482,18 @@ transcript dat niet in het contextvenster past, wordt eerst per deel tot
 aantekeningen teruggebracht. Lukt een samenvatting drie keer niet, dan blijft de
 aflevering zonder; de aflevering zelf mislukt daar nooit door.
 
+**Video in het leespaneel.** Heeft het platform beeld, dan staat de video van
+de vergadering in het leespaneel, met de spelerbalk eronder (afspelen, −15 s,
+tempo, beeldvullend, de treffers als streepjes, wie er spreekt); een klik op een
+tijd in het transcript, bij Sprekers of bij een treffer zet de video daar, en de
+lopende beurt licht op. Company Webcast geeft een mp4 (ondertekende link van een
+dag, dus elke keer opnieuw opgezocht), Notubiz en iBabs (babscast) een HLS-stream
+die met hls.js speelt (`public/vendor/`). Het transcript komt uit dezelfde opname,
+dus de tijden zijn dezelfde (bij Company Webcast zijn de mp3 en de mp4 even lang).
+GemeenteOplossingen en de mp3's per agendapunt (Westerwolde) hebben alleen
+geluid: daar blijft de eigen audio (zolang die bewaard is). Bij een Kamerdebat
+werkt het net zo, met de video van Debat Direct (zie Kamerdebatten).
+
 **Agenda en sprekers van het vergaderplatform** (`platform` bij de aflevering):
 Company Webcast geeft de agendapunten (topics) en per spreker de spreekmomenten,
 in kloktijd vanaf `actualStart`; Notubiz de agendapunten met `start_offset` in

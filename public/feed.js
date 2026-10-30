@@ -285,13 +285,13 @@ function metaHtml(d) {
 }
 
 function tijdLink(d, t, inhoud, klasse) {
-  if (d.speler) return `<button class="${klasse}" data-tijd="${t}">${inhoud}</button>`;
-  // Een Kamerdebat: het fragment op gehoord.de waarin die tijd valt.
+  // Een Kamerdebat: een link naar het fragment op gehoord.de waarin die tijd
+  // valt; met de video erbij springt een klik daarin (koppelPaneel).
   if (d.gehoord) {
     const s = (d.segmenten || []).filter((x) => x.link && x.start <= t + 0.5).at(-1) || d.segmenten?.find((x) => x.link);
-    // Met de video erbij springt een klik daarin (koppelPaneel); anders gaat de link naar gehoord.de.
-    if (s) return `<a class="${klasse}" href="${esc(s.link)}" data-debattijd="${t}" target="_blank" rel="noopener noreferrer" title="Naar dit moment in het debat">${inhoud}</a>`;
+    if (s) return `<a class="${klasse}" href="${esc(s.link)}" data-tijd="${t}" target="_blank" rel="noopener noreferrer" title="Naar dit moment in het debat">${inhoud}</a>`;
   }
+  if (d.speler || d.video) return `<button class="${klasse}" data-tijd="${t}">${inhoud}</button>`;
   if (d.youtube && d.url) {
     try {
       const u = new URL(d.url);
@@ -329,8 +329,9 @@ function waaromHtml(d) {
     const termen = uniek(viaMelding.map((t) => t.term));
     zinnen.push(`${esc(opsomming(termen.map(aanhalen)))} ${termen.length === 1 ? 'is een zoekterm' : 'zijn zoektermen'} van je meldingen.`);
   }
-  if (audio && (d.speler || d.youtube)) zinnen.push('Klik op een tijd om vanaf daar te luisteren.');
-  else if (audio && d.gehoord) zinnen.push('Klik op een tijd om naar dat moment in het debat te gaan.');
+  if (audio && d.gehoord) zinnen.push('Klik op een tijd om naar dat moment in het debat te gaan.');
+  else if (audio && d.video) zinnen.push('Klik op een tijd om vanaf daar te kijken.');
+  else if (audio && (d.speler || d.youtube)) zinnen.push('Klik op een tijd om vanaf daar te luisteren.');
   // Eén rij per term, ook als hij er zowel als sleutelwoord als via een melding in staat.
   const getoond = new Set();
   const rijen = treffers.filter((t) => (t.melding || d.landelijk) && !getoond.has(t.term) && getoond.add(t.term)).map((t) => {
@@ -620,16 +621,18 @@ function audioPaneel(d) {
   const chips = !d.landelijk && d.treffers?.length
     ? `<div class="in-stuk"><span>In dit stuk:</span>${d.treffers.map((t) => `<span class="in-stuk-chip"><strong>${esc(t.term)}</strong><span>${t.aantal}× · ${t.melding ? 'jouw melding' : 'sleutelwoord regio'}</span></span>`).join('')}</div>`
     : '';
-  const speler = d.speler
-    ? `<div class="speler" id="speler">
+  const spelerbalk = `<div class="speler" id="speler">
         <button class="speelknop" id="speel" aria-label="Afspelen">${icoon('play', 20)}</button>
         <div class="voortgang">
           <div class="balk" id="balk" title="Klik om naar die tijd te gaan"><span class="vulling" id="vulling"></span></div>
           <div class="tijden"><span class="nu"><strong id="nu-tijd">0:00</strong><span id="nu-wie"></span></span><span id="totaal">${d.duur ? tijdcode(d.duur) : ''}</span></div>
         </div>
-        <div class="spelerknoppen"><button id="terug15" title="15 seconden terug">−15 s</button><button id="tempo" title="Afspeelsnelheid">1×</button></div>
-      </div>`
-    : d.gehoord ? '<div id="debatvideo" class="debatvideo laden"><span class="zacht klein">De video van het debat wordt geladen…</span></div>'
+        <div class="spelerknoppen"><button id="terug15" title="15 seconden terug">−15 s</button><button id="tempo" title="Afspeelsnelheid">1×</button>${d.video ? `<button id="beeldvullend" title="Beeldvullend">${icoon('maximize', 14)}</button>` : ''}</div>
+      </div>`;
+  // Met een video: het vak (laadVideo vult het) met de spelerbalk eronder.
+  const speler = d.video
+    ? `<div id="videovak" class="videovak laden"><span class="zacht klein">De video wordt geladen…</span></div>${spelerbalk}`
+    : d.speler ? spelerbalk
       : `<div class="geen-speler">${d.youtube ? 'De tijden openen de video bij YouTube op dat moment.' : 'De audio van deze aflevering is niet bewaard; de tijden zijn ter oriëntatie. Luister terug bij de bron.'}</div>`;
   const kop = `<div class="acties" id="acties">${actiesHtml(d)}</div>
     <div class="kopblok" style="gap:8px"><div class="kicker">${esc(kicker.filter(Boolean).join(' · '))}</div><h2>${esc(d.titel)}</h2>${sub ? `<span class="subregel">${esc(sub)}</span>` : ''}</div>`;
@@ -675,7 +678,7 @@ function tekenTab() {
 // ---------- de speler ----------
 
 function stopSpeler() {
-  stopDebat();
+  stopVideo();
   if (staat.speler) {
     staat.speler.audio.pause();
     staat.speler.audio.removeAttribute('src');
@@ -687,16 +690,16 @@ function stopSpeler() {
 
 const fragmentSpeler = new Audio();
 
-// ---------- de video van een Kamerdebat ----------
+// ---------- de video van de opname ----------
 //
-// De Tweede Kamer zendt elk debat uit via Debat Direct; de server zoekt de
-// stream op (/api/stuk/video, src/gehoord.mjs). Die speelt hier met hls.js
-// (public/vendor/, pas geladen als er een debat opengaat; alleen zonder MSE,
-// zoals op een iPhone, de eigen HLS-speler van de browser).
-// Bij een debat met video staan de tijden in het transcript op de klok van de
-// video (0:00 is het eerste beeld; de server zet ze om, src/gehoord.mjs): een
-// klik op 2:41 zet de video op 2:41. `nul` is de kloktijd van 0:00, en met de
-// kloktijden in de stream (EXT-X-PROGRAM-DATE-TIME) klopt dat op de seconde.
+// Een raadsvergadering op een platform met beeld (Company Webcast: mp4; Notubiz
+// en iBabs: HLS), of een Kamerdebat (Debat Direct, HLS). De server zoekt de video
+// op (/api/stuk/video). Het transcript staat op dezelfde klok als de video (bij
+// een debat zet de server de tijden om, src/gehoord.mjs), dus de spelerbalk,
+// de tijden in het transcript en het meelezen werken op de video zoals op de
+// audio. HLS speelt met hls.js (public/vendor/, pas geladen als het nodig is):
+// Chrome zegt "maybe" op HLS maar speelt deze streams zelf niet af. Alleen
+// zonder Media Source Extensions (iPhone) de eigen speler van de browser.
 
 let hlsBelofte = null;
 const laadHls = () => (hlsBelofte ||= new Promise((klaar, mislukt) => {
@@ -711,88 +714,92 @@ const laadHls = () => (hlsBelofte ||= new Promise((klaar, mislukt) => {
   document.head.append(script);
 }));
 
-function stopDebat() {
-  const db = staat.debat;
-  if (!db) return;
-  db.video.pause();
-  db.hls?.destroy();
-  staat.debat = null;
+function stopVideo() {
+  const v = staat.video;
+  if (!v) return;
+  v.media.pause();
+  v.hls?.destroy();
+  staat.video = null;
 }
 
-const geenDebatVideo = (tekst) => `<div class="geen-speler">${tekst} De tijden openen het debat bij gehoord.de op die plek.</div>`;
-
-async function laadDebatVideo(d) {
-  const plek = $('#debatvideo');
+async function laadVideo(d) {
+  const plek = $('#videovak');
   if (!plek) return;
-  // Hetzelfde debat opnieuw getekend: de speler blijft, en speelt door.
-  if (staat.debat?.id === d.id) {
-    plek.replaceWith(staat.debat.vak);
+  // Hetzelfde stuk opnieuw getekend: de speler blijft, en speelt door.
+  if (staat.video?.id === d.id) {
+    plek.replaceWith(staat.video.vak);
+    koppelSpeler(d, staat.video.media);
     return;
   }
-  stopDebat();
+  stopVideo();
   let r = null;
   try {
     r = await vraag('GET', `/api/stuk/video?id=${encodeURIComponent(d.id)}`);
   } catch { /* geen video */ }
   if (!plek.isConnected || staat.detail?.id !== d.id) return;
-  if (!r?.video || !r.nul) {
-    plek.outerHTML = geenDebatVideo(r && !r.fout ? 'Bij dit debat is geen video van Debat Direct (zoals bij de Eerste Kamer).' : 'De video van dit debat kon niet worden geladen.');
+  const bron = r?.video && { type: r.video.type || 'hls', src: r.video.src || r.video.hls, poster: r.video.poster };
+  if (!bron?.src || (d.gehoord && !r.nul)) {
+    // Geen beeld: de eigen audio als die er is; anders alleen de tijden.
+    if (d.speler) {
+      plek.remove();
+      koppelSpeler(d);
+      return;
+    }
+    $('#speler')?.remove();
+    plek.outerHTML = `<div class="geen-speler">${d.gehoord
+      ? `${r && !r.fout ? 'Bij dit debat is geen video van Debat Direct (zoals bij de Eerste Kamer).' : 'De video van dit debat kon niet worden geladen.'} De tijden openen het debat bij gehoord.de op die plek.`
+      : 'Deze vergadering heeft geen beeld, en de audio is niet bewaard; de tijden zijn ter oriëntatie.'}</div>`;
     return;
   }
   const vak = document.createElement('div');
-  vak.className = 'debatvideo';
-  vak.innerHTML = `<video controls playsinline preload="metadata"${r.video.poster ? ` poster="${esc(r.video.poster)}"` : ''}></video>
-    <span class="zacht klein">Video: <a href="${esc(r.video.pagina)}" target="_blank" rel="noopener noreferrer">Debat Direct, Tweede Kamer</a>. Klik op een tijd om daar te kijken.</span>`;
-  const video = vak.querySelector('video');
-  const db = { id: d.id, vak, video, hls: null, nul: Date.parse(r.nul), begin: Date.parse(r.video.begin), eerstePdt: null };
+  vak.className = 'videovak';
+  vak.innerHTML = `<video playsinline preload="metadata"${bron.poster ? ` poster="${esc(bron.poster)}"` : ''}></video>
+    ${d.gehoord && r.video.pagina ? `<span class="zacht klein">Video: <a href="${esc(r.video.pagina)}" target="_blank" rel="noopener noreferrer">Debat Direct, Tweede Kamer</a>.</span>` : ''}`;
+  const media = vak.querySelector('video');
+  const v = { id: d.id, vak, media, hls: null };
+  const fout = (tekst) => {
+    if (!vak.isConnected) return;
+    stopVideo();
+    vak.innerHTML = `<div class="geen-speler">${esc(tekst)}</div>`;
+  };
   try {
-    // Eerst hls.js (Media Source Extensions: Chrome, Edge, Firefox, Safari op de
-    // Mac). Chrome zegt tegenwoordig ook "maybe" op HLS, maar speelt deze stream
-    // (fMP4 met een aparte geluidsspoor) zelf niet af: een grijze afspeelknop.
-    // Alleen zonder MSE (iPhone) de eigen HLS-speler van de browser.
-    const Hls = await laadHls().catch(() => null);
-    if (Hls?.isSupported()) {
-      db.hls = new Hls({ startPosition: 0 });
-      db.hls.on(Hls.Events.LEVEL_LOADED, (_, data) => {
-        const f = data.details.fragments[0];
-        if (f?.programDateTime) db.eerstePdt = f.programDateTime - f.start * 1000;
-      });
+    const Hls = bron.type === 'hls' ? await laadHls().catch(() => null) : null;
+    if (bron.type === 'mp4') {
+      media.src = bron.src;
+    } else if (Hls?.isSupported()) {
+      v.hls = new Hls({ startPosition: 0 });
       let herstel = 0;
-      db.hls.on(Hls.Events.ERROR, (_, data) => {
+      v.hls.on(Hls.Events.ERROR, (_, data) => {
         if (!data.fatal) return;
         // Twee keer opnieuw proberen bij een netwerk- of mediafout, daarna een melding.
         if (herstel < 2 && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
           herstel++;
-          return db.hls.startLoad();
+          return v.hls.startLoad();
         }
         if (herstel < 2 && data.type === Hls.ErrorTypes.MEDIA_ERROR) {
           herstel++;
-          return db.hls.recoverMediaError();
+          return v.hls.recoverMediaError();
         }
-        db.hls.destroy();
-        vak.innerHTML = geenDebatVideo(`De video kon niet worden afgespeeld (${esc(data.details || data.type)}).`);
+        fout(`De video kon niet worden afgespeeld (${data.details || data.type}).`);
       });
-      db.hls.loadSource(r.video.hls);
-      db.hls.attachMedia(video);
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = r.video.hls;
-      video.addEventListener('loadedmetadata', () => {
-        const start = video.getStartDate?.();
-        if (start && !Number.isNaN(+start)) db.eerstePdt = +start;
-      });
+      v.hls.loadSource(bron.src);
+      v.hls.attachMedia(media);
+    } else if (media.canPlayType('application/vnd.apple.mpegurl')) {
+      media.src = bron.src;
     } else {
       throw new Error('Deze browser kan de video niet afspelen.');
     }
-  } catch (fout) {
-    if (plek.isConnected) plek.outerHTML = geenDebatVideo(esc(fout.message));
+  } catch (e) {
+    plek.outerHTML = `<div class="geen-speler">${esc(e.message)}</div>`;
     return;
   }
   if (!plek.isConnected || staat.detail?.id !== d.id) {
-    db.hls?.destroy();
+    v.hls?.destroy();
     return;
   }
   plek.replaceWith(vak);
-  staat.debat = db;
+  staat.video = v;
+  koppelSpeler(d, media);
   // Net omgezet naar de klok van de video: het stuk opnieuw ophalen, zodat de tijden kloppen.
   if (r.omgezet) {
     try {
@@ -805,21 +812,15 @@ async function laadDebatVideo(d) {
   }
 }
 
-// Naar een tijd in het transcript (seconden vanaf het eerste fragment).
-function springDebat(t) {
-  const db = staat.debat;
-  if (!db) return false;
-  db.video.currentTime = Math.max(0, (db.nul + t * 1000 - (db.eerstePdt ?? db.begin)) / 1000);
-  db.video.play().catch(() => {});
-  db.vak.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  return true;
-}
-
-function koppelSpeler(d) {
-  if (!d.speler) return;
-  const audio = new Audio();
-  audio.preload = 'metadata';
-  audio.src = d.speler;
+// De spelerbalk koppelen aan de eigen audio (d.speler), of aan de video van de
+// opname (`media`, zie laadVideo): die hebben dezelfde bediening.
+function koppelSpeler(d, media = null) {
+  if (!media && !d.speler) return;
+  const audio = media || new Audio();
+  if (!media) {
+    audio.preload = 'metadata';
+    audio.src = d.speler;
+  }
   const sp = { audio, beurt: -1, volgen: true, starts: beurten(d).map((b) => b.start), namen: beurten(d).map((b) => sprekerInfo(d).get(b.sleutel)?.label || b.spreker || '') };
   staat.speler = sp;
   const duur = () => audio.duration && Number.isFinite(audio.duration) ? audio.duration : d.duur || 0;
@@ -843,8 +844,14 @@ function koppelSpeler(d) {
   audio.addEventListener('play', () => { $('#speel').innerHTML = icoon('pause', 20); $('#speel').classList.add('speelt'); $('#speel').setAttribute('aria-label', 'Pauzeren'); });
   audio.addEventListener('pause', () => { $('#speel').innerHTML = icoon('play', 20); $('#speel').classList.remove('speelt'); $('#speel').setAttribute('aria-label', 'Afspelen'); });
   audio.addEventListener('error', () => {
-    if (staat.speler === sp && audio.getAttribute('src')) toast('De audio kon niet worden geladen; misschien is hij al opgeruimd.', 'fout');
+    if (!media && staat.speler === sp && audio.getAttribute('src')) toast('De audio kon niet worden geladen; misschien is hij al opgeruimd.', 'fout');
   });
+  if (media) {
+    // Een klik op het beeld speelt of pauzeert; beeldvullend via de knop in de balk.
+    media.onclick = () => (media.paused ? media.play().catch(() => {}) : media.pause());
+    const vol = $('#beeldvullend');
+    if (vol) vol.onclick = () => media.requestFullscreen?.().catch(() => {});
+  }
   audio.addEventListener('timeupdate', () => {
     if (staat.speler !== sp) return;
     const t = audio.currentTime;
@@ -971,8 +978,9 @@ function tekenPaneel() {
   }
   if (d.audio) {
     paneel.innerHTML = audioPaneel(d);
-    koppelSpeler(d);
-    if (d.gehoord) laadDebatVideo(d);
+    // Met een video kiest laadVideo de speler (video, of anders de eigen audio).
+    if (d.video) laadVideo(d);
+    else koppelSpeler(d);
     if (staat.springNaar !== null && staat.springNaar !== undefined) {
       markeerTijd(staat.springNaar);
       staat.springNaar = null;
@@ -1044,11 +1052,9 @@ function koppelPaneel(paneel) {
       const zoekveld = $('#transcript-zoek');
       if (zoekveld) zoekveld.value = audioTab.zoek;
       tekenTab();
-    } else if (knop.dataset.debattijd !== undefined && staat.debat) {
-      // Een tijd in een Kamerdebat: de video op die plek, niet gehoord.de.
-      e.preventDefault();
-      springDebat(Number(knop.dataset.debattijd));
-    } else if (knop.dataset.tijd !== undefined && knop.tagName === 'BUTTON') {
+    } else if (knop.dataset.tijd !== undefined && (knop.tagName === 'BUTTON' || staat.speler)) {
+      // Een link naar gehoord.de springt in de video als die er is.
+      if (knop.tagName === 'A') e.preventDefault();
       spring(Number(knop.dataset.tijd));
     } else if (knop.dataset.fragment) {
       speelFragment(knop);

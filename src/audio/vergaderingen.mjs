@@ -142,6 +142,38 @@ export async function mediaVoor(af) {
   }
 }
 
+// De video van een vergadering, voor in het leespaneel: { type: 'hls'|'mp4',
+// src, poster }, of null als het platform alleen geluid heeft (GemeenteOplossingen,
+// de mp3's per agendapunt van Westerwolde). Het transcript komt uit dezelfde
+// opname, dus een tijd in het transcript is dezelfde tijd in de video (bij
+// Company Webcast zijn de mp3 en de mp4 even lang, gecontroleerd oktober 2026).
+// Elke keer opnieuw: de links van Company Webcast zijn ondertekend en verlopen.
+export async function videoVoor(af) {
+  if (af.extern.startsWith('cwc:')) {
+    const host = new URL(af.url).hostname.toLowerCase();
+    const code = af.extern.slice(4);
+    if (!COMPANY_WEBCAST.has(host) || !WEBCAST_CODE.test(code)) return null;
+    const d = await haalJsonOpenbaar(`https://${host}/portal/api/1.0/${code.split('/')[0]}/webcasts/${code}?method=GET&key=`);
+    const mp4 = (d.attachments || []).find((a) => a.contentType === 'video/mp4' && /^https:\/\//.test(a.location || ''));
+    return mp4 ? { type: 'mp4', src: mp4.location, poster: null } : null;
+  }
+  if (af.extern.startsWith('ntb:')) {
+    const vergadering = af.extern.slice(4).split('/')[1];
+    const stream = notubizApiStream(await notubiz('media', { event_id: vergadering }));
+    return stream ? { type: 'hls', src: stream, poster: null } : null;
+  }
+  if (af.extern.startsWith('ibabs:')) {
+    const u = new URL(af.url);
+    const agenda = af.extern.slice(`ibabs:${u.host}/`.length);
+    if (!UUID.test(agenda)) return null;
+    const blok = await ibabsBlok(`https://${u.host}/`, agenda);
+    if (blok?.type !== 'babscast') return null;
+    const ev = await babscastEvent(blok.event);
+    return ev?.openbaar && ev.afspeellijst && BABSCAST_MEDIA.test(new URL(ev.afspeellijst).hostname) ? { type: 'hls', src: ev.afspeellijst, poster: null } : null;
+  }
+  return null;
+}
+
 // Gaat omhoog als er meer uit een platform komt dan eerst (2: de sprekers van
 // Notubiz); opnames die al klaar waren, krijgen dat dan alsnog (src/audio/verwerking.mjs).
 export const PLATFORM_VERSIE = 2;

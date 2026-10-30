@@ -25,6 +25,7 @@ import { controleerMelding, BRONNEN } from './meldingen.mjs';
 import { zoekvraagTekst } from './termen.mjs';
 import { beheerApi } from './beheer.mjs';
 import { rondKoppelingAf, debatVideo, naarVideoTijd } from './gehoord.mjs';
+import { videoVoor } from './audio/vergaderingen.mjs';
 import { kamerApi } from './kamer/api.mjs';
 import { publiekeInstellingen, werkInstellingenBij } from './instellingen.mjs';
 import { ollamaInfo } from './ollama.mjs';
@@ -101,7 +102,15 @@ export async function api(req, res, url, ctx) {
   // transcript, waarmee de speler een tijd in de video vindt (src/gehoord.mjs).
   if (route === 'GET /api/stuk/video') {
     const af = adb?.aflevering(String(z.get('id') || '').replace(/^a:/, ''));
-    if (!af || af.vorm !== 'gehoord') throw new Fout(404, 'Dit is geen Kamerdebat');
+    // Een raadsvergadering: de video van het platform, op dezelfde tijden als het transcript.
+    if (af?.vorm === 'vergadering') {
+      try {
+        return stuur({ video: await videoVoor(af), nul: null });
+      } catch (fout) {
+        return stuur({ video: null, nul: null, fout: fout.message });
+      }
+    }
+    if (!af || af.vorm !== 'gehoord') throw new Fout(404, 'Deze aflevering heeft geen video');
     const antwoord = (p) => ({ video: p.video, nul: p.tijdbasis === 'video' ? p.video.begin : p.klokBegin, klokBegin: p.klokBegin });
     const p = af.platform || {};
     if (p.video !== undefined && p.klokBegin && (p.video === null || p.tijdbasis === 'video')) return stuur(antwoord(p));
