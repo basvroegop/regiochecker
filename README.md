@@ -214,6 +214,25 @@ woorden; een woordgroep moet als geheel voorkomen. Per sleutelwoord zie je hoeve
 stukken uit landelijke bronnen het de afgelopen 30 dagen opleverde ("Veel ruis"
 bij 25 of meer). Per regio kun je een landelijke bron uitzetten ("Geldt voor").
 
+Sinds 30 oktober 2026 heeft elke regio als sleutelwoorden de naam van de
+gemeente en alle woonplaatsen erin (CBS, `src/geo/nl.json`; 917 aan, 57 uit).
+Vooraf geteld in de Kamerstukken sinds 15 september; wat daar vooral iets anders
+betekende, staat uit:
+- gewone woorden, of een grotere plaats elders: "Een", "Anderen", "Oranje",
+  "Loon", "Boer", "de Wijk", "De Punt", "Sloten", "Noordwijk", "Hoorn",
+  "Steenbergen", "Zurich" en dergelijke, zonder varianten;
+- echte plaatsen die ook een achternaam of woord zijn (Kamerleden Westerveld en
+  Hoogeveen, de rapporteur Sneek, Witteveen+Bos; "haren", "leek", "vries",
+  "balk", "dalen"): de kale naam uit, met varianten aan als "in Hoogeveen", "uit
+  Hoogeveen", "te Hoogeveen", "naar Hoogeveen", "bij Hoogeveen" en "gemeente
+  Hoogeveen". Varianten die zelf botsten ("uit leek te rollen", "in wier
+  verkiezingsprogramma", "bestaande uit Witteveen+Bos") ontbreken.
+Een plaatsnaam die in twee regio's ligt (Oudega, Zuidwolde, Winsum, Alteveer),
+staat bij allebei. "Groningen" levert de meeste treffers (stad én provincie,
+zo'n 45 Kamerstukken per week). De officiële namen zijn in een deel van Fryslân
+Fries (Burgum, Damwâld); landelijke stukken gebruiken soms de Nederlandse naam
+(Bergum, Damwoude), die er nog niet bij staat.
+
 De Tweede Kamer is de ingebouwde landelijke bron; een RSS-feed, Woo-platform of
 podcast voeg je als landelijke bron toe in Beheer › Bronnen, met een
 proefronde die laat zien hoeveel stukken er naar welke regio zouden gaan. Bij
