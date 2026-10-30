@@ -79,6 +79,7 @@ What counts as "new" is `eersteGezien`, the moment of first sight, never the doc
   - the region's keywords (`data/regios.json`);
   - `routeerOpPlek`: points or tracks within the municipality polygon, province, company location (`src/locatie.mjs`), or place names found by `plaatsenIn`.
 - Term matching ignores case and accents (`src/termen.mjs`), except for region keywords against Kamerstukken. There, every capital in the keyword must be a capital in the text ("Assen" ≠ "assen"). Pass `hoofdletters: true` wherever region keywords meet `kdb`; alert search terms stay case-insensitive.
+- Routing is the hot path: ~1000 keywords against every national text and transcript. `src/termen.mjs` normalises a text once and checks a term's longest word in a word set before running its regex. `onthoud()` in `src/feed.mjs` caches results; keep cache keys stable (no `Date.now()` boundaries) and include every option in the key. After a restart and after each round, `warmOp` fills the cache in small steps, so no request blocks the event loop for seconds.
 - `plaatsenIn` uses a strict "pointer word before the place name" rule. Polygons and place names come from `src/geo/nl.json`, PDOK + CBS data, rebuilt with `scripts/maak-geo.mjs`.
 
 **One selection, many consumers.** The feed, weekly mail (`src/mail.mjs`), alerts (`src/meldingen.mjs`) and Teams channels (`src/kanalen.mjs`) share their selection logic in `src/feed.mjs` (`regioRegels`, `meldingTreffers`, `kanaalRegels`). Change selection there, not in the consumers.

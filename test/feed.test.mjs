@@ -282,6 +282,23 @@ test('meldingen zonder zoekterm: alles binnen regio\'s en bronnen, en niet extra
   }
 });
 
+test('snelheid: opwarmen in stapjes, en normaliseren blijft teken voor teken gelijk', metSqlite, async () => {
+  const { warmOp } = await import('../src/feed.mjs');
+  const { normaliseer, vindInSegmenten } = await import('../src/termen.mjs');
+  const { ctx } = await opzet();
+  // Drie landelijke berichten, twee podcastafleveringen, en de kamerstukken van
+  // Smallingerland (Heerenveen heeft de Kamer uitgezet).
+  assert.equal(await warmOp(ctx, { stapMs: 0 }), 6);
+  // Zelfde lengte, zodat een plek in de genormaliseerde tekst een plek in het origineel is.
+  for (const [tekst, verwacht] of [['Súdwest-Fryslân', 'sudwest-fryslan'], ['ÉÉN Ærø', 'een ærø'], ['İstanbul', 'istanbul'], ['’t Zandt', '’t zandt']]) {
+    assert.equal(normaliseer(tekst), verwacht);
+    assert.equal(normaliseer(tekst).length, tekst.length);
+  }
+  // De woordenset is een voorselectie: een term die alleen binnen een woord staat, telt niet.
+  const segmenten = [{ start: 0, text: 'Over Drachtenaren.' }, { start: 5, text: 'En nu Drachten zelf.' }];
+  assert.deepEqual(vindInSegmenten(segmenten, ['Drachten', 'Ureterp']).map((t) => [t.term, t.aantal, t.treffers[0].tijd]), [['Drachten', 1, 5]]);
+});
+
 test('het hele document doorzoeken: zoeken, sleutelwoorden en meldingen, ook na vijf weken', metSqlite, async () => {
   const { zoekFeed, routeerItem, meldingTreffers, maakKader } = await import('../src/feed.mjs');
   const { ctx, opslag, fdb, sanne } = await opzet();

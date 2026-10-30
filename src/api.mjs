@@ -40,6 +40,11 @@ const EMAIL = /^[^\s@<>,;]+@[^\s@<>,;]+\.[a-z]{2,}$/i;
 const MEDIATYPE = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm' };
 const DAG_MS = 86400000;
 
+const dagBegin = (ms) => {
+  const d = new Date(ms);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
+};
+
 function meldingVoorClient(k, gebruiker, m) {
   const regio = k.regioMap.get(m.bereik);
   return {
@@ -48,7 +53,10 @@ function meldingVoorClient(k, gebruiker, m) {
     naam: meldingNaam(m, (id) => k.regioMap.get(id)?.naam),
     bereikNaam: m.bereik === 'overal' ? 'Overal' : m.bereik === 'mijn' ? 'Mijn regio\'s' : regio?.naam || m.bereik,
     bronnenNaam: BRONNEN[m.bronnen] || BRONNEN.alle,
-    aantal30: meldingTreffers(k, gebruiker, m, { sinds: new Date(Date.now() - 30 * DAG_MS).toISOString() }).length,
+    // Vanaf het begin van de dag, 30 dagen terug: een vaste grens, zodat het
+    // geheugen van src/feed.mjs het antwoord bewaart. Met een grens tot op de
+    // milliseconde rekende elke keer openen alles opnieuw uit (seconden).
+    aantal30: meldingTreffers(k, gebruiker, m, { sinds: dagBegin(Date.now() - 30 * DAG_MS) }).length,
   };
 }
 

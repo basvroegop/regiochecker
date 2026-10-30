@@ -40,6 +40,7 @@ import { AudioDb } from './audio/db.mjs';
 import { Verwerking, isAudio } from './audio/verwerking.mjs';
 import { deelLocatieIn } from './audio/namen.mjs';
 import { api } from './api.mjs';
+import { warmOp } from './feed.mjs';
 
 const hier = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIEK = path.join(hier, '..', 'public');
@@ -92,6 +93,7 @@ async function kamerTik() {
   if (r.ok) {
     console.log(`Kamerronde: ${r.metadata.nieuw} nieuw, ${r.teksten.gelukt} teksten (${r.teksten.over} te gaan)`);
     await meldingen();
+    await warmOp(ctx).catch(() => {});
   } else {
     console.error('Kamerronde mislukt:', r.fout);
   }
@@ -134,6 +136,7 @@ async function tik() {
     if ((weekmails.length && Date.now() - vorige > 10 * 60000) || Date.now() - vorige >= interval) {
       const resultaten = await verzamelAlles(opslag);
       verzameld = true;
+      await warmOp(ctx).catch(() => {});
       console.log(`Verzamelronde: ${resultaten.reduce((n, r) => n + (r.nieuw || 0), 0)} nieuw, ${resultaten.filter((r) => !r.ok).length} bronnen mislukt`);
     }
     if (weekmails.length) {
@@ -350,6 +353,11 @@ server.listen(POORT, () => {
     maakMappen(opslag);
     setInterval(() => verwerkAccounts(opslag).catch((fout) => console.error('Accounts:', fout.message)), 15_000);
   }
+  // Het geheugen van de feed vullen, in stapjes (src/feed.mjs warmOp).
+  setTimeout(() => {
+    const t = Date.now();
+    warmOp(ctx).then((n) => console.log(`Feed opgewarmd: ${n} landelijke stukken in ${Math.round((Date.now() - t) / 1000)} s`)).catch((fout) => console.error('Opwarmen:', fout.message));
+  }, 8000);
   // De locatie-index (11 MB) alvast inlezen, zodat Audio-archief › Namen meteen opent.
   setTimeout(() => deelLocatieIn('Drachten'), 20_000);
 });

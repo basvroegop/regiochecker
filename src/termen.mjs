@@ -19,10 +19,14 @@
 // Kleine letters, zonder accenten, en even lang als het origineel, zodat een
 // positie in de genormaliseerde tekst ook een positie in het origineel is.
 export function normaliseer(tekst) {
+  // Snel: in één keer naar kleine letters, en alleen de tekens buiten ASCII
+  // los van hun accent ontdoen. Verandert de lengte (een zeldzaam teken als
+  // İ wordt twee tekens), dan teken voor teken.
+  const klein = tekst.toLowerCase();
+  if (klein.length === tekst.length) return klein.replace(/[^\x00-\x7f]/g, (t) => t.normalize('NFD')[0] || t);
   let uit = '';
   for (let i = 0; i < tekst.length; i++) {
     const code = tekst.charCodeAt(i);
-    // Gewone letters snel; alleen bij andere tekens de dure omweg.
     if (code < 128) uit += code >= 65 && code <= 90 ? String.fromCharCode(code + 32) : tekst[i];
     else uit += tekst[i].toLowerCase().normalize('NFD')[0] || tekst[i];
   }
@@ -37,6 +41,39 @@ export function patroon(term) {
   const tussen = `[^${WOORD}]+`;
   const kern = delen.map((d) => d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join(tussen);
   return new RegExp(`(?<![${WOORD}])${kern}(?![${WOORD}])`, 'gu');
+}
+
+// Per term het patroon en het langste woord eruit, één keer gemaakt. Dat woord
+// moet als heel woord in de genormaliseerde tekst staan; dat zie je in de
+// woordenset van de tekst veel sneller dan met het patroon. De meeste van de
+// ~1000 sleutelwoorden staan in een gegeven tekst niet, en hoeven zo niet door
+// de reguliere expressie.
+const VOORAF = new Map();
+function vooraf(term) {
+  let v = VOORAF.get(term);
+  if (v === undefined) {
+    const re = patroon(term);
+    const delen = normaliseer(term.trim()).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    v = re ? { re, deel: delen.reduce((a, b) => (b.length > a.length ? b : a), '') } : null;
+    if (VOORAF.size > 50000) VOORAF.clear();
+    VOORAF.set(term, v);
+  }
+  return v;
+}
+
+const woordenVan = (norm) => new Set(norm.split(/[^\p{L}\p{N}]+/u));
+
+// De laatste genormaliseerde tekst met zijn woorden: bij het routeren zoekt
+// elke regio (veertig keer) in dezelfde tekst.
+let laatsteTekst = null;
+let laatste = null;
+function genormaliseerd(tekst) {
+  if (tekst !== laatsteTekst) {
+    laatsteTekst = tekst;
+    const norm = normaliseer(tekst);
+    laatste = { norm, woorden: woordenVan(norm) };
+  }
+  return laatste;
 }
 
 const AANHALING = /^["'“”‘’„]+|["'“”‘’„]+$/g;
@@ -113,12 +150,12 @@ function inLink(tekst, positie) {
 // Welke van de termen komen in de tekst voor? Per term het eerste fragment en
 // het aantal keer dat hij voorkomt.
 export function vindTermen(tekst, termen, { hoofdletters = false } = {}) {
-  const norm = normaliseer(tekst);
+  const { norm, woorden } = genormaliseerd(tekst);
   const treffers = [];
   for (const term of termen) {
-    const re = patroon(term);
-    if (!re) continue;
-    let gevonden = [...norm.matchAll(re)];
+    const v = vooraf(term);
+    if (!v || !woorden.has(v.deel)) continue;
+    let gevonden = [...norm.matchAll(v.re)];
     // normaliseer() houdt de lengte gelijk: dezelfde plek in het origineel.
     if (hoofdletters) gevonden = gevonden.filter((m) => hoofdlettersKloppen(term, tekst.slice(m.index, m.index + m[0].length)) || inLink(tekst, m.index));
     if (!gevonden.length) continue;
@@ -140,16 +177,32 @@ export const zoekvraagTekst = (termen) => termen.map(toonTerm).join(' OR ');
 
 // Termen in een transcript: per term het aantal en de eerste treffers, met de
 // tijd van het segment en de zin eromheen. `segmenten`: [{ start, text }].
+// De genormaliseerde segmenten per transcript, één keer: bij het routeren
+// zoekt elke regio in hetzelfde transcript.
+const SEGMENTNORM = new WeakMap();
+function segmentNormen(segmenten) {
+  let n = SEGMENTNORM.get(segmenten);
+  if (!n) {
+    const normen = segmenten.map((s) => normaliseer(String(s.text || '')));
+    n = { normen, woorden: woordenVan(normen.join('\n')) };
+    SEGMENTNORM.set(segmenten, n);
+  }
+  return n;
+}
+
 export function vindInSegmenten(segmenten, termen, { maxPerTerm = 20 } = {}) {
-  const patronen = termen.map((t) => [t, patroon(t)]).filter(([, re]) => re);
+  const { normen, woorden } = segmentNormen(segmenten);
+  // Alleen de termen die ergens in het transcript staan.
+  const patronen = termen.map((t) => [t, vooraf(t)]).filter(([, v]) => v && woorden.has(v.deel));
+  if (!patronen.length) return [];
   const perTerm = new Map();
   segmenten.forEach((s, index) => {
     const tekst = String(s.text || '');
     if (!tekst) return;
-    const norm = normaliseer(tekst);
-    for (const [term, re] of patronen) {
-      re.lastIndex = 0;
-      const gevonden = [...norm.matchAll(re)];
+    const norm = normen[index];
+    for (const [term, v] of patronen) {
+      if (!norm.includes(v.deel)) continue;
+      const gevonden = [...norm.matchAll(v.re)];
       if (!gevonden.length) continue;
       const t = perTerm.get(term) || { term, aantal: 0, treffers: [] };
       t.aantal += gevonden.length;

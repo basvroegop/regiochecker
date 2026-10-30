@@ -31,12 +31,27 @@ const GEMEENTELIJK = ['nieuws', 'ingekomen', 'woo'];
 // ---------- hulpjes ----------
 
 // Uitkomsten van het zoeken naar termen, per stuk en per versie van de
-// sleutelwoorden. Klein genoeg om in het geheugen te houden.
+// sleutelwoorden. Klein genoeg om in het geheugen te houden. Vol? Dan gaat het
+// oudste kwart eruit, niet alles: alles opnieuw uitrekenen (alle transcripten
+// tegen ~1000 sleutelwoorden) houdt de server tientallen seconden bezig.
 const geheugen = new Map();
+const GEHEUGEN_MAX = 60000;
 function onthoud(sleutel, maak) {
-  if (geheugen.has(sleutel)) return geheugen.get(sleutel);
+  if (geheugen.has(sleutel)) {
+    // Opnieuw achteraan: wat gebruikt wordt, blijft het langst.
+    const waarde = geheugen.get(sleutel);
+    geheugen.delete(sleutel);
+    geheugen.set(sleutel, waarde);
+    return waarde;
+  }
   const waarde = maak();
-  if (geheugen.size > 20000) geheugen.clear();
+  if (geheugen.size >= GEHEUGEN_MAX) {
+    let weg = GEHEUGEN_MAX / 4;
+    for (const oud of geheugen.keys()) {
+      geheugen.delete(oud);
+      if (--weg <= 0) break;
+    }
+  }
   geheugen.set(sleutel, waarde);
   return waarde;
 }
@@ -161,7 +176,7 @@ const zoekInAflevering = (a, termen) => onthoud(`za|${a.id}|${a.bijgewerkt}|${te
 // kamerstukken hoofdlettergevoelig ("Assen" vindt niet "assen", zie src/termen.mjs).
 function kamerTreffers(k, termen, opties) {
   if (!k.kdb || !termen.length) return [];
-  const sleutel = `kt|${opties.hoofdletters ? 'H' : ''}|${termen.join('\u0000')}|${opties.ookTermen?.join('\u0000') || ''}|${opties.sinds}|${opties.tot || ''}|${k.kamerVersie}`;
+  const sleutel = `kt|${opties.hoofdletters ? 'H' : ''}|${termen.join('\u0000')}|${opties.ookTermen?.join('\u0000') || ''}|${opties.sinds}|${opties.tot || ''}|${opties.minDatum || ''}|${k.kamerVersie}`;
   return onthoud(sleutel, () => k.kdb.feedTreffers(termen, { ...opties, tot: opties.tot || '9999' }));
 }
 
@@ -234,7 +249,27 @@ export function meldingTreffers(k, gebruiker, melding, { sinds, tot }) {
     }
   }
 
-  if (wil('kamerstuk') && k.kdb) {
+  if (wil('kamerstuk') && k.kdb && alles) {
+    // Zonder zoekterm: per regio, zoals de feed. Eén zoekvraag met alle ~1000
+    // sleutelwoorden van veertig regio's is voor SQLite drie keer zo traag.
+    const perStuk = new Map();
+    let meer = 0;
+    for (const id of scope) {
+      const regio = k.regioMap.get(id);
+      if (!regio || !geldtVoor(regio, TWEEDE_KAMER.id)) continue;
+      const kt = kamerTreffers(k, actieveTermen(regio), { sinds, tot, minDatum: minDatum(sinds), hoofdletters: true });
+      meer += kt.meer || 0;
+      for (const t of kt) {
+        const bestaand = perStuk.get(t.stuk.id);
+        if (bestaand) bestaand.regios.push(id);
+        else perStuk.set(t.stuk.id, { ...t, regios: [id] });
+      }
+    }
+    for (const t of perStuk.values()) {
+      uit.push({ ...kamerRegel(t.stuk, t.regios, match(t.term)), gevonden: [{ term: t.term, fragment: t.fragment }], url: stukUrl(t.stuk), stuk: t.stuk });
+    }
+    if (meer) uit.meerKamerstukken = meer;
+  } else if (wil('kamerstuk') && k.kdb) {
     let ookTermen = null;
     if (scope) {
       ookTermen = [...new Set([...scope].map((id) => k.regioMap.get(id))
@@ -242,9 +277,7 @@ export function meldingTreffers(k, gebruiker, melding, { sinds, tot }) {
         .flatMap(actieveTermen))];
     }
     if (!scope || ookTermen.length) {
-      const kt = alles
-        ? kamerTreffers(k, ookTermen, { sinds, tot, minDatum: minDatum(sinds), hoofdletters: true })
-        : kamerTreffers(k, termen, { sinds, tot, minDatum: minDatum(sinds), ookTermen });
+      const kt = kamerTreffers(k, termen, { sinds, tot, minDatum: minDatum(sinds), ookTermen });
       for (const t of kt) {
         uit.push({ ...kamerRegel(t.stuk, [], match(t.term)), gevonden: [{ term: t.term, fragment: t.fragment }], url: stukUrl(t.stuk), stuk: t.stuk });
       }
@@ -270,6 +303,41 @@ export function meldingTreffers(k, gebruiker, melding, { sinds, tot }) {
     }
   }
   return uit;
+}
+
+// Het geheugen vullen voor de periode van de feed: elk landelijk stuk en elke
+// landelijke aflevering één keer routeren, in kleine stappen met ruimte voor
+// andere verzoeken ertussen. Na een herstart (of nieuwe sleutelwoorden) doet de
+// eerste die de feed opent dat anders in één keer, en wacht iedereen even mee.
+// Ook de kamerstukken per regio, met dezelfde grens als bouwFeed (begin van de
+// dag), zodat het precies die zoekvragen zijn; die verlopen bij elk nieuw
+// kamerstuk, dus ook na elke kamerronde (src/dienst.mjs).
+export async function warmOp(ctx, { dagen = FEED_DAGEN, stapMs = 25 } = {}) {
+  const k = maakKader(ctx);
+  const grens = beginVanDag(Date.now() - dagen * DAG_MS).toISOString();
+  const werk = [];
+  for (const item of Object.values(k.opslag.items)) {
+    if (item.basislijn || item.eersteGezien <= grens) continue;
+    const bron = k.bronnen.get(item.bron);
+    if (bron && isLandelijk(item, bron)) werk.push(() => routeerItem(k, item, bron));
+  }
+  for (const a of k.adb?.metTranscriptSinds(grens) || []) {
+    if (k.bronnen.get(a.bron)?.bereik === 'landelijk') werk.push(() => routeerAflevering(k, a));
+  }
+  const gevolgd = new Set(k.opslag.gebruikers.flatMap((g) => g.regios));
+  for (const regio of k.regios) {
+    if (!gevolgd.has(regio.id) || !geldtVoor(regio, TWEEDE_KAMER.id)) continue;
+    werk.push(() => kamerTreffers(k, actieveTermen(regio), { sinds: grens, tot: null, minDatum: grens.slice(0, 10), hoofdletters: true }));
+  }
+  let begin = performance.now();
+  for (const stap of werk) {
+    stap();
+    if (performance.now() - begin > stapMs) {
+      await new Promise((klaar) => setImmediate(klaar));
+      begin = performance.now();
+    }
+  }
+  return werk.length;
 }
 
 // ---------- de feed ----------
