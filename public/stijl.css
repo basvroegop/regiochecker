@@ -238,7 +238,9 @@ input:focus-visible + .vakje { outline: 2px solid var(--color-accent); outline-o
 .voortgang { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .balk { position: relative; height: 10px; background: var(--color-neutral-300); cursor: pointer; }
 .balk .vulling { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--color-text); }
-.balk .tick { position: absolute; top: -5px; width: 3px; height: 20px; background: var(--color-accent); pointer-events: none; }
+.balk .tick { position: absolute; top: -5px; width: 3px; height: 20px; margin-left: -1px; background: var(--color-accent); }
+.balk .tick::after { content: ""; position: absolute; inset: 0 -4px; }
+.balk .tick:hover { background: var(--color-accent-600); }
 .tijden { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--color-neutral-700); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
 .tijden strong { color: var(--color-text); }
 .tijden .nu { overflow: hidden; text-overflow: ellipsis; }

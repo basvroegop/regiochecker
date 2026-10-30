@@ -302,6 +302,14 @@ function tijdLink(d, t, inhoud, klasse) {
   return `<span class="${klasse}">${inhoud}</span>`;
 }
 
+// De treffers die 'Waarom staat dit in je feed?' toont: één per term, ook als hij
+// er zowel als sleutelwoord als via een melding in staat. Hun tijden zijn ook de
+// streepjes in de spelerbalk van een debat.
+function waaromRijen(d) {
+  const getoond = new Set();
+  return (d.treffers || []).filter((t) => (t.melding || d.landelijk) && !getoond.has(t.term) && getoond.add(t.term));
+}
+
 function waaromHtml(d) {
   const treffers = d.treffers || [];
   const viaRegio = treffers.filter((t) => t.regio);
@@ -332,9 +340,7 @@ function waaromHtml(d) {
   if (audio && d.gehoord) zinnen.push('Klik op een tijd om naar dat moment in het debat te gaan.');
   else if (audio && d.video) zinnen.push('Klik op een tijd om vanaf daar te kijken.');
   else if (audio && (d.speler || d.youtube)) zinnen.push('Klik op een tijd om vanaf daar te luisteren.');
-  // Eén rij per term, ook als hij er zowel als sleutelwoord als via een melding in staat.
-  const getoond = new Set();
-  const rijen = treffers.filter((t) => (t.melding || d.landelijk) && !getoond.has(t.term) && getoond.add(t.term)).map((t) => {
+  const rijen = waaromRijen(d).map((t) => {
     const links = audio && t.tijd !== undefined
       ? tijdLink(d, t.tijd, `${icoon('play', 12)}${tijdcode(t.tijd)}`, 'treffer-tijd')
       : `<span class="treffer-term">${esc(t.term)}${t.aantal && !t.plek ? `<span class="aantal">${t.aantal}× in het stuk</span>` : ''}</span>`;
@@ -821,18 +827,27 @@ function koppelSpeler(d, media = null) {
     audio.preload = 'metadata';
     audio.src = d.speler;
   }
-  const sp = { audio, beurt: -1, volgen: true, starts: beurten(d).map((b) => b.start), namen: beurten(d).map((b) => sprekerInfo(d).get(b.sleutel)?.label || b.spreker || '') };
+  const sp = { audio, beurt: -1, starts: beurten(d).map((b) => b.start), namen: beurten(d).map((b) => sprekerInfo(d).get(b.sleutel)?.label || b.spreker || '') };
   staat.speler = sp;
   const duur = () => audio.duration && Number.isFinite(audio.duration) ? audio.duration : d.duur || 0;
+  // Streepjes in de balk: bij een vergadering met agenda het begin van elk
+  // agendapunt, anders de tijden uit 'Waarom staat dit in je feed?' (termen op
+  // hetzelfde moment delen één streepje).
+  const opTijd = new Map();
+  if (!d.gehoord && d.agenda?.length) for (const p of d.agenda) opTijd.set(p.start, [...(opTijd.get(p.start) || []), p.titel]);
+  else if (waaromHtml(d)) for (const t of waaromRijen(d)) if (t.tijd !== undefined) opTijd.set(t.tijd, [...(opTijd.get(t.tijd) || []), t.term]);
+  const markeringen = [...opTijd].map(([tijd, namen]) => ({ tijd, label: `${tijdcode(tijd)} ${namen.join(', ')}` }));
   const tekenTicks = () => {
     const balk = $('#balk');
     if (!balk || !duur()) return;
     $$('.tick', balk).forEach((t) => t.remove());
-    const tijden = uniek((d.treffers || []).flatMap((t) => t.tijden || [t.tijd]).filter((t) => t !== undefined));
-    for (const t of tijden) {
+    for (const m of markeringen) {
+      if (!(m.tijd >= 0 && m.tijd <= duur())) continue;
       const tick = document.createElement('span');
       tick.className = 'tick';
-      tick.style.left = `${(t / duur()) * 100}%`;
+      tick.style.left = `${(m.tijd / duur()) * 100}%`;
+      tick.title = m.label;
+      tick.addEventListener('click', (e) => { e.stopPropagation(); spring(m.tijd); });
       balk.append(tick);
     }
   };
@@ -857,7 +872,7 @@ function koppelSpeler(d, media = null) {
     const t = audio.currentTime;
     $('#vulling').style.width = `${duur() ? (t / duur()) * 100 : 0}%`;
     $('#nu-tijd').textContent = tijdcode(t);
-    // De beurt die nu loopt, oplichten en in beeld houden.
+    // De beurt die nu loopt, oplichten. Niet erheen scrollen: het scherm blijft staan.
     let n = -1;
     for (let lo = 0, hi = sp.starts.length - 1; lo <= hi;) {
       const mid = (lo + hi) >> 1;
@@ -867,11 +882,7 @@ function koppelSpeler(d, media = null) {
       sp.beurt = n;
       $('#nu-wie').textContent = n >= 0 && sp.namen[n] ? ` · ${sp.namen[n]}` : '';
       $$('.beurt.actief').forEach((b) => b.classList.remove('actief'));
-      const el = $(`.beurt[data-beurt="${n}"]`);
-      if (el) {
-        el.classList.add('actief');
-        if (!audio.paused && sp.volgen) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      }
+      $(`.beurt[data-beurt="${n}"]`)?.classList.add('actief');
     }
   });
   $('#speel').addEventListener('click', () => (audio.paused ? audio.play() : audio.pause()));
@@ -904,7 +915,6 @@ function spring(t) {
   const sp = staat.speler;
   if (!sp) return;
   sp.audio.currentTime = Math.max(0, t);
-  sp.volgen = true;
   sp.audio.play().catch(() => {});
 }
 
@@ -1085,13 +1095,6 @@ function koppelPaneel(paneel) {
   paneel.addEventListener('change', (e) => {
     if (e.target.classList.contains('naamveld') && e.target.value.trim()) noemSpreker(e.target.dataset.profiel, e.target.value);
   });
-  // Zelf scrollen in het transcript zet het meelezen even uit.
-  paneel.addEventListener('wheel', () => {
-    if (!staat.speler) return;
-    staat.speler.volgen = false;
-    clearTimeout(koppelPaneel.volgTimer);
-    koppelPaneel.volgTimer = setTimeout(() => { if (staat.speler) staat.speler.volgen = true; }, 8000);
-  }, { passive: true });
 }
 
 // ---------- de weergave ----------

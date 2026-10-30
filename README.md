@@ -8,8 +8,9 @@ YouTube-kanalen en podcasts, getranscribeerd met sprekers en genoemde namen.
 Daarnaast een **weekmail** per journalist met per gemeente een samenvatting van
 wat er speelt, en **directe meldingen** op zoektermen.
 
-Draait op https://regiochecker.vroeg.app. Inloggen via de Authelia op deze
-server (authelia.vroeg.app). Het ontwerp volgt de overdracht uit Claude Design
+Draait op https://checker.mh-n.nl (sinds 30 oktober 2026; daarvoor
+regiochecker.vroeg.app, dat nu doorverwijst). Inloggen via de Authelia op deze
+server (authelia.mh-n.nl). Het ontwerp volgt de overdracht uit Claude Design
 (Modernist-ontwerpsysteem, `public/modernist.css`), met per titel een eigen
 signaalkleur: LC paars (#482AA5), DVHN blauw (#006ED1).
 
@@ -38,8 +39,11 @@ Audio-archief heeft eigen filters. Een stuk openen markeert het als gelezen;
   **Waarom staat dit in je feed?**: de term, hoe vaak hij voorkomt en de zin
   eromheen (bij audio met de tijd).
 - Een raadsvergadering, video of podcast opent met speler (als de audio bewaard
-  is), de treffers als streepjes op de tijdbalk, en het transcript per beurt. De
-  beurt die nu speelt licht op; een tijd aanklikken springt erheen. Een spreker
+  is), streepjes op de tijdbalk, en het transcript per beurt. De streepjes zijn
+  bij een vergadering met agenda het begin van elk agendapunt, anders (ook bij
+  een Kamerdebat) de tijden uit **Waarom staat dit in je feed?**; erover zweven
+  toont het punt of de term, erop klikken springt erheen. De beurt die nu speelt
+  licht op, maar het scherm scrolt niet mee; een tijd aanklikken springt erheen. Een spreker
   zonder naam heeft een ▶ (kort fragment van die stem) en een veld **Naam
   invullen**; zo'n naam geldt voor die stem in alle opnames, ook in Plaud.
   Weet het vergaderplatform wie wanneer de microfoon had (Company Webcast,
@@ -484,7 +488,7 @@ aflevering zonder; de aflevering zelf mislukt daar nooit door.
 
 **Video in het leespaneel.** Heeft het platform beeld, dan staat de video van
 de vergadering in het leespaneel, met de spelerbalk eronder (afspelen, −15 s,
-tempo, beeldvullend, de treffers als streepjes, wie er spreekt); een klik op een
+tempo, beeldvullend, de agendapunten of treffers als streepjes, wie er spreekt); een klik op een
 tijd in het transcript, bij Sprekers of bij een treffer zet de video daar, en de
 lopende beurt licht op. Company Webcast geeft een mp4 (ondertekende link van een
 dag, dus elke keer opnieuw opgezocht), Notubiz en iBabs (babscast) een HLS-stream
@@ -714,8 +718,16 @@ inlognaam). Wie niet is uitgenodigd, krijgt een nette weigering. Is er nog geen
 beheerder, dan wordt de eerste die inlogt beheerder. Iemand zonder inlog kan
 alleen de weekmail krijgen.
 
-Het Authelia-account zelf, en toegang tot deze site, regel je in Authelia
-(`/opt/authelia/config/configuration.yml`, de regel voor `regiochecker.vroeg.app`).
+Het Authelia-account zelf regel je in Authelia (`/opt/authelia/config/`:
+`users_database.yml` voor de accounts, `configuration.yml` met de regel voor
+`checker.mh-n.nl`). Elk Authelia-account mag op de site; binnen komt alleen wie
+hier ook een account heeft. Op 30 oktober 2026 kreeg iedereen met een
+Authelia-account er een, ook de gebruikers van de Verhalenplanner
+(verhalen.mh-n.nl): die zijn met hun wachtwoord van daar in Authelia gezet (de
+scrypt-hash van de Verhalenplanner, omgeschreven naar het `$scrypt$`-formaat dat
+Authelia leest), in de groep `checker`. Wie daar nog geen wachtwoord had
+gekozen, kreeg geen account. Een wachtwoord dat iemand later in de
+Verhalenplanner wijzigt, gaat niet vanzelf mee.
 
 ### Regio's, bronnen en audio
 
@@ -877,13 +889,15 @@ De Tailscale-identiteit van de sidecar staat apart in `./tailscale`.
 
 ### Beveiliging
 
-- Inloggen gaat via de gedeelde Authelia in `/opt/authelia`, met de Traefik-
-  middleware `authelia@docker`. Voor deze site zijn daar op 26 oktober 2026
-  drie dingen toegevoegd: een sessiecookie voor `vroeg.app` met inlogpagina
-  `authelia.vroeg.app`, een Traefik-router voor die inlogpagina, en een
-  toegangsregel voor `regiochecker.vroeg.app`. De bestaande domeinen zijn
-  ongewijzigd. Terugdraaien: de bestanden uit `/opt/authelia/backups/regiochecker-*`
-  terugzetten en daar `docker compose up -d`.
+- Inloggen gaat via de gedeelde Authelia in `/opt/authelia` (authelia.mh-n.nl,
+  sessiecookie voor `mh-n.nl`), met de Traefik-middleware `authelia@docker`. Op 30
+  oktober 2026 (de verhuizing naar checker.mh-n.nl) is daar de toegangsregel voor
+  `checker.mh-n.nl` gekomen, zijn de accounts uit de Verhalenplanner toegevoegd
+  (groep `checker`), en zijn de cookie en inlogpagina voor `vroeg.app` van 26
+  oktober weer weggehaald. Wiki.js logt via OIDC in op dezelfde Authelia en maakt
+  bij elke inlog zelf een account aan; een eigen OIDC-beleid (`wiki`) houdt de
+  groep `checker` daarom buiten de wiki. Terugdraaien: de bestanden uit
+  `/opt/authelia/backups/checker-mhn-*` terugzetten en daar `docker compose up -d`.
 - Vóór Authelia haalt Traefik de `Authorization`-kop weg (middleware
   `regiochecker-zonder-basic`), anders kreeg een browser met oude basic-auth-
   gegevens een wachtwoord-pop-up in plaats van het inlogscherm.
