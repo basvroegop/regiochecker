@@ -22,12 +22,16 @@ thuisnetwerk, via Tailscale.
 
 ### Feed
 
-Links de lijst, rechts het leespaneel. Bovenaan de gevolgde regio's (klik er een
-om alleen die te tonen; met **+** volg je er meer) en tabbladen per soort bron
-met aantallen (Gemeentenieuws, Ingekomen, Woo, Bekendmakingen,
-Raadsvergaderingen, Kamerstukken, Kamerdebatten, YouTube, Podcasts, KNMI, Raad
-van State, Ransomware, Verkeer, Ingezonden; alleen de soorten waarvan er een bron
-is), plus **Alleen ongelezen**. Een stuk openen markeert het als gelezen;
+Links de lijst, rechts het leespaneel; verder niets, zodat het rustig blijft.
+Boven de lijst staat alleen de knop **Filters** (met het aantal filters dat
+aanstaat en wat dat is, zoals "Opsterland · Kamerstukken"). Die klapt open met:
+de gevolgde regio's (klik er een om alleen die te tonen; met **+ volgen** volg je
+er meer), de soorten bron met aantallen (Gemeentenieuws, Ingekomen, Woo,
+Bekendmakingen, Raadsvergaderingen, Kamerstukken, Kamerdebatten, YouTube,
+Podcasts, KNMI, Raad van State, Ransomware, Verkeer, Ingezonden; alleen de
+soorten waarvan er een bron is), **Alleen ongelezen** en **Wis filters**. Esc
+klapt het weer dicht. Bij Zoeken staat naast de knop het aantal resultaten; het
+Audio-archief heeft eigen filters. Een stuk openen markeert het als gelezen;
 **j**/**k** of de pijltjes lopen door de lijst, **s** bewaart.
 
 - Elk stuk dat via een sleutelwoord of een melding binnenkwam, heeft het blok

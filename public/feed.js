@@ -14,8 +14,9 @@ const STATUSNAAM = { wacht: 'in de wachtrij', downloaden: 'wordt gedownload', tr
 const groepen = () => ['alles', ...Object.keys(app.ik.groepen || {})];
 const groepNaam = (g) => (g === 'alles' ? 'Alles' : app.ik.groepen?.[g] || g);
 
-// Filters blijven staan als je even naar een andere pagina gaat.
-const filters = { groep: 'alles', regio: '', ongelezen: false };
+// Filters blijven staan als je even naar een andere pagina gaat. `open`: het
+// filtervak onder de knop Filters is opengeklapt.
+const filters = { groep: 'alles', regio: '', ongelezen: false, open: false };
 
 const staat = {
   modus: 'feed',
@@ -61,6 +62,9 @@ function regioNaam(id) {
   return app.ik.regios.find((r) => r.id === id)?.naam || id;
 }
 
+// Boven de lijst alleen een knop Filters (met wat er aanstaat); het vak met
+// regio's, soorten en "Alleen ongelezen" klapt eronder open. Zo blijft de pagina
+// rustig: links de lijst, rechts het stuk. Het audio-archief heeft eigen filters.
 function tekenFilters() {
   const balk = $('#filterbalk');
   if (staat.modus === 'archief') {
@@ -75,21 +79,31 @@ function tekenFilters() {
     tellingen.alles++;
     tellingen[i.groep] = (tellingen[i.groep] || 0) + 1;
   }
+  const zoeken = staat.modus === 'zoeken';
   const gevolgd = app.ik.gebruiker.regios;
-  let links;
-  if (staat.modus === 'zoeken') {
-    links = `<span class="klein"><strong>${staat.items.length}</strong> resultaten voor ${esc(aanhalen(staat.zoekvraag))}</span>`;
-  } else {
-    links = gevolgd.map((id) => `<button class="chip${filters.regio && filters.regio !== id ? ' uit' : ''}" data-regio="${esc(id)}" title="${filters.regio === id ? 'Weer alle regio\'s tonen' : 'Alleen deze regio tonen'}">${esc(regioNaam(id))}</button>`).join('')
-      + `<button class="chip-plus" id="regio-plus" title="Regio's volgen" aria-haspopup="true">+</button>`;
-    if (!gevolgd.length) links = `<span class="klein zacht">Je volgt nog geen regio's</span><button class="chip-plus" id="regio-plus" title="Regio's volgen">+</button>`;
-  }
+  const actief = [
+    !zoeken && filters.regio && regioNaam(filters.regio),
+    filters.groep !== 'alles' && groepNaam(filters.groep),
+    filters.ongelezen && 'ongelezen',
+  ].filter(Boolean);
+  const regios = gevolgd.length
+    ? gevolgd.map((id) => `<button class="chip${filters.regio && filters.regio !== id ? ' uit' : ''}" data-regio="${esc(id)}" title="${filters.regio === id ? 'Weer alle regio\'s tonen' : 'Alleen deze regio tonen'}">${esc(regioNaam(id))}</button>`).join('')
+    : '<span class="klein zacht">Je volgt nog geen regio\'s</span>';
   balk.innerHTML = `
-    <div class="regiochips">${links}</div>
-    <div class="soorttabs" role="tablist">
-      ${groepen().map((g) => `<button class="soorttab" role="tab" data-groep="${g}" aria-selected="${filters.groep === g}">${esc(groepNaam(g))} <span class="n">${tellingen[g] || 0}</span></button>`).join('')}
-      <label class="ongelezen-schakel"><input type="checkbox" id="alleen-ongelezen" ${filters.ongelezen ? 'checked' : ''}><span class="vakje"></span>Alleen ongelezen</label>
-    </div>`;
+    <div class="filterkop">
+      <button class="filterknop" id="filterknop" aria-expanded="${filters.open}" aria-controls="filtervak">${icoon('filter', 14)}Filters${actief.length ? ` <span class="badge">${actief.length}</span>` : ''}</button>
+      <span class="filteruitleg">${zoeken ? `<strong>${staat.items.length}</strong> resultaten voor ${esc(aanhalen(staat.zoekvraag))}` : esc(actief.join(' · '))}</span>
+    </div>
+    ${filters.open ? `<div class="filtervak" id="filtervak">
+      ${zoeken ? '' : `<div class="filtergroep"><span class="filterlabel">Regio's</span><div class="filterchips">${regios}<button class="chip-plus" id="regio-plus" title="Regio's volgen" aria-haspopup="true">+ volgen</button></div></div>`}
+      <div class="filtergroep"><span class="filterlabel">Soort</span><div class="filterchips" role="radiogroup">
+        ${groepen().map((g) => `<button class="soortkeuze" role="radio" data-groep="${g}" aria-checked="${filters.groep === g}">${esc(groepNaam(g))} <span class="n">${tellingen[g] || 0}</span></button>`).join('')}
+      </div></div>
+      <div class="filtervoet">
+        <label class="ongelezen-schakel"><input type="checkbox" id="alleen-ongelezen" ${filters.ongelezen ? 'checked' : ''}><span class="vakje"></span>Alleen ongelezen</label>
+        ${actief.length ? '<button class="linkknop" id="wis-filters">Wis filters</button>' : ''}
+      </div>
+    </div>` : ''}`;
 }
 
 function regioPopover(knop) {
@@ -1051,8 +1065,13 @@ export async function toonFeed(hoofd, { modus, params }) {
   staat.zoekvraag = modus === 'zoeken' ? params.get('q') || '' : '';
   staat.gekozen = null;
   staat.detail = null;
-  hoofd.innerHTML = `<div class="filterbalk" id="filterbalk"></div>
-    <div class="feed${staat.volledig ? ' volledig' : ''}" id="feed"><div class="lijst" id="lijst" role="listbox" aria-label="Stukken"><p class="leeg">Laden…</p></div><section class="paneel" id="paneel"></section></div>`;
+  // Het audio-archief heeft zijn eigen balk over de hele breedte; de feed,
+  // Bewaard en Zoeken alleen een knop Filters boven de lijst.
+  const lijst = '<div class="lijst" id="lijst" role="listbox" aria-label="Stukken"><p class="leeg">Laden…</p></div>';
+  hoofd.innerHTML = modus === 'archief'
+    ? `<div class="filterbalk" id="filterbalk"></div>
+      <div class="feed${staat.volledig ? ' volledig' : ''}" id="feed"><div class="lijstkolom">${lijst}</div><section class="paneel" id="paneel"></section></div>`
+    : `<div class="feed${staat.volledig ? ' volledig' : ''}" id="feed"><div class="lijstkolom"><div class="lijstkop" id="filterbalk"></div>${lijst}</div><section class="paneel" id="paneel"></section></div>`;
   if (modus === 'archief') await laadBronnen();
   staat.items = await laad();
   tekenFilters();
@@ -1081,6 +1100,17 @@ export async function toonFeed(hoofd, { modus, params }) {
       tekenLijst();
       return;
     }
+    if (e.target.closest('#filterknop')) {
+      filters.open = !filters.open;
+      tekenFilters();
+      return;
+    }
+    if (e.target.closest('#wis-filters')) {
+      Object.assign(filters, { groep: 'alles', regio: '', ongelezen: false });
+      tekenFilters();
+      tekenLijst();
+      return;
+    }
     if (e.target.closest('#regio-plus')) regioPopover(e.target.closest('#regio-plus'));
   });
   $('#filterbalk').addEventListener('change', (e) => {
@@ -1097,6 +1127,13 @@ export async function toonFeed(hoofd, { modus, params }) {
   koppelPaneel($('#paneel'));
 
   const toetsen = (e) => {
+    // Esc klapt het filtervak dicht (ook vanaf het vinkje "Alleen ongelezen").
+    if (e.key === 'Escape' && filters.open && !$('.popover') && staat.modus !== 'archief') {
+      filters.open = false;
+      tekenFilters();
+      $('#filterknop')?.focus();
+      return;
+    }
     if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === 'j' || e.key === 'ArrowDown') { e.preventDefault(); volgende(1); }
     if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); volgende(-1); }

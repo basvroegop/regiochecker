@@ -73,27 +73,30 @@ mark { background: var(--color-accent-200); color: var(--color-text); padding: 0
 .gebruikersnaam { font-weight: 600; }
 .kop-link { font-size: 13px; font-weight: 600; color: var(--color-accent-700); text-decoration: none; }
 
-/* ---------- filterbalk ---------- */
+/* ---------- filters: een knop boven de lijst, het vak klapt eronder open ---------- */
 .filterbalk { display: flex; align-items: stretch; flex: none; min-height: 48px; border-bottom: 2px solid var(--color-text); }
-.regiochips {
-  display: flex; align-items: center; gap: 6px; flex: none; width: 440px; padding: 0 20px;
-  border-right: 2px solid var(--color-text); font-size: 13px; overflow-x: auto; scrollbar-width: none; position: relative;
-}
+.lijstkop { flex: none; border-bottom: 2px solid var(--color-text); }
+.filterkop { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 20px; }
+.filterknop { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 2px solid var(--color-text); background: none; font-size: 13px; font-weight: 600; flex: none; }
+.filterknop:hover { background: var(--color-surface); }
+.filterknop[aria-expanded="true"] { background: var(--color-text); color: var(--color-bg); }
+.filterknop .badge { background: var(--color-accent); color: #fff; padding: 0 6px; font-size: 12px; }
+.filteruitleg { min-width: 0; font-size: 13px; color: var(--color-neutral-700); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.filtervak { display: grid; gap: 14px; padding: 2px 20px 16px; }
+.filtergroep { display: grid; gap: 6px; }
+.filterlabel { font-size: 12px; font-weight: 600; color: var(--color-neutral-700); }
+.filterchips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.filtervoet { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .chip { padding: 4px 8px; border: 0; background: var(--color-text); color: var(--color-bg); font-weight: 600; font-size: 13px; white-space: nowrap; }
 .chip.uit { background: transparent; color: var(--color-neutral-700); box-shadow: inset 0 0 0 2px var(--color-neutral-300); }
-.chip-plus { padding: 4px 6px; border: 0; background: none; color: var(--color-neutral-700); font-size: 15px; font-weight: 600; }
+.chip-plus { padding: 4px 6px; border: 0; background: none; color: var(--color-neutral-700); font-size: 13px; font-weight: 600; }
 .chip-plus:hover { color: var(--color-text); }
-/* Past niet alles op één regel, dan lopen de tabbladen door op een tweede. */
-.soorttabs { display: flex; flex-wrap: wrap; flex: 1; min-width: 0; }
-.soorttab {
-  display: flex; align-items: center; gap: 6px; min-height: 46px; padding: 0 12px; white-space: nowrap;
-  font-size: 13px; font-weight: 600; border: 0; border-right: 1px solid var(--color-neutral-300); background: none;
-  box-shadow: inset 0 -1px var(--color-neutral-300);
-}
-.soorttab .n { font-weight: 400; color: var(--color-neutral-700); }
-.soorttab[aria-selected="true"] { background: var(--color-surface); }
-.soorttab:hover { background: var(--color-surface); }
-.ongelezen-schakel { margin-left: auto; display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 16px; white-space: nowrap; font-size: 13px; color: var(--color-neutral-700); cursor: pointer; }
+.soortkeuze { padding: 4px 8px; border: 0; background: none; box-shadow: inset 0 0 0 2px var(--color-neutral-300); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.soortkeuze:hover { box-shadow: inset 0 0 0 2px var(--color-text); }
+.soortkeuze .n { font-weight: 400; color: var(--color-neutral-700); }
+.soortkeuze[aria-checked="true"] { background: var(--color-text); color: var(--color-bg); box-shadow: none; }
+.soortkeuze[aria-checked="true"] .n { color: inherit; opacity: .75; }
+.ongelezen-schakel { display: flex; align-items: center; gap: 8px; white-space: nowrap; font-size: 13px; color: var(--color-neutral-700); cursor: pointer; }
 .ongelezen-schakel input { position: absolute; opacity: 0; width: 0; height: 0; }
 .vakje { width: 16px; height: 16px; border: 2px solid var(--color-text); display: flex; align-items: center; justify-content: center; flex: none; }
 input:checked + .vakje::after, .vakje.aan::after { content: ''; width: 8px; height: 8px; background: var(--color-text); }
@@ -110,12 +113,13 @@ input:focus-visible + .vakje { outline: 2px solid var(--color-accent); outline-o
 .popover .popover-voet { padding: 8px 16px 0; font-size: 12px; color: var(--color-neutral-700); }
 
 /* ---------- feed: lijst + leespaneel ---------- */
-/* De balk erboven kan twee regels hoog zijn: de feed neemt de rest van het scherm. */
+/* De feed neemt de rest van het scherm; de lijstkolom heeft de filters bovenaan. */
 #hoofd:has(> .feed) { display: flex; flex-direction: column; height: calc(100vh - 64px); }
 .feed { display: grid; grid-template-columns: 440px minmax(0, 1fr); flex: 1; min-height: 0; }
 .feed.volledig { grid-template-columns: 0 minmax(0, 1fr); }
-.feed.volledig .lijst { visibility: hidden; border: 0; }
-.lijst { border-right: 2px solid var(--color-text); overflow-y: auto; }
+.feed.volledig .lijstkolom { visibility: hidden; border: 0; }
+.lijstkolom { display: flex; flex-direction: column; min-height: 0; border-right: 2px solid var(--color-text); }
+.lijst { flex: 1; min-height: 0; overflow-y: auto; }
 .dagkop {
   position: sticky; top: 0; z-index: 2; padding: 14px 20px 6px; background: var(--color-bg);
   font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--color-accent-700);
