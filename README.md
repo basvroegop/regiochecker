@@ -98,6 +98,60 @@ voorkomen, `"woordgroep"` als geheel, `OR` voor alternatieven.
   wel; zonder zoekterm zou dat hele regio's toevoegen, en welke regio's de feed
   toont, kies je met volgen.
 
+## Hoe de mails eruitzien
+
+Sinds 30 oktober 2026 hebben de mails de huisstijl van de website (Modernist,
+Archivo), volgens de handover van Claude Design. De opmaak staat in
+`src/mailstijl.mjs` en geldt voor alle mails: de meldingsmail, de weekmail, de
+uitnodiging en de testmail.
+- **Huisstijl per titel.** De accentkleur volgt de titel van de ontvanger: LC
+  paars, DVHN blauw. De tinten zijn vaste waarden, want mailprogramma's kennen
+  geen CSS-variabelen.
+- **Bouw.** Tabellen met inline stijlen, zodat Outlook het ook goed toont. Er
+  staat een verborgen voorbeeldtekst (preheader) in, en lichte kleuren zijn
+  afgedwongen. Op mobiel worden de marges smaller en gaan tellers en knoppen
+  onder elkaar.
+- **Te lange woorden** (zoals een webadres) breken af, zodat een bron de mail
+  nooit breder kan maken.
+
+**Meldingsmail.**
+- **Onderwerp**: bij één stuk "{zoekterm}: {titel}" (zonder zoekterm
+  "{regio}: {titel}"); bij meer stukken zoals altijd: "Melding: 3 nieuwe
+  stukken met …".
+- **Opbouw per stuk**: waarom het erin staat, soort en regio, de titel, de
+  kenmerken, het fragmentblok met de treffer, en de knoppen **Openen in
+  Regiochecker** en **Bij {bron}**.
+- **Tekst van het stuk.** Bij hooguit drie stukken staat ook de tekst van het
+  stuk erin, met de zoektermen gemarkeerd:
+  - Kamerstukken komen uit de kamerdatabase;
+  - websites uit het opgehaalde document of de korte inhoud;
+  - audio uit het transcript, twee minuten voor tot twee minuten na de eerste
+    treffer, met per spreker een alinea en de tijd;
+  - een aflevering zonder treffer (melding zonder zoekterm) krijgt de korte
+    samenvatting.
+- **Lengte.** Tot ongeveer 600 woorden, afgekapt op een alineagrens. Staat de
+  eerste vondst verder in de tekst, dan het deel eromheen; de handover vroeg
+  het begin, maar in een agenda van 6.000 woorden staat de vondst zelden in de
+  eerste 600. Bij meer dan drie stukken alleen het fragment.
+
+**Weekmail.**
+- **Onderwerp**: "Week 44: 52 nieuwe stukken in Smallingerland, Heerenveen en
+  Leeuwarden". Bij meer dan drie regio's de eerste twee en "en 38 andere". Het
+  weeknummer is dat van het midden van de periode. Ging er langer dan een week
+  geen mail uit, dan staan de datums erachter in plaats van een weeknummer.
+- **Bovenaan**: "Week 44", de periode, een groet, en een rij tellers met per
+  regio het aantal stukken, drie per rij.
+- **Per regio**: alle stukken, niet alleen de nieuwste (keuze van de
+  opdrachtgever), met onderaan "Alle {n} stukken uit {regio} →" naar de feed.
+- **Omvang.** Met veel regio's wordt de mail groot: met veertig regio's ongeveer
+  1 MB. Gmail laat boven ongeveer 100 kB een link "Volledig bericht weergeven"
+  zien; Outlook toont alles.
+
+**Voorbeeld zonder versturen**: `GET /api/beheer/mailvoorbeeld?soort=week` of
+`?soort=melding`, met `&gebruiker=<id>`, `&titel=LC|DVHN`, `&aantal=1` (alleen
+het nieuwste stuk, voor de mail met de tekst van het stuk), `&dagen=7` en
+`&samenvatting=1` (alleen bij de weekmail).
+
 ## Wat er in de weekmail staat
 
 Per gemeente een H2-kop. Daaronder:

@@ -257,9 +257,10 @@ test('bijhouden, meldingen en het kopje in de regiomail', metSqlite, async () =>
     const mail = await stelMailSamen(opslag, { email: 'v@example.nl', regios: ['opsterland', 'heerenveen'], laatsteMail: '2026-10-01T00:00:00Z' }, { samenvatting: false });
     // De regio's staan op naam: eerst Heerenveen, dan Opsterland.
     const opsterland = mail.html.slice(mail.html.indexOf('>Opsterland</h2>'));
-    assert.match(opsterland, /<h3[^>]*>Kamerstukken <span[^>]*>\(1\)<\/span><\/h3>/);
+    assert.match(opsterland, /<h3[^>]*>Kamerstukken<\/h3> <span[^>]*>\(1\)<\/span>/);
     assert.match(opsterland, /href="https:\/\/www\.tweedekamer\.nl\/kamerstukken\/detail\?id=2026Z21147&amp;did=2026D1"/);
-    assert.match(opsterland, /<strong style="background:#fff3b0;">ziekenhuis<\/strong>/);
+    // De treffer gemarkeerd in de accentkleur van de ontvanger (zonder titel: LC).
+    assert.match(opsterland, /<span style="background:#33187c;color:#ffffff;[^"]*">ziekenhuis<\/span>/);
     assert.ok(!mail.html.slice(mail.html.indexOf('>Heerenveen</h2>'), mail.html.indexOf('>Opsterland</h2>')).includes('Kamerstukken'), 'zonder termen geen kopje');
     assert.match(mail.tekst, /-- Kamerstukken \(1\) --/);
     // Passen ze niet allemaal in de mail, dan staat erbij hoeveel er nog zijn.

@@ -21,7 +21,7 @@ import { isBeheerder, werkGebruikerBij, voorClient } from './gebruikers.mjs';
 import { alleRegios, alleBronnen } from './register.mjs';
 import { zichtbareGroepen, ENKELVOUD } from './regios.mjs';
 import { maakKader, bouwFeed, bewaardeFeed, zoekFeed, detail, momentopname, meldingTreffers } from './feed.mjs';
-import { controleerMelding, meldingNaam, BRONNEN } from './meldingen.mjs';
+import { controleerMelding, meldingNaam, meldingMail, BRONNEN } from './meldingen.mjs';
 import { zoekvraagTekst } from './termen.mjs';
 import { beheerApi } from './beheer.mjs';
 import { rondKoppelingAf, debatVideo, naarVideoTijd } from './gehoord.mjs';
@@ -31,10 +31,11 @@ import { publiekeInstellingen, werkInstellingenBij } from './instellingen.mjs';
 import { ollamaInfo } from './ollama.mjs';
 import { audioApi, stuurBestand } from './audio/api.mjs';
 import { worker as audioWorker } from './audio/worker.mjs';
-import { verstuur } from './mail.mjs';
+import { verstuur, stelMailSamen } from './mail.mjs';
 import { volgendeWeekmail } from './planning.mjs';
 import { documentOpVraag } from './inhoud.mjs';
 import { accountsAan } from './accounts.mjs';
+import { stijl, mailHtml, rij } from './mailstijl.mjs';
 
 const EMAIL = /^[^\s@<>,;]+@[^\s@<>,;]+\.[a-z]{2,}$/i;
 const MEDIATYPE = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm' };
@@ -230,6 +231,27 @@ export async function api(req, res, url, ctx) {
 
   // ---------- alleen beheer ----------
   alleenBeheer();
+  // Een mail bekijken zonder hem te versturen: ?soort=week of ?soort=melding,
+  // met &gebruiker=<id> (standaard jijzelf) en &titel=LC|DVHN voor de kleur.
+  // Melding: &melding=<id> (standaard de eerste), &dagen=7, &aantal=1 (alleen
+  // de nieuwste, om de mail met één stuk en de documenttekst te zien).
+  // Week: &samenvatting=1 om ook het taalmodel te laten samenvatten (traag).
+  if (route === 'GET /api/beheer/mailvoorbeeld') {
+    const g = opslag.gebruikers.find((x) => x.id === z.get('gebruiker')) || gebruiker;
+    const ontvanger = { ...g, ...(['LC', 'DVHN'].includes(z.get('titel')) ? { titel: z.get('titel') } : {}) };
+    let mail;
+    if (z.get('soort') === 'melding') {
+      const melding = opslag.meldingen.find((m) => m.id === z.get('melding')) || opslag.meldingen.find((m) => m.gebruiker === g.id);
+      if (!melding) throw new Fout(404, 'Deze gebruiker heeft geen meldingen');
+      const dagen = Math.min(90, Math.max(1, Number(z.get('dagen')) || 7));
+      ({ mail } = meldingMail(k(), melding, ontvanger, { sinds: new Date(Date.now() - dagen * DAG_MS).toISOString(), tot: new Date().toISOString(), max: Number(z.get('aantal')) || Infinity }));
+      if (!mail) throw new Fout(404, `Geen stukken voor deze melding in de afgelopen ${dagen} dagen`);
+    } else {
+      mail = await stelMailSamen(opslag, ontvanger, { samenvatting: z.get('samenvatting') === '1' });
+    }
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'X-Onderwerp': encodeURIComponent(mail.onderwerp) });
+    return res.end(mail.html);
+  }
   // Terug van het inloggen bij gehoord.de (src/gehoord.mjs): de browser van de
   // beheerder komt hier met een code; daarna terug naar Instellingen.
   if (route === 'GET /api/beheer/gehoord/terug') {
@@ -279,7 +301,13 @@ export async function api(req, res, url, ctx) {
         aan,
         onderwerp: 'Regiochecker: testmail',
         tekst: 'De SMTP-instellingen van de Regiochecker werken.',
-        html: '<p style="font-family:Arial,sans-serif">De SMTP-instellingen van de Regiochecker werken.</p>',
+        html: mailHtml({
+          s: stijl(gebruiker.titel),
+          titel: 'Regiochecker: testmail',
+          preheader: 'De SMTP-instellingen werken.',
+          rechts: 'Testmail',
+          rijen: [rij('<p style="margin:0;font-family:Archivo,Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;">De SMTP-instellingen van de Regiochecker werken.</p>', '28px 28px 32px')],
+        }),
       });
     } catch (fout) {
       throw new Fout(502, `Testmail mislukt: ${fout.message}`);

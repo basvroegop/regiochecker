@@ -22,7 +22,8 @@ import { maakKader, routeerItem, routeerAflevering } from './feed.mjs';
 import { html, kort } from './html.mjs';
 import { korteDatum, lokaleDatum } from './datum.mjs';
 import { minDatum } from './kamer/db.mjs';
-import { trefferHtml, trefferTekst, fragmentHtml } from './kamer/weergave.mjs';
+import { trefferHtml, trefferTekst } from './kamer/weergave.mjs';
+import { stijl, mailHtml, rij, letter, FAMILIE, sectieKop, categorieKop, itemRij, lijst, zacht, link, knoppen } from './mailstijl.mjs';
 import { weekmailNodig } from './planning.mjs';
 
 // Meer kamerstukken dan in een mail passen: dat zeggen, niet stilzwijgend weglaten.
@@ -75,72 +76,70 @@ function categorieen(opslag, regio, items) {
   })).filter((c) => c.items.length || c.opmerkingen.length || c.gecontroleerd);
 }
 
-const STIJL = {
-  body: 'margin:0;padding:0;background:#f4f4f1;',
-  kader: 'max-width:680px;margin:0 auto;background:#ffffff;font-family:Georgia,\'Times New Roman\',serif;color:#1d1d1b;',
-  kop: 'padding:22px 28px 14px;border-bottom:3px solid #1d1d1b;',
-  h1: 'font-size:26px;font-weight:bold;margin:0 0 4px;',
-  regio: 'padding:20px 28px 8px;',
-  h2: 'font-size:26px;margin:0 0 6px;',
-  klein: 'font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b6b66;',
-  samenvatting: 'margin:14px 0 6px;padding:12px 16px 4px;background:#fbf6e9;border-left:4px solid #c8102e;',
-  h3: 'font-size:19px;font-weight:bold;margin:26px 0 10px;padding-bottom:4px;border-bottom:1px solid #e3e1da;',
-  item: 'margin:0 0 10px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.45;',
-  link: 'color:#1d1d1b;',
-};
-
-function itemHtml(item) {
-  const extra = kenmerken(item);
-  return `<p style="${STIJL.item}"><span style="color:#6b6b66;">${html(korteDatum(item.datum) || 'z.d.')}</span> &nbsp;<a href="${html(item.url)}" style="${STIJL.link}">${html(item.titel)}</a>${extra ? `<br><span style="${STIJL.klein}">${html(extra)}</span>` : ''}</p>`;
+function itemHtml(item, s) {
+  return itemRij({ soort: ENKELVOUD[item.soort], datum: korteDatum(item.datum), titel: item.titel, url: item.url, kenmerken: kenmerken(item) }, s);
 }
 
-function regioHtml(blok, opslag) {
+// Alles wat er voor deze regio in de mail staat: de stukken van de regio zelf,
+// landelijke stukken, kamerstukken en audio.
+const aantalVan = (blok) => blok.items.length + blok.landelijk.length + blok.kamerstukken.length + blok.audio.length;
+const stukken = (n) => `${n} ${n === 1 ? 'stuk' : 'stukken'}`;
+
+function regioHtml(blok, opslag, s) {
   const { regio, items, samenvatting, samenvattingFout } = blok;
   const perSleutel = new Map(items.map((i) => [i.sleutel, i]));
-  let uit = `<div style="${STIJL.regio}"><h2 style="${STIJL.h2}">${html(regio.naam)}</h2>`;
-  uit += `<p style="${STIJL.klein}">${items.length ? `${items.length} nieuw${items.length === 1 ? ' bericht' : 'e berichten'}` : 'Niets nieuws gevonden.'}</p>`;
+  const site = process.env.REGIOCHECKER_SITE_URL;
+  const n = aantalVan(blok);
+  let uit = sectieKop('h2', regio.naam, n ? stukken(n) : 'niets nieuws', s);
 
+  // De samenvatting: lopende tekst, per onderwerp een punt met vierkant
+  // opsommingsteken, en de bronnen klein erachter.
   if (samenvatting?.punten.length) {
-    uit += `<div style="${STIJL.samenvatting}"><ul style="margin:0;padding:0 0 0 20px;">${samenvatting.punten.map((p) => {
+    uit += `<ul style="margin:14px 0 0;padding:0 0 0 18px;list-style-type:square;">${samenvatting.punten.map((p) => {
       const bronnen = p.items.map((k) => perSleutel.get(k)).filter(Boolean);
-      const links = bronnen.map((b) => `<a href="${html(b.url)}" style="color:#6b6b66;">${html(kort(b.titel, 80))}</a>`).join(' · ');
-      return `<li style="font-size:15px;line-height:1.5;margin:0 0 8px;">${html(p.zin)}${links ? ` <span style="${STIJL.klein}">— ${links}</span>` : ''}</li>`;
-    }).join('')}</ul></div>`;
+      const links = bronnen.map((b) => `<a href="${html(b.url)}" style="color:${s.tweede};text-decoration:underline;text-decoration-color:${s.a700};">${html(kort(b.titel, 80))}</a>`).join(' · ');
+      return `<li style="margin:0 0 8px;${letter(400, 15, 1.55)}">${html(p.zin)}${links ? ` <span style="${letter(400, 13, 1.5)}color:${s.tweede};">— ${links}</span>` : ''}</li>`;
+    }).join('')}</ul>`;
   }
-  if (samenvattingFout) uit += `<p style="${STIJL.klein}">Geen samenvatting: ${html(samenvattingFout)}. Hieronder staat wel alles wat nieuw is.</p>`;
+  if (samenvattingFout) uit += zacht(`Geen samenvatting: ${html(samenvattingFout)}. Hieronder staat wel alles wat nieuw is.`, s, '12px 0 0');
 
   for (const c of categorieen(opslag, regio, items)) {
-    uit += `<h3 style="${STIJL.h3}">${html(c.naam)}${c.items.length ? ` <span style="font-weight:normal;color:#6b6b66;">(${c.items.length})</span>` : ''}</h3>`;
-    if (c.opmerkingen.length) uit += `<p style="${STIJL.klein};margin:0 0 10px;">${c.opmerkingen.map(html).join('<br>')}</p>`;
-    if (c.items.length) uit += c.items.map(itemHtml).join('');
-    else if (c.gecontroleerd) uit += `<p style="${STIJL.item};color:#6b6b66;">Geen nieuwe berichten.</p>`;
+    uit += categorieKop(c.naam, c.items.length, s);
+    if (c.opmerkingen.length) uit += zacht(c.opmerkingen.map(html).join('<br>'), s, '8px 0 0');
+    if (c.items.length) uit += lijst(c.items.map((i) => itemHtml(i, s)));
+    else if (c.gecontroleerd) uit += zacht('Geen nieuwe berichten.', s);
   }
   if (blok.landelijk.length) {
-    uit += `<h3 style="${STIJL.h3}">Landelijke bronnen <span style="font-weight:normal;color:#6b6b66;">(${blok.landelijk.length})</span></h3>`;
-    uit += blok.landelijk.map(landelijkHtml).join('');
+    uit += categorieKop('Landelijke bronnen', blok.landelijk.length, s);
+    uit += lijst(blok.landelijk.map((l) => landelijkHtml(l, s)));
   }
   if (blok.kamerTermen?.length) {
-    const n = blok.kamerstukken.length;
-    uit += `<h3 style="${STIJL.h3}">Kamerstukken${n ? ` <span style="font-weight:normal;color:#6b6b66;">(${n})</span>` : ''}</h3>`;
-    uit += n
-      ? blok.kamerstukken.map(trefferHtml).join('')
-      : `<p style="${STIJL.item};color:#6b6b66;">Geen nieuwe kamerstukken met ${html(blok.kamerTermen.join(', '))}.</p>`;
-    if (blok.kamerstukken.meer) uit += `<p style="${STIJL.item};color:#6b6b66;">${html(meerKamerstukken(blok.kamerstukken.meer))}${process.env.REGIOCHECKER_SITE_URL ? ` <a href="${html(process.env.REGIOCHECKER_SITE_URL)}/#/feed?groep=kamerstuk" style="color:#6b6b66;">Bekijk ze in de Regiochecker</a>.` : ''}</p>`;
+    uit += categorieKop('Kamerstukken', blok.kamerstukken.length, s);
+    uit += blok.kamerstukken.length
+      ? lijst(blok.kamerstukken.map((t) => trefferHtml(t, s)))
+      : zacht(`Geen nieuwe kamerstukken met ${html(blok.kamerTermen.join(', '))}.`, s);
+    if (blok.kamerstukken.meer) uit += zacht(`${html(meerKamerstukken(blok.kamerstukken.meer))}${site ? ` ${link('Bekijk ze in de Regiochecker', `${site}/#/feed?groep=kamerstuk`, s)}.` : ''}`, s);
   }
-  for (const [kop, lijst] of audioPerSoort(blok.audio)) {
-    uit += `<h3 style="${STIJL.h3}">${html(kop)} <span style="font-weight:normal;color:#6b6b66;">(${lijst.length})</span></h3>`;
-    uit += lijst.map(audioHtml).join('');
+  for (const [kop, l] of audioPerSoort(blok.audio)) {
+    uit += categorieKop(kop, l.length, s);
+    uit += lijst(l.map((x) => audioHtml(x, s)));
   }
-  return `${uit}</div>`;
+  if (site && n) uit += `<p style="margin:16px 0 0;${letter(600, 14, 1.4)}">${link(`Alle ${stukken(n)} uit ${regio.naam} →`, `${site}/#/feed?regio=${encodeURIComponent(regio.id)}`, s, 'font-weight:600;')}</p>`;
+  return rij(uit, '28px 28px 4px');
 }
 
 const duurTekst = (s) => (s ? `${Math.floor(s / 3600) ? `${Math.floor(s / 3600)} u ` : ''}${Math.round((s % 3600) / 60)} min` : '');
 
-function landelijkHtml({ item, bron, gevonden }) {
-  const termen = gevonden.map((g) => `${g.term}${g.aantal > 1 ? ` (${g.aantal}×)` : ''}`).join(', ');
-  return `<div style="${STIJL.item}"><span style="color:#6b6b66;">${html(korteDatum(item.datum) || 'z.d.')}</span> &nbsp;<a href="${html(item.url)}" style="${STIJL.link}">${html(item.titel)}</a>
-    <br><span style="${STIJL.klein}">${html(bron.naam)} · gevonden: <strong>${html(termen)}</strong></span>
-    <div style="margin:4px 0 0 10px;padding-left:8px;border-left:2px solid #e3e1da;font-size:13px;color:#3b3b38;">${fragmentHtml(gevonden[0].fragment)}</div></div>`;
+function landelijkHtml({ item, bron, gevonden }, s) {
+  return itemRij({
+    soort: ENKELVOUD[item.soort] || bron.naam,
+    datum: korteDatum(item.datum),
+    labels: [...new Set(gevonden.map((g) => g.term))],
+    titel: item.titel,
+    url: item.url,
+    kenmerken: bron.naam,
+    fragmenten: gevonden[0]?.fragment ? [{ fragment: gevonden[0].fragment, bij: gevonden[0].aantal > 1 ? `(${gevonden[0].aantal}× ${gevonden[0].term})` : '' }] : [],
+  }, s);
 }
 
 // Audio per soort een eigen kop (Raadsvergaderingen, Kamerdebatten, …), zoals
@@ -149,25 +148,32 @@ const audioPerSoort = (lijst) => Object.entries(GROEPEN)
   .map(([id, kop]) => [kop, lijst.filter((x) => groepVan(x.aflevering.soort) === id)])
   .filter(([, l]) => l.length);
 
-function audioHtml({ aflevering: a, bron, gevonden, samenvatting, samenvattingFout }) {
-  const kenmerk = [ENKELVOUD[a.soort], duurTekst(a.duur)].filter(Boolean).join(' · ');
-  let uit = `<div style="${STIJL.item}"><span style="color:#6b6b66;">${html(korteDatum(String(a.gepubliceerd || '').slice(0, 10)) || 'z.d.')}</span> &nbsp;<a href="${html(a.url)}" style="${STIJL.link}">${html(a.titel)}</a>
-    <br><span style="${STIJL.klein}">${html([bron.naam, kenmerk].filter(Boolean).join(' · '))}</span>`;
-  for (const g of gevonden || []) {
-    uit += `<div style="margin:4px 0 0 10px;padding-left:8px;border-left:2px solid #e3e1da;font-size:13px;color:#3b3b38;"><strong>${tijdcode(g.treffers[0].tijd)}</strong> ${fragmentHtml(g.treffers[0].fragment)}${g.aantal > 1 ? ` <span style="color:#6b6b66;">(${g.aantal}× ${html(g.term)})</span>` : ''}</div>`;
-  }
-  uit += '</div>';
+function audioHtml({ aflevering: a, bron, gevonden, samenvatting, samenvattingFout }, s) {
+  const eerste = gevonden?.[0]?.treffers[0];
+  let na = '';
+  // Een raadsvergadering: per onderwerp een kop met de punten.
   for (const o of samenvatting?.onderwerpen || []) {
-    uit += `<h4 style="font-size:16px;margin:14px 0 6px;">${html(o.kop)}</h4><ul style="margin:0 0 8px;padding:0 0 0 20px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.45;">${o.punten.map((p) => `<li style="margin:0 0 4px;">${html(p)}</li>`).join('')}</ul>`;
+    na += `<h4 style="margin:14px 0 4px;${FAMILIE}${letter(600, 14, 1.4)}color:${s.inkt};">${html(o.kop)}</h4><ul style="margin:0 0 6px;padding:0 0 0 18px;list-style-type:square;${letter(400, 14, 1.5)}color:${s.inkt};">${o.punten.map((p) => `<li style="margin:0 0 4px;">${html(p)}</li>`).join('')}</ul>`;
   }
-  if (samenvattingFout) uit += `<p style="${STIJL.klein}">Geen samenvatting van de vergadering: ${html(samenvattingFout)}.</p>`;
-  return uit;
+  if (samenvattingFout) na += zacht(`Geen samenvatting van de vergadering: ${html(samenvattingFout)}.`, s, '8px 0 0');
+  return itemRij({
+    soort: ENKELVOUD[a.soort],
+    datum: [korteDatum(String(a.gepubliceerd || '').slice(0, 10)), eerste && tijdcode(eerste.tijd)].filter(Boolean).join(' · '),
+    labels: [...new Set((gevonden || []).map((g) => g.term))],
+    titel: a.titel,
+    url: a.url,
+    kenmerken: [bron.naam, duurTekst(a.duur)].filter(Boolean).join(' · '),
+    fragmenten: (gevonden || []).slice(0, 2).map((g) => ({ fragment: g.treffers[0].fragment, tijd: g.treffers[0].tijd, bij: g.aantal > 1 ? `(${g.aantal}× ${g.term})` : '' })),
+    tijdcode,
+    na,
+  }, s);
 }
 
 function regioTekst(blok, opslag) {
   const { regio, items, samenvatting, samenvattingFout } = blok;
   const perSleutel = new Map(items.map((i) => [i.sleutel, i]));
-  const r = [`== ${regio.naam.toUpperCase()} ==`, items.length ? `${items.length} nieuwe berichten` : 'Niets nieuws gevonden.', ''];
+  const n = aantalVan(blok);
+  const r = [`== ${regio.naam.toUpperCase()} ==`, n ? stukken(n) : 'Niets nieuws gevonden.', ''];
   for (const p of samenvatting?.punten || []) {
     r.push(`• ${p.zin}`);
     for (const k of p.items) if (perSleutel.has(k)) r.push(`  -> ${perSleutel.get(k).url}`);
@@ -209,11 +215,36 @@ function regioTekst(blok, opslag) {
   return r.join('\n');
 }
 
+// ISO-weeknummer (maandag eerst, week 1 bevat de eerste donderdag).
+export function isoWeek(datum) {
+  const d = new Date(Date.UTC(datum.getFullYear(), datum.getMonth(), datum.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  return Math.ceil(((d - Date.UTC(d.getUTCFullYear(), 0, 1)) / DAG_MS + 1) / 7);
+}
+
+const opsomming = (namen) => (namen.length > 1 ? `${namen.slice(0, -1).join(', ')} en ${namen.at(-1)}` : namen[0] || '');
+
+// "Week 44: 52 nieuwe stukken in Smallingerland, Heerenveen en Leeuwarden". Meer
+// dan drie regio's: de eerste twee en "en 38 andere". Een periode van meer dan
+// een week (er ging eerder geen mail uit): de datums erachter, zonder weeknummer.
 function onderwerp(blokken, sinds, nu) {
-  const namen = blokken.map((b) => b.regio.naam).join(', ');
-  const items = blokken.reduce((n, b) => n + b.items.length, 0);
-  const aantal = items ? `${items} nieuw${items === 1 ? ' bericht' : 'e berichten'}` : 'niets nieuws';
-  return `${namen}: ${aantal} (${korteDatum(lokaleDatum(new Date(sinds)))} – ${korteDatum(lokaleDatum(nu))})`;
+  const totaal = blokken.reduce((n, b) => n + aantalVan(b), 0);
+  const aantal = totaal ? `${totaal} nieuw${totaal === 1 ? ' stuk' : 'e stukken'}` : 'niets nieuws';
+  const namen = blokken.map((b) => b.regio.naam);
+  const waar = namen.length > 3 ? `${namen.slice(0, 2).join(', ')} en ${namen.length - 2} andere` : opsomming(namen);
+  if (langePeriode(sinds, nu)) return `${aantal[0].toUpperCase()}${aantal.slice(1)} in ${waar} (${korteDatum(lokaleDatum(new Date(sinds)))} – ${korteDatum(lokaleDatum(nu))})`;
+  return `Week ${weekVan(sinds, nu)}: ${aantal} in ${waar}`;
+}
+
+const langePeriode = (sinds, nu) => nu - Date.parse(sinds) > 7.5 * DAG_MS;
+// De week waar de periode het meest in valt: die van het midden.
+const weekVan = (sinds, nu) => isoWeek(new Date((Date.parse(sinds) + nu.getTime()) / 2));
+
+function groet(nu, gebruiker) {
+  const uur = Number(new Intl.DateTimeFormat('nl-NL', { timeZone: 'Europe/Amsterdam', hour: 'numeric', hourCycle: 'h23' }).format(nu));
+  const voornaam = String(gebruiker.naam || '').trim().split(/\s+/)[0];
+  const dag = uur < 12 ? 'Goedemorgen' : uur < 18 ? 'Goedemiddag' : 'Goedenavond';
+  return voornaam ? `${dag} ${voornaam}, dit kwam er binnen in je regio’s.` : 'Dit kwam er binnen in je regio’s.';
 }
 
 // Stukken uit landelijke bronnen (niet de Tweede Kamer, die heeft een eigen
@@ -301,21 +332,46 @@ export async function stelMailSamen(opslag, gebruiker, opties = {}) {
     blokken.push(blok);
   }
 
+  const s = stijl(gebruiker.titel);
   const sindsTekst = new Date(sinds).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  const kopTekst = `Regiochecker · ${nu.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}`;
   const totTekst = nu.toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  const voet = `Je krijgt deze mail omdat je ${regios.map((r) => r.naam).join(', ')} volgt. Nieuw = voor het eerst gezien tussen ${sindsTekst} en ${totTekst}. Je weekmail stel je in bij Meldingen.`;
+  const titel = langePeriode(sinds, nu) ? `${korteDatum(lokaleDatum(new Date(sinds)))} – ${korteDatum(lokaleDatum(nu))}` : `Week ${weekVan(sinds, nu)}`;
+  const periode = `${sindsTekst} – ${totTekst}`;
+  const welkom = groet(nu, gebruiker);
+  const wie = regios.length > 5 ? `${regios.length} regio’s` : regios.map((r) => r.naam).join(', ');
+  const voet = `Je krijgt deze mail omdat je ${wie} volgt. Nieuw = voor het eerst gezien tussen ${sindsTekst} en ${totTekst}.`;
   const site = process.env.REGIOCHECKER_SITE_URL;
+  const punten = blokken.flatMap((b) => b.samenvatting?.punten || []).slice(0, 3).map((p) => kort(p.zin, 60));
 
-  const htmlMail = `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
-<body style="${STIJL.body}"><div style="${STIJL.kader}">
-<div style="${STIJL.kop}"><h1 style="${STIJL.h1}">${html(kopTekst)}</h1>
-<div style="${STIJL.klein}">Gemeentenieuws, ingekomen stukken en Woo-publicaties van ${html(sindsTekst)} tot ${html(totTekst)}</div></div>
-${blokken.map((b) => regioHtml(b, opslag)).join('<hr style="border:0;border-top:1px solid #e3e1da;margin:8px 28px;">')}
-<div style="padding:18px 28px 26px;${STIJL.klein}">${html(voet)}${site ? ` <a href="${html(site)}/#/meldingen" style="color:#6b6b66;">${html(site)}/#/meldingen</a>` : ''}</div>
-</div></body></html>`;
+  // De tellers: per regio het aantal stukken, drie per rij (op mobiel onder elkaar).
+  const tellers = [];
+  for (let i = 0; i < blokken.length; i += 3) {
+    const cellen = blokken.slice(i, i + 3).map((b) => `<td width="33%" valign="top" style="width:33%;padding:10px 12px 10px 0;${FAMILIE}color:${s.inkt};${i ? `border-top:1px solid ${s.lijn};` : ''}"><div style="${letter(800, 25, 1.1)}font-variant-numeric:tabular-nums;">${aantalVan(b)}</div><div style="margin-top:2px;${letter(600, 13, 1.3)}">${html(b.regio.naam)}</div></td>`);
+    while (cellen.length < 3) cellen.push(`<td width="33%" style="width:33%;${i ? `border-top:1px solid ${s.lijn};` : ''}">&nbsp;</td>`);
+    tellers.push(`<tr>${cellen.join('')}</tr>`);
+  }
 
-  const tekst = [kopTekst, '', ...blokken.map((b) => regioTekst(b, opslag)), voet, site || ''].join('\n');
+  const htmlMail = mailHtml({
+    s,
+    titel: onderwerp(blokken, sinds, nu),
+    preheader: punten.length ? punten.join(', ') : onderwerp(blokken, sinds, nu),
+    rechts: 'Weekoverzicht',
+    rijen: [
+      rij(`<h1 style="margin:0;${FAMILIE}${letter(800, 32, 1.1)}color:${s.inkt};">${html(titel)}</h1><p style="margin:8px 0 0;${letter(400, 14, 1.5)}color:${s.n800};">${html(periode)} · ${html(welkom)}</p>`, '28px 28px 20px'),
+      ...(tellers.length ? [rij(`<table role="presentation" class="rc-stapel" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;border-top:2px solid ${s.inkt};border-bottom:2px solid ${s.inkt};">${tellers.join('')}</table>`)] : []),
+      ...blokken.map((b) => regioHtml(b, opslag, s)),
+      ...(site ? [rij(knoppen([{ tekst: 'Naar je feed', url: `${site}/#/feed` }], s), '28px 28px 28px')] : [rij('&nbsp;', '8px 28px')]),
+    ],
+    voet: `De samenvattingen zijn automatisch gemaakt; controleer altijd het stuk zelf. ${html(voet)}${site ? ` ${link('Weekmail aanpassen', `${site}/#/meldingen`, s)} · ${link('Uitzetten', `${site}/#/meldingen`, s)}` : ''}`,
+  });
+
+  const tekst = [
+    `Regiochecker · ${titel}`, `${periode} · ${welkom}`, '',
+    ...blokken.map((b) => regioTekst(b, opslag)),
+    'De samenvattingen zijn automatisch gemaakt; controleer altijd het stuk zelf.',
+    voet,
+    ...(site ? [`Je feed: ${site}/#/feed`, `Weekmail aanpassen of uitzetten: ${site}/#/meldingen`] : []),
+  ].join('\n');
 
   return {
     onderwerp: onderwerp(blokken, sinds, nu),

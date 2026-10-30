@@ -84,6 +84,11 @@ What counts as "new" is `eersteGezien`, the moment of first sight, never the doc
 
 **One selection, many consumers.** The feed, weekly mail (`src/mail.mjs`), alerts (`src/meldingen.mjs`) and Teams channels (`src/kanalen.mjs`) share their selection logic in `src/feed.mjs` (`regioRegels`, `meldingTreffers`, `kanaalRegels`). Change selection there, not in the consumers.
 
+**Mail layout.** All mails share `src/mailstijl.mjs`:
+- Use tables and inline styles only; no flex, grid or CSS variables.
+- The accent colour depends on the recipient's `titel` (LC or DVHN). Pass `titel` along when composing a mail.
+- Check changes with `GET /api/beheer/mailvoorbeeld?soort=melding|week` (it sends nothing).
+
 **Feed tabs.** One tab per source kind, defined only in `src/regios.mjs` (`ENKELVOUD`, `GROEPEN`, `SIGNAALGROEP` / `groepVan`). `GET /api/ik` sends `zichtbareGroepen()` (only kinds that have a source, in `GROEPEN` order) and `public/feed.js` builds the kind choices in the collapsible Filters panel above the list from it. Audio kinds each have their own tab; audio behaviour in the reading panel hangs on `detail().audio`, not on the group. The weekmail groups audio per kind the same way. Tests assert the tab counts.
 
 **Audio** (`src/audio/`).

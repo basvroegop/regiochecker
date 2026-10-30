@@ -17,6 +17,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { verstuur, smtpIngesteld } from './mail.mjs';
 import { html } from './html.mjs';
+import { stijl, mailHtml, rij, letter, FAMILIE, link, knoppen } from './mailstijl.mjs';
 
 export const accountsAan = () => process.env.REGIOCHECKER_AUTHELIA_ACCOUNTS === '1';
 
@@ -81,18 +82,22 @@ export function uitnodigingsmail(g, site) {
     : 'Je hebt al een account met deze inlognaam: log in met je wachtwoord. Nog nooit een wachtwoord gekozen, of vergeten? Zo stel je er een in:';
   const slot = 'Daarna log je in met je inlognaam en wachtwoord. Kies in de feed welke regio’s je volgt.';
   const tekst = [`Hallo ${naam},`, '', inleiding, '', `Je inlognaam: ${g.login}`, '', uitleg, ...stappen.map((s, i) => `${i + 1}. ${s}`), '', slot].join('\n');
-  const KLEIN = 'font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;';
-  const htmlMail = `<!doctype html><html lang="nl"><head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f4f4f1;"><div style="max-width:620px;margin:0 auto;background:#fff;font-family:Georgia,'Times New Roman',serif;color:#1d1d1b;">
-<div style="padding:22px 28px 14px;border-bottom:3px solid #1d1d1b;"><h1 style="font-size:26px;margin:0;">Regiochecker</h1></div>
-<div style="padding:18px 28px 26px;${KLEIN}">
-<p>Hallo ${html(naam)},</p>
-<p>${html(inleiding)}</p>
-<p>Je inlognaam: <strong>${html(g.login)}</strong></p>
-<p style="margin-bottom:4px;">${html(uitleg)}</p>
-<ol style="margin-top:4px;">${stappen.map((s, i) => `<li>${i === 0 ? `Ga naar <a href="${html(site)}" style="color:#1d1d1b;">${html(site)}</a>.` : html(s)}</li>`).join('')}</ol>
-<p>${html(slot)}</p>
-</div></div></body></html>`;
+  const s = stijl(g.titel);
+  const p = (inhoud, marge = '0 0 12px') => `<p style="margin:${marge};${letter(400, 15, 1.6)}color:${s.inkt};">${inhoud}</p>`;
+  const htmlMail = mailHtml({
+    s,
+    titel: 'Je account voor de Regiochecker',
+    preheader: `Je inlognaam: ${g.login}`,
+    rechts: 'Uitnodiging',
+    rijen: [rij(`<h1 class="rc-titel" style="margin:0 0 16px;${FAMILIE}${letter(800, 25, 1.2)}color:${s.inkt};">Welkom bij de Regiochecker</h1>
+${p(`Hallo ${html(naam)},`)}
+${p(html(inleiding))}
+<div style="margin:4px 0 16px;padding:14px 16px;background:${s.a100};border:2px solid ${s.a300};${letter(400, 15, 1.5)}">Je inlognaam: <strong style="font-weight:800;color:${s.a700};">${html(g.login)}</strong></div>
+${p(html(uitleg), '0 0 4px')}
+<ol style="margin:0 0 12px;padding:0 0 0 22px;${letter(400, 15, 1.6)}color:${s.inkt};">${stappen.map((st, i) => `<li style="margin:0 0 4px;">${i === 0 ? `Ga naar ${link(site, site, s)}.` : html(st)}</li>`).join('')}</ol>
+${p(html(slot), '0 0 20px')}
+${knoppen([{ tekst: 'Naar de Regiochecker', url: site }], s)}`, '28px 28px 32px')],
+  });
   return { onderwerp: 'Je account voor de Regiochecker', html: htmlMail, tekst };
 }
 

@@ -269,7 +269,14 @@ class KamerDb {
         // Eerst het fragment van SQLite; pas als dat niet klopt de hele tekst.
         let volledig = null;
         const geheel = () => (volledig ??= `${stuk.titel || ''}\n${stuk.onderwerp || ''}\n${this.tekst(stuk.nr)}`);
-        if (hoofdletters && !hoofdlettersKloppen(term, gemarkeerd)) {
+        // Met ookTermen markeert SQLite ook die (een sleutelwoord van de regio):
+        // dan de eigen term en zijn fragment uit de hele tekst.
+        const eigen = genormaliseerd.some(([, n]) => n === sleutel);
+        if (ookTermen && !eigen) {
+          const g = vindTermen(geheel(), termen, { hoofdletters });
+          if (g.length) treffer = { stuk, term: g[0].term, fragment: g[0].fragment };
+        }
+        if (hoofdletters && !hoofdlettersKloppen(treffer.term, treffer.fragment.treffer)) {
           const g = vindTermen(geheel(), termen, { hoofdletters: true });
           if (!g.length) continue;
           treffer = { stuk, term: g[0].term, fragment: g[0].fragment };

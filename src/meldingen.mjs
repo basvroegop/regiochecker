@@ -15,19 +15,20 @@
 // de feed en de mail precies dezelfde stukken vinden.
 
 import { verstuur, meerKamerstukken } from './mail.mjs';
-import { html } from './html.mjs';
+import { html, kort } from './html.mjs';
 import { lokaleDatum, korteDatum } from './datum.mjs';
 import { ENKELVOUD } from './regios.mjs';
-import { schoneTermen, leesZoekvraag, zoekvraagTekst } from './termen.mjs';
+import { schoneTermen, leesZoekvraag, zoekvraagTekst, vindTermen } from './termen.mjs';
 import { maakKader, meldingTreffers } from './feed.mjs';
-import { trefferHtml, trefferTekst, fragmentHtml } from './kamer/weergave.mjs';
+import { tekstBlokken } from './document.mjs';
+import { tijdcode } from './vergadering.mjs';
+import { stijl, mailHtml, rij, letter, FAMILIE, sectieKop, fragmentBlok, markeerTermen, knoppen, zacht, link, moment as tijdstip } from './mailstijl.mjs';
 import { InvoerFout } from './gebruikers.mjs';
 
 export const BEREIK = ['overal', 'mijn'];
 export const BRONNEN = { alle: 'Alle bronnen', gemeente: 'Alleen websites', kamerstuk: 'Alleen Kamerstukken', audio: 'Alleen audio en video' };
 export const FREQUENTIES = ['direct', 'dagelijks'];
 const TIJD = /^([01]\d|2[0-3]):[0-5]\d$/;
-const KLEIN = 'font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b6b66;';
 
 export function controleerMelding(invoer, bestaand, { regioIds }) {
   const termen = invoer.zoekvraag !== undefined ? leesZoekvraag(invoer.zoekvraag) : schoneTermen(invoer.termen ?? bestaand?.termen ?? []);
@@ -43,30 +44,6 @@ export function controleerMelding(invoer, bestaand, { regioIds }) {
   const tijd = invoer.tijd ?? bestaand?.tijd ?? '17:00';
   if (!TIJD.test(tijd)) throw new InvoerFout('Tijd moet de vorm UU:MM hebben');
   return { termen, bereik, bronnen, frequentie, tijd, actief: Boolean(invoer.actief ?? bestaand?.actief ?? true) };
-}
-
-function regelHtml(r) {
-  const termen = r.gevonden.map((g) => `${g.term}${g.aantal > 1 ? ` (${g.aantal}×)` : ''}`).join(', ');
-  const tijd = (s) => {
-    const t = Math.max(0, Math.floor(s || 0));
-    return `${t >= 3600 ? `${Math.floor(t / 3600)}:` : ''}${String(Math.floor(t / 60) % 60).padStart(t >= 3600 ? 2 : 1, '0')}:${String(t % 60).padStart(2, '0')}`;
-  };
-  return `<div style="margin:0 0 14px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.45;">
-    <span style="color:#6b6b66;">${html(korteDatum(r.datum) || 'z.d.')}</span> &nbsp;<a href="${html(r.url)}" style="color:#1d1d1b;">${html(r.titel)}</a>
-    <br><span style="${KLEIN}">${html([r.regioNaam, ENKELVOUD[r.soort]].filter(Boolean).join(' · '))}</span>
-    ${termen ? `<br><span style="${KLEIN}">Gevonden: <strong>${html(termen)}</strong></span>` : ''}
-    ${r.gevonden.slice(0, 2).map((g) => `<div style="margin:4px 0 0 10px;padding-left:8px;border-left:2px solid #e3e1da;font-size:13px;color:#3b3b38;">${g.tijd !== undefined ? `<strong>${tijd(g.tijd)}</strong> ` : ''}${fragmentHtml(g.fragment)}</div>`).join('')}
-  </div>`;
-}
-
-function regelTekst(r) {
-  return [
-    `* ${korteDatum(r.datum) || 'z.d.'}  ${r.titel}`,
-    `  ${[r.regioNaam, ENKELVOUD[r.soort]].filter(Boolean).join(' · ')}`,
-    ...(r.gevonden.length ? [`  Gevonden: ${r.gevonden.map((g) => g.term).join(', ')}`] : []),
-    ...r.gevonden.slice(0, 2).map((g) => `  "${g.fragment.tekst}"`),
-    `  ${r.url}`,
-  ].join('\n');
 }
 
 const GROEPEN = [
@@ -89,42 +66,243 @@ export function meldingNaam(melding, regioNaam = () => null) {
   return melding.termen?.length ? zoekvraagTekst(melding.termen) : `Alles uit ${selectieTekst(melding, regioNaam)}`;
 }
 
-export function stelMeldingSamen(melding, treffers, nu = new Date(), { meer = 0, regioNaam = () => null } = {}) {
+// ---------- de tekst van een stuk ----------
+
+// Onder het fragment staat de tekst van het stuk, als de mail hooguit drie
+// stukken heeft (anders wordt hij te lang). Tot ongeveer 600 woorden, afgekapt
+// op een alineagrens.
+const MAX_WOORDEN = 600;
+export const MAX_MET_TEKST = 3;
+const AUDIO_RUIMTE_S = 120;
+const woordenIn = (t) => (String(t || '').match(/\S+/g) || []).length;
+const gelijk = (a, b) => String(a || '').toLowerCase().replace(/\s+/g, ' ').trim() === String(b || '').toLowerCase().replace(/\s+/g, ' ').trim();
+const datumLang = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
+
+// Waar de tekst vandaan komt: kamerstukken uit de kamerdatabase, stukken van
+// websites uit het opgehaalde document (of de korte inhoud), audio uit de
+// segmenten rond de eerste treffer (twee minuten ervoor en erna, per alinea de
+// tijd). Een aflevering zonder treffer (melding zonder zoekterm): de korte
+// samenvatting. Geen tekst: null, dan komt er geen blok.
+// `termen`: de zoektermen van de melding. Valt de eerste vondst buiten de
+// eerste 600 woorden, dan het stuk tekst eromheen (met één alinea ervoor).
+export function documentVoorMail(k, t, termen = []) {
+  let alineas = [];
+  let kop = 'Documenttekst';
+  const meta = [];
+  let totaal = null;
+  if (t.stuk) {
+    alineas = tekstBlokken(String(k.kdb?.tekst(t.stuk.nr) || '').slice(0, 200_000)).map(([soort, tekst]) => ({ soort, tekst }));
+    if (t.stuk.datum) meta.push(`datum stuk ${datumLang(t.stuk.datum)}`);
+  } else if (t.id.startsWith('i:')) {
+    const item = k.opslag.items[t.id.slice(2)];
+    if (!item) return null;
+    const doc = k.fdb?.document(item.sleutel);
+    const blokken = doc?.blokken?.length ? doc.blokken : tekstBlokken(item.inhoud || item.tekst || '');
+    alineas = blokken.map(([soort, tekst]) => ({ soort, tekst }));
+    if (alineas[0]?.soort === 'k' && gelijk(alineas[0].tekst, item.titel)) alineas.shift();
+  } else if (t.id.startsWith('a:')) {
+    const a = k.adb?.aflevering(t.id.slice(2));
+    if (!a) return null;
+    const tijd = t.gevonden[0]?.tijd;
+    if (tijd === undefined) {
+      if (!a.samenvatting?.tekst) return null;
+      const w = woordenIn(a.samenvatting.tekst);
+      return { kop: 'Samenvatting', meta: 'automatisch gemaakt; controleer altijd de opname zelf', alineas: [{ soort: 'p', tekst: a.samenvatting.tekst }], getoond: w, totaal: w, deel: false };
+    }
+    kop = 'Transcript';
+    // Per spreker een alinea, met de tijd waarop die begint.
+    for (const seg of a.segmenten || []) {
+      if (seg.start < tijd - AUDIO_RUIMTE_S || seg.start > tijd + AUDIO_RUIMTE_S || !String(seg.text || '').trim()) continue;
+      const vorige = alineas.at(-1);
+      if (vorige && vorige.spreker === seg.speaker && seg.start - vorige.tijd < 90) vorige.tekst += ` ${seg.text.trim()}`;
+      else alineas.push({ soort: 'p', tekst: seg.text.trim(), tijd: seg.start, spreker: seg.speaker });
+    }
+    totaal = woordenIn(a.transcript);
+    meta.push(`${tijdcode(Math.max(0, tijd - AUDIO_RUIMTE_S))}–${tijdcode(tijd + AUDIO_RUIMTE_S)}`);
+  }
+  alineas = alineas.filter((a) => String(a.tekst || '').trim());
+  if (!alineas.length) return null;
+  totaal ??= alineas.reduce((n, a) => n + woordenIn(a.tekst), 0);
+  let begin = 0;
+  if (termen.length && kop !== 'Transcript') {
+    const eerste = alineas.findIndex((a) => vindTermen(a.tekst, termen).length);
+    const ervoor = alineas.slice(0, eerste + 1).reduce((n, a) => n + woordenIn(a.tekst), 0);
+    if (eerste > 0 && ervoor > MAX_WOORDEN) begin = eerste - 1;
+  }
+  const getoond = [];
+  let n = 0;
+  for (const a of alineas.slice(begin)) {
+    const w = woordenIn(a.tekst);
+    if (getoond.length && n + w > MAX_WOORDEN) break;
+    // Eén reusachtige eerste alinea (een pdf zonder alinea's): op woorden afkappen.
+    if (w > MAX_WOORDEN) {
+      getoond.push({ ...a, tekst: `${a.tekst.split(/\s+/).slice(0, MAX_WOORDEN).join(' ')} …` });
+      n = MAX_WOORDEN;
+      break;
+    }
+    getoond.push(a);
+    n += w;
+  }
+  // Niet eindigen op een kop zonder de tekst eronder.
+  while (getoond.length > 1 && getoond.at(-1).soort === 'k') n -= woordenIn(getoond.pop().tekst);
+  if (kop !== 'Transcript') meta.unshift(`${totaal} woorden`);
+  return { kop, meta: meta.join(' · '), alineas: getoond, getoond: n, totaal, deel: n < totaal, halverwege: begin > 0 };
+}
+
+// ---------- de mail ----------
+
+const opsomming = (lijst) => (lijst.length > 1 ? `${lijst.slice(0, -1).join(', ')} en ${lijst.at(-1)}` : lijst[0] || '');
+const bijBron = (t) => (t.stuk ? 'Bij de Tweede Kamer' : t.bronNaam ? `Bij ${t.bronNaam.split(' · ')[0]}` : 'Bij de bron');
+const openUrl = (t, site) => (site ? `${site}/#/feed?stuk=${encodeURIComponent(t.id)}` : null);
+
+function kenmerkenVan(t) {
+  if (t.stuk) return ['Tweede Kamer', t.stuk.soort, t.stuk.nummer, t.stuk.afzender].filter(Boolean).join(' · ');
+  return [t.bronNaam, korteDatum(t.datum)].filter(Boolean).join(' · ');
+}
+
+// Eén stuk: (bij één stuk) waarom, dan soort en regio, titel, kenmerken, het
+// fragmentblok, de tekst van het stuk, en de knoppen.
+function stukHtml(t, { s, alles, selectie, document, termen, site, enkel }) {
+  const gevonden = [...new Set(t.gevonden.map((g) => g.term))];
+  const open = openUrl(t, site);
+  let uit = '';
+  if (enkel) {
+    const waarom = alles
+      ? `Nieuw uit ${html(selectie)}.`
+      : `Een nieuw stuk bevat je ${gevonden.length > 1 ? 'zoektermen' : 'zoekterm'} ${opsomming(gevonden.map((g) => `<strong style="font-weight:600;color:${s.a700};">${html(g)}</strong>`))}.`;
+    uit += `<p style="margin:0 0 12px;${letter(400, 13, 1.5)}color:${s.n800};">${waarom}</p>`;
+  }
+  uit += `<p style="margin:0;${letter(600, 11, 1.4)}letter-spacing:.08em;text-transform:uppercase;color:${s.tweede};">${html([ENKELVOUD[t.soort], t.regioNaam].filter(Boolean).join(' · '))}</p>`;
+  uit += `<h2 class="rc-titel" style="margin:12px 0 0;${FAMILIE}${letter(800, enkel ? 25 : 22, 1.2)}color:${s.inkt};">${open ? `<a href="${html(open)}" style="color:${s.inkt};text-decoration:none;">${html(t.titel)}</a>` : html(t.titel)}</h2>`;
+  const kenmerken = kenmerkenVan(t);
+  if (kenmerken) uit += `<p style="margin:12px 0 0;${letter(400, 13, 1.5)}color:${s.tweede};">${html(kenmerken)}</p>`;
+  if (t.gevonden.length) uit += `<div style="margin-top:16px;">${fragmentBlok(t.gevonden.slice(0, 2).map((g) => ({ fragment: g.fragment, tijd: g.tijd })), s, { tijdcode })}</div>`;
+  if (document) {
+    uit += `<div style="margin-top:24px;padding:0 0 8px;border-bottom:2px solid ${s.inkt};"><span style="${letter(800, 16, 1.2)}color:${s.inkt};">${html(document.kop)}</span>${document.meta ? `<span style="${letter(400, 12, 1.2)}color:${s.tweede};">&nbsp;&nbsp; ${html(document.meta)}</span>` : ''}</div>`;
+    if (document.halverwege) uit += `<p style="margin:12px 0 0;${letter(400, 12, 1.5)}color:${s.tweede};">… eerder in de tekst; hieronder het deel met de eerste vondst.</p>`;
+    for (const a of document.alineas) {
+      const tekst = `${a.tijd !== undefined ? `<strong>${tijdcode(a.tijd)}</strong> ` : ''}${markeerTermen(a.tekst, termen, s)}`;
+      uit += a.soort === 'k'
+        ? `<p style="margin:16px 0 0;${letter(800, 15, 1.4)}color:${s.inkt};">${tekst}</p>`
+        : `<p style="margin:12px 0 0;${letter(400, 15, 1.6)}color:${s.inkt};">${a.soort === 'l' ? '•&nbsp; ' : ''}${tekst}</p>`;
+    }
+    if (document.deel) {
+      uit += `<p style="margin:12px 0 0;${letter(400, 12, 1.5)}color:${s.tweede};">Dit is een deel van de ${document.kop === 'Transcript' ? 'opname' : 'tekst'}${document.halverwege ? ', rond de eerste vondst' : ''} (${document.getoond} van ${document.totaal} woorden).${open ? ` ${link('Lees verder in Regiochecker →', open, s)}` : ''}</p>`;
+    }
+  }
+  uit += `<div style="margin-top:24px;">${knoppen([{ tekst: 'Openen in Regiochecker', url: open }, { tekst: bijBron(t), url: t.url, tweede: true }], s)}</div>`;
+  return uit;
+}
+
+function stukTekst(t, { document, site }) {
+  const r = [[ENKELVOUD[t.soort], t.regioNaam].filter(Boolean).join(' · ').toUpperCase(), t.titel];
+  const kenmerken = kenmerkenVan(t);
+  if (kenmerken) r.push(kenmerken);
+  for (const g of t.gevonden.slice(0, 2)) r.push(`  ${g.tijd !== undefined ? `${tijdcode(g.tijd)} ` : ''}“${g.fragment.tekst}”`);
+  if (document) {
+    r.push('', `  ${document.kop}${document.meta ? ` (${document.meta})` : ''}`);
+    if (document.halverwege) r.push('    …');
+    for (const a of document.alineas) r.push(`    ${a.tijd !== undefined ? `${tijdcode(a.tijd)} ` : ''}${a.tekst}`);
+    if (document.deel) r.push(`    (Dit is een deel: ${document.getoond} van ${document.totaal} woorden.)`);
+  }
+  r.push('');
+  if (openUrl(t, site)) r.push(`Openen in Regiochecker: ${openUrl(t, site)}`);
+  if (t.url) r.push(`${bijBron(t)}: ${t.url}`);
+  return r.join('\n');
+}
+
+// opties.documenten: Map van stuk-id naar documentVoorMail(), alleen bij
+// hooguit drie stukken. opties.titel: LC of DVHN (de accentkleur).
+export function stelMeldingSamen(melding, treffers, nu = new Date(), { meer = 0, regioNaam = () => null, titel = 'LC', documenten = new Map() } = {}) {
+  const s = stijl(titel);
   const alles = !melding.termen?.length;
+  const selectie = selectieTekst(melding, regioNaam);
   const gevonden = new Set(treffers.flatMap((t) => t.gevonden.map((g) => g.term)));
   const termen = (melding.termen || []).filter((t) => gevonden.has(t));
   const aantal = `${treffers.length} nieuw${treffers.length === 1 ? ' stuk' : 'e stukken'}`;
-  const naam = meldingNaam(melding, regioNaam);
-  const onderwerp = alles
-    ? `Melding: ${aantal} uit ${selectieTekst(melding, regioNaam)} (${korteDatum(lokaleDatum(nu))})`
-    : `Melding: ${aantal} met ${termen.slice(0, 3).join(', ')}${termen.length > 3 ? ' …' : ''} (${korteDatum(lokaleDatum(nu))})`;
   const site = process.env.REGIOCHECKER_SITE_URL;
-  const voet = alles
-    ? `Je krijgt deze melding voor alles wat er nieuw binnenkomt uit ${selectieTekst(melding, regioNaam)}.`
-    : `Je krijgt deze melding omdat je stukken volgt met: ${zoekvraagTekst(melding.termen)}.`;
-  let inhoud = '';
-  const tekst = [`Melding: ${naam}`, ''];
-  for (const [groep, kop] of GROEPEN) {
-    const lijst = treffers.filter((t) => groepVanRegel(t) === groep);
-    if (!lijst.length) continue;
-    inhoud += `<h3 style="font-size:19px;margin:18px 0 10px;padding-bottom:4px;border-bottom:1px solid #e3e1da;">${kop} <span style="font-weight:normal;color:#6b6b66;">(${lijst.length})</span></h3>`;
-    inhoud += lijst.map((t) => (t.stuk ? trefferHtml({ stuk: t.stuk, gevonden: t.gevonden }) : regelHtml(t))).join('');
-    tekst.push(`-- ${kop} (${lijst.length}) --`, ...lijst.map((t) => (t.stuk ? trefferTekst({ stuk: t.stuk, gevonden: t.gevonden }) : regelTekst(t))), '');
-    if (groep === 'kamerstuk' && meer) {
-      const zoek = !site ? '' : alles ? `${site}/#/feed?groep=kamerstuk` : `${site}/#/zoeken?q=${encodeURIComponent(zoekvraagTekst(melding.termen))}`;
-      inhoud += `<p style="${KLEIN}">${html(meerKamerstukken(meer))}${zoek ? ` <a href="${html(zoek)}" style="color:#6b6b66;">Bekijk ze in de Regiochecker</a>.` : ''}</p>`;
-      tekst.splice(tekst.length - 1, 0, meerKamerstukken(meer) + (zoek ? ` ${zoek}` : ''));
+  const enkel = treffers.length === 1;
+  const eerste = treffers[0];
+
+  // Eén stuk: "{term}: {titel}"; meer: zoals altijd.
+  const onderwerp = enkel
+    ? `${alles ? eerste.regioNaam?.split(', ')[0] || 'Nieuw' : eerste.gevonden[0]?.term || termen[0]}: ${kort(eerste.titel, 90)}`
+    : alles
+      ? `Melding: ${aantal} uit ${selectie} (${korteDatum(lokaleDatum(nu))})`
+      : `Melding: ${aantal} met ${termen.slice(0, 3).join(', ')}${termen.length > 3 ? ' …' : ''} (${korteDatum(lokaleDatum(nu))})`;
+  const preheader = eerste ? [eerste.bronNaam, eerste.regioNaam, eerste.gevonden[0] && `“…${kort(eerste.gevonden[0].fragment.tekst.replace(/^…|…$/g, ''), 110)}…”`].filter(Boolean).join(' · ') : '';
+
+  const waar = melding.bereik === 'mijn' ? 'in je regio’s' : melding.bereik === 'overal' ? 'overal' : `in ${regioNaam(melding.bereik) || melding.bereik}`;
+  const beperkt = { gemeente: 'alleen websites', kamerstuk: 'alleen Kamerstukken', audio: 'alleen audio en video' }[melding.bronnen];
+  const soortMelding = melding.frequentie === 'dagelijks' ? 'dagelijkse' : 'directe';
+  const reden = alles
+    ? `Je krijgt deze mail omdat je een ${soortMelding} melding hebt voor alles uit ${selectie}.`
+    : `Je krijgt deze mail omdat je een ${soortMelding} melding hebt op ‘${zoekvraagTekst(melding.termen)}’ ${waar}${beperkt ? ` (${beperkt})` : ''}.`;
+
+  const rijen = [];
+  const tekst = [`Regiochecker · Melding · ${tijdstip(nu)}`, ''];
+  if (enkel) {
+    const document = documenten.get(eerste.id) || null;
+    rijen.push(rij(stukHtml(eerste, { s, alles, selectie, document, termen: melding.termen, site, enkel: true }), '28px 28px 28px'));
+    tekst.push(alles ? `Nieuw uit ${selectie}.` : `Een nieuw stuk bevat je zoekterm ${[...new Set(eerste.gevonden.map((g) => g.term))].join(', ')}.`, '', stukTekst(eerste, { document, site }), '');
+  } else {
+    const intro = alles ? `${aantal} uit ${html(selectie)}.` : `${aantal} met je ${termen.length > 1 ? 'zoektermen' : 'zoekterm'} ${opsomming(termen.map((g) => `<strong style="font-weight:600;color:${s.a700};">${html(g)}</strong>`))}.`;
+    rijen.push(rij(`<p style="margin:0;${letter(400, 13, 1.5)}color:${s.n800};">${intro}</p>`, '28px 28px 0'));
+    tekst.push(`${aantal} ${alles ? `uit ${selectie}` : `met ${termen.join(', ')}`}.`, '');
+    for (const [groep, kop] of GROEPEN) {
+      const lijst = treffers.filter((t) => groepVanRegel(t) === groep);
+      if (!lijst.length) continue;
+      rijen.push(rij(sectieKop('h3', kop, String(lijst.length), s), '28px 28px 0'));
+      tekst.push(`-- ${kop} (${lijst.length}) --`, '');
+      lijst.forEach((t, i) => {
+        const document = documenten.get(t.id) || null;
+        rijen.push(rij(`<div style="${i ? `border-top:2px solid ${s.inkt};` : ''}padding:${i ? '24px' : '20px'} 0 4px;">${stukHtml(t, { s, alles, selectie, document, termen: melding.termen, site, enkel: false })}</div>`));
+        tekst.push(stukTekst(t, { document, site }), '');
+      });
+      if (groep === 'kamerstuk' && meer) {
+        const zoek = !site ? '' : alles ? `${site}/#/feed?groep=kamerstuk` : `${site}/#/zoeken?q=${encodeURIComponent(zoekvraagTekst(melding.termen))}`;
+        rijen.push(rij(zacht(`${html(meerKamerstukken(meer))}${zoek ? ` ${link('Bekijk ze in de Regiochecker', zoek, s)}.` : ''}`, s, '16px 0 0')));
+        tekst.push(meerKamerstukken(meer) + (zoek ? ` ${zoek}` : ''), '');
+      }
     }
+    rijen.push(rij('&nbsp;', '12px 28px'));
   }
-  tekst.push(voet);
-  const htmlMail = `<!doctype html><html lang="nl"><head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f4f4f1;"><div style="max-width:680px;margin:0 auto;background:#fff;font-family:Georgia,'Times New Roman',serif;color:#1d1d1b;">
-<div style="padding:22px 28px 14px;border-bottom:3px solid #1d1d1b;"><h1 style="font-size:26px;margin:0 0 4px;">${html(naam)}</h1>
-<div style="${KLEIN}">${aantal}${alles ? '' : ` met ${html(termen.join(', '))}`}</div></div>
-<div style="padding:4px 28px 8px;">${inhoud}</div>
-<div style="padding:8px 28px 26px;${KLEIN}">${html(voet)}${site ? ` Instellen: <a href="${html(site)}/#/meldingen" style="color:#6b6b66;">${html(site)}/#/meldingen</a>` : ''}</div>
-</div></body></html>`;
+  tekst.push(reden);
+  if (site) tekst.push(`Melding aanpassen of uitzetten: ${site}/#/meldingen`);
+
+  const htmlMail = mailHtml({
+    s,
+    titel: onderwerp,
+    preheader,
+    rechts: `Melding · ${tijdstip(nu)}`,
+    rijen,
+    voet: `${html(reden)}${site ? ` ${link('Melding aanpassen', `${site}/#/meldingen`, s)} · ${link('Alle meldingen uitzetten', `${site}/#/meldingen`, s)}` : ''}`,
+  });
   return { onderwerp, html: htmlMail, tekst: tekst.join('\n') };
+}
+
+// Alles voor één melding: de treffers sinds `sinds`, met regio- en bronnaam,
+// de tekst van de stukken (bij hooguit drie), en de mail. Ook voor het
+// voorbeeld in Beheer (GET /api/beheer/mailvoorbeeld).
+export function meldingMail(k, melding, gebruiker, { sinds, tot, nu = new Date(), max = Infinity }) {
+  const gevonden = meldingTreffers(k, gebruiker, melding, { sinds, tot });
+  const treffers = gevonden
+    .map((t) => ({
+      ...t,
+      regioNaam: t.regios.map((r) => k.regioMap.get(r)?.naam).filter(Boolean).join(', '),
+      bronNaam: t.stuk ? 'Tweede Kamer' : k.bronnen.get(t.bron)?.naam || '',
+    }))
+    .sort((a, b) => b.tijd.localeCompare(a.tijd))
+    .slice(0, max);
+  if (!treffers.length) return { treffers, mail: null };
+  const documenten = new Map(treffers.length <= MAX_MET_TEKST ? treffers.map((t) => [t.id, documentVoorMail(k, t, melding.termen || [])]) : []);
+  const mail = stelMeldingSamen(melding, treffers, nu, {
+    meer: gevonden.meerKamerstukken || 0,
+    regioNaam: (id) => k.regioMap.get(id)?.naam,
+    titel: gebruiker.titel,
+    documenten,
+  });
+  return { treffers, mail };
 }
 
 function moment(nu, tijd) {
@@ -155,17 +333,13 @@ async function verwerk(ctx, { nu = new Date() } = {}) {
     if (dagelijks && (nu < moment(nu, melding.tijd) || melding.laatsteDagronde === vandaag)) continue;
     const sinds = melding.laatsteMelding || melding.aangemaakt;
     const tot = nu.toISOString();
-    const gevonden = meldingTreffers(k, gebruiker, melding, { sinds, tot });
-    const treffers = gevonden
-      .map((t) => ({ ...t, regioNaam: t.regios.map((r) => k.regioMap.get(r)?.naam).filter(Boolean).join(', ') }))
-      .sort((a, b) => b.tijd.localeCompare(a.tijd));
+    const { treffers, mail } = meldingMail(k, melding, gebruiker, { sinds, tot, nu });
     if (!treffers.length) {
       if (dagelijks) melding.laatsteDagronde = vandaag;
       resultaten.push({ id: melding.id, verstuurd: false });
       continue;
     }
     try {
-      const mail = stelMeldingSamen(melding, treffers, nu, { meer: gevonden.meerKamerstukken || 0, regioNaam: (id) => k.regioMap.get(id)?.naam });
       await verstuur(opslag, { aan: gebruiker.email, ...mail });
       melding.laatsteMelding = tot;
       melding.laatsteFout = null;

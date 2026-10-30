@@ -1024,7 +1024,7 @@ test('raadsvergadering in de weekmail: per onderwerp een kop met punten', metSql
     // De weekmail haalt hem uit de cache: geen tweede aanroep.
     const mail = await stelMailSamen(opslag, { email: 'x@lc.nl', regios: ['smallingerland'], laatsteMail: new Date(Date.now() - 2 * 86400000).toISOString() });
     assert.equal(nep.verzoeken.length, 1);
-    assert.match(mail.html, /<h3[^>]*>Raadsvergaderingen <span[^>]*>\(1\)<\/span><\/h3>/, 'per soort een eigen kop, zoals de tabbladen');
+    assert.match(mail.html, /<h3[^>]*>Raadsvergaderingen<\/h3> <span[^>]*>\(1\)<\/span>/, 'per soort een eigen kop, zoals de tabbladen');
     assert.match(mail.html, /<h4[^>]*>Programmabegroting 2027<\/h4><ul[^>]*><li[^>]*>Gemeentebelangen dient een motie in/);
     assert.match(mail.html, /De motie wordt &lt;unaniem&gt; aangenomen\./);
     assert.match(mail.tekst, /\n {2}Programmabegroting 2027\n {3}- Gemeentebelangen/);

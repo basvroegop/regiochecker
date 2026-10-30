@@ -115,7 +115,7 @@ test('zonder sleutel: geen aanroep, mail zegt waarom er geen samenvatting is', a
   const ontvanger = { email: 'x@example.nl', regios: ['heerenveen'], laatsteMail: '2026-10-19T05:00:00.000Z' };
   const mail = await stelMailSamen(opslag, ontvanger, { nu: new Date('2026-10-20T05:00:00.000Z') });
   assert.equal(mail.aantal, 2);
-  assert.match(mail.onderwerp, /^Heerenveen: 2 nieuwe berichten/);
+  assert.match(mail.onderwerp, /^Week \d+: 2 nieuwe stukken in Heerenveen$/);
   assert.match(mail.html, /Geen samenvatting: er is nog geen Claude-API-sleutel ingesteld/);
   assert.match(mail.html, /Vervangende bron: Woo-stukken op heerenveen\.nl; alleen wat de gemeente zelf op de Woo-pagina zet\./);
   assert.match(mail.tekst, /Brief Plaatselijk Belang Oude- en Nieuwehorne/);
@@ -221,7 +221,7 @@ test('opbouw: H2 per gemeente, daaronder H3 Gemeentenieuws, Ingekomen stukken, W
     'h2 Heerenveen', 'h3 Gemeentenieuws', 'h3 Ingekomen stukken', 'h3 Woo-publicaties',
     'h2 Súdwest-Fryslân', 'h3 Gemeentenieuws', 'h3 Ingekomen stukken', 'h3 Woo-publicaties',
   ]);
-  assert.match(koppen[0], /^h1 Regiochecker/);
+  assert.match(koppen[0], /^h1 Week 42$/);
 
   // Elk bericht staat onder de juiste kop.
   const heerenveen = mail.html.slice(mail.html.indexOf('>Heerenveen</h2>'), mail.html.indexOf('>Súdwest-Fryslân</h2>'));
@@ -276,7 +276,8 @@ test('de samenvatting staat onder de gemeentekop: per onderwerp een punt, met de
     await maakSamenvatting({ opslag, regio: regioOpId('heerenveen'), items: [...ITEMS].sort((a, b) => a.titel.localeCompare(b.titel)), client: nep.client });
     const mail = await stelMailSamen(opslag, { email: 'x@example.nl', regios: ['heerenveen'], laatsteMail: '2026-10-19T05:00:00.000Z' }, { nu: new Date('2026-10-20T05:00:00.000Z') });
     const h2 = mail.html.indexOf('>Heerenveen</h2>');
-    const punt = mail.html.indexOf('Plaatselijk Belang &lt;maakt&gt; bezwaar.');
+    // (Het punt staat ook in de verborgen voorbeeldtekst bovenaan; daarom vanaf de kop zoeken.)
+    const punt = mail.html.indexOf('Plaatselijk Belang &lt;maakt&gt; bezwaar.', h2);
     const eersteH3 = mail.html.indexOf('<h3', h2);
     assert.ok(h2 < punt && punt < eersteH3, 'samenvatting tussen H2 en de eerste H3');
     const lijst = mail.html.slice(mail.html.indexOf('<ul', h2), mail.html.indexOf('</ul>', h2));

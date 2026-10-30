@@ -269,11 +269,12 @@ test('meldingen zonder zoekterm: alles binnen regio\'s en bronnen, en niet extra
     opslag.meldingen.push({ ...basis, bereik: 'opsterland', aangemaakt: uurGeleden(100), laatsteMelding: null });
     assert.deepEqual((await verwerkMeldingen(ctx)).filter((r) => r.verstuurd).map((r) => [r.id, r.aantal]), [['m2', 1]]);
     const mail = plat(smtp.ontvangen[0]);
-    assert.match(mail, /Subject: Melding: 1 nieuw stuk uit Opsterland/);
-    assert.match(mail, /Alles uit Opsterland/);
+    // Eén stuk: "{regio}: {titel}" als onderwerp.
+    assert.match(mail, /Subject: Opsterland: Bakkeveen: omleiding/);
+    assert.match(mail, /Nieuw uit Opsterland\./);
     assert.match(mail, /Bakkeveen: omleiding/);
-    assert.doesNotMatch(mail, /Gevonden:/);
-    assert.match(mail, /voor alles wat er nieuw binnenkomt uit Opsterland/);
+    assert.doesNotMatch(mail, /Een nieuw stuk bevat je zoekterm/);
+    assert.match(mail, /een directe melding hebt voor alles uit Opsterland/);
 
     // Sanne volgt Opsterland niet: de melding zet het niet in haar feed.
     assert.ok(!bouwFeed(ctx, sanne).items.some((i) => i.id === 'i:opsterland-nieuws:b'));
