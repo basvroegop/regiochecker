@@ -11,7 +11,7 @@ import { lookup } from 'node:dns/promises';
 import { fetch } from 'undici';
 import { prive, openbaarDispatcher } from '../netwerk.mjs';
 import { createWriteStream, existsSync } from 'node:fs';
-import { mkdir, rename, rm, stat, readFile, unlink } from 'node:fs/promises';
+import { mkdir, rename, rm, stat, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Readable, Transform } from 'node:stream';
@@ -142,10 +142,45 @@ export function ytdlp(args, { map, tijd = 240_000 } = {}) {
 // Eén compacte mono-mp3, uit een bestand of rechtstreeks van een stream.
 // Bij een stream (HLS van een raadsvergadering) staat de invoer vast op
 // HTTPS zonder doorverwijzingen: ffmpeg mag nergens anders heen dan de bron.
-export async function zetOm(bron, doel, { netwerk = false } = {}) {
+// `lijst`: de invoer is een lijst lokale bestanden die na elkaar komen.
+export async function zetOm(bron, doel, { netwerk = false, lijst = false } = {}) {
   const bereik = netwerk ? ['-protocol_whitelist', 'https,tls,tcp,crypto,hls', '-max_redirects', '0', '-user_agent', UA,
-    '-reconnect', '1', '-reconnect_on_network_error', '1', '-reconnect_delay_max', '60'] : [];
+    '-reconnect', '1', '-reconnect_on_network_error', '1', '-reconnect_delay_max', '60']
+    : lijst ? ['-f', 'concat', '-protocol_whitelist', 'file'] : [];
   await draai(process.env.FFMPEG || 'ffmpeg', ['-nostdin', '-y', '-v', 'error', ...bereik, '-i', bron, '-vn', '-ac', '1', '-ar', '24000', '-b:a', '64k', doel], { tijd: 2 * 3600_000 });
+}
+
+// Een opname in losse bestanden (een mp3 per agendapunt): na elkaar ophalen,
+// samenvoegen tot `doel`, en de agenda teruggeven met de tijden die uit de
+// lengte van elk deel volgen. Een leeg of onleesbaar deel valt weg.
+export async function haalDelen(delen, mapAf, doel, { beurt } = {}) {
+  const regels = [];
+  const agenda = [];
+  const paden = [];
+  let tijd = 0;
+  const rond = (s) => Math.round(s * 10) / 10;
+  try {
+    for (const [i, d] of delen.entries()) {
+      await beurt?.();
+      const naam = `deel-${i}.media`;
+      const pad = path.join(mapAf, naam);
+      paden.push(pad);
+      await haalOpenbaar(d.adres, { naar: pad, maxBytes: MAX_BYTES });
+      const duur = await audioDuur(pad);
+      if (!duur) continue;
+      regels.push(`file '${naam}'`);
+      agenda.push({ titel: d.titel, start: rond(tijd), eind: rond(tijd + duur) });
+      tijd += duur;
+    }
+    if (!regels.length) throw new Error('Geen van de geluidsbestanden van deze vergadering kon worden gelezen.');
+    const lijst = path.join(mapAf, 'delen.txt');
+    paden.push(lijst);
+    await writeFile(lijst, `${regels.join('\n')}\n`);
+    await zetOm(lijst, doel, { lijst: true });
+  } finally {
+    for (const p of paden) await rm(p, { force: true });
+  }
+  return { agenda, duur: rond(tijd) };
 }
 
 // De audio van één aflevering, als mp3 in data/audio/<id>/. `bron`: de
@@ -176,13 +211,17 @@ export async function downloadAudio(af, { map, vergadering, metadata }) {
       const r = await vergadering(af);
       adres = r.adres;
       stream = r.stream;
-      if (r.velden) metadata?.(r.velden);
+      if (r.delen) {
+        const { agenda, duur } = await haalDelen(r.delen, mapAf, doel, { beurt: r.beurt });
+        metadata?.({ ...r.velden, duur, platform: { ...r.velden?.platform, agenda } });
+        pad = doel;
+      } else if (r.velden) metadata?.(r.velden);
     }
-    if (!adres) throw new Error('Deze aflevering heeft geen mediabestand.');
-    if (stream) {
+    if (!pad && !adres) throw new Error('Deze aflevering heeft geen mediabestand.');
+    if (!pad && stream) {
       await zetOm(await openbaar(adres), doel, { netwerk: true });
       pad = doel;
-    } else {
+    } else if (!pad) {
       const deel = path.join(mapAf, 'bron.deel');
       await haalOpenbaar(adres, { naar: deel, maxBytes: MAX_BYTES });
       pad = path.join(mapAf, 'bron.media');

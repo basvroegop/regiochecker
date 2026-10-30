@@ -1,5 +1,5 @@
 // Audio en video, nu in de Regiochecker zelf: catalogi lezen (podcast,
-// YouTube-adressen, Notubiz, iBabs met babscast, GemeenteOplossingen achter
+// YouTube-adressen, Notubiz, iBabs met babscast of een mp3 per agendapunt, GemeenteOplossingen achter
 // Anubis, een gemeentepagina die naar haar archief linkt), de
 // verwerking tegen een nagebootste Whisper-worker (downloaden, ffmpeg,
 // transcriberen, namen, nummers, herkansen, pauze, volgorde), het archief via
@@ -19,7 +19,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { Opslag } from '../src/opslag.mjs';
 import { herken as herkenGebruiker, nieuweGebruiker } from '../src/gebruikers.mjs';
 import { leesPodcast, youtubeAdres } from '../src/audio/catalogus.mjs';
-import { nepWorker, nepPodcast, TOKEN, STEM } from './nep-worker.mjs';
+import { nepWorker, nepPodcast, wav, TOKEN, STEM } from './nep-worker.mjs';
 import { roep } from './api-hulp.mjs';
 
 const sqlite = await import('node:sqlite').catch(() => null);
@@ -80,6 +80,7 @@ async function nepInternet(routes) {
     const r = routes(u);
     if (r === undefined) return { statusCode: 404, data: 'niet gevonden' };
     if (r?.status) return { statusCode: r.status, data: r.body, responseOptions: { headers: { 'content-type': 'application/json' } } };
+    if (Buffer.isBuffer(r)) return { statusCode: 200, data: r, responseOptions: { headers: { 'content-type': 'audio/wav' } } };
     return typeof r === 'string'
       ? { statusCode: 200, data: r, responseOptions: { headers: { 'content-type': 'text/html' } } }
       : { statusCode: 200, data: JSON.stringify(r), responseOptions: { headers: { 'content-type': 'application/json' } } };
@@ -184,6 +185,69 @@ test('iBabs met babscast, Notubiz onder notubiz.nl, en een gemeentepagina die na
       stream: true,
     });
     assert.ok(!JSON.stringify(m).includes('geheim'), 'het spelertoken blijft buiten de Regiochecker');
+  } finally {
+    net.herstel();
+  }
+});
+
+test('iBabs zonder speler: de mp3 bij elk agendapunt samen één opname, met de agenda erbij', { skip: ffmpeg ? false : 'ffmpeg niet aanwezig' }, async () => {
+  const { herken, ontdek, mediaVoor, platformVoor, ibabsGeluid } = await import('../src/audio/vergaderingen.mjs');
+  const { downloadAudio, audioDuur } = await import('../src/audio/ophalen.mjs');
+  const uuid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  // Zoals op westerwolde.bestuurlijkeinformatie.nl (oktober 2026).
+  const punt = (id, nummer, titel, bijlagen) => `<li><div class="panel panel-default agenda-item" id="${id}" >
+    <div class="panel-id">${nummer}</div><h3 class="panel-title"><button aria-controls="collapse-${id}"><span class="panel-title-label" >${titel}</span></button></h3>
+    <ul class="list-group list-attachments">${bijlagen.map(([doc, soort, naam]) => `<li><a href="${soort === 'mp3' ? `/Document/View/${doc}` : `/Agenda/Document/${uuid(100)}?documentId=${doc}&amp;agendaItemId=${id}`}" class="unread" data-document-id="${doc}" target=_blank>
+      <span class="icon ${soort}" aria-label="${soort}" role="img"></span> ${naam} <span class="badge badge-light badge-pill">433 KB</span></a></li>`).join('')}</ul></div></li>`;
+  const pagina = punt(uuid(1), '1', 'Opening', [[uuid(11), 'mp3', 'Geluidsbestand agendapunt 1 - Opening']])
+    + punt(uuid(2), '2', 'Parkeerverordening Westerwolde 2026', [[uuid(21), 'pdf', 'Raadsvoorstel'], [uuid(22), 'mp3', 'Geluidsbestand agendapunt 2 - Parkeerverordening']])
+    + punt(uuid(3), '3', 'Sluiting', []);
+  assert.deepEqual(ibabsGeluid(pagina), { type: 'geluid', delen: [{ id: uuid(11), titel: '1. Opening' }, { id: uuid(22), titel: '2. Parkeerverordening Westerwolde 2026' }] });
+  assert.equal(ibabsGeluid(punt(uuid(4), '1', 'Opening', [[uuid(41), 'pdf', 'Agenda']])), null, 'alleen pdf\'s: geen opname');
+
+  const begin = new Date(Date.now() - 10 * 86400_000);
+  begin.setHours(19, 30, 0, 0);
+  const lokaalIso = (d) => new Date(d - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 19);
+  const net = await nepInternet((u) => {
+    if (u.host !== 'ww.bestuurlijkeinformatie.nl') return undefined;
+    if (u.pathname === '/Calendar/GetAgendasForCalendar') {
+      return Date.parse(u.searchParams.get('start')) <= begin && begin < Date.parse(u.searchParams.get('end'))
+        ? [{ id: uuid(100), title: 'Raadsvergadering', start: lokaalIso(begin), url: `/Agenda/Index/${uuid(100)}`, classNames: ['agendatype-7'] }] : [];
+    }
+    if (u.pathname === '/Calendar') return '<a href="/Calendar/OpenCategory/7">Raadsvergadering</a>';
+    if (u.pathname === `/Agenda/Index/${uuid(100)}`) return `<html>${pagina}</html>`;
+    if (u.pathname === `/Document/View/${uuid(11)}`) return wav(1);
+    if (u.pathname === `/Document/View/${uuid(22)}`) return wav(2);
+    return undefined;
+  });
+  try {
+    const portaal = 'https://ww.bestuurlijkeinformatie.nl/';
+    assert.deepEqual(await herken(portaal, 'meetings'), { kind: 'ibabs', url: portaal });
+    const c = await ontdek({ url: portaal, audio: { kind: 'ibabs', eersteImport: 0 } });
+    assert.deepEqual(c.items.map((i) => [i.extern, i.titel, i.auteur, i.duur]), [[`ibabs:ww.bestuurlijkeinformatie.nl/${uuid(100)}`, 'Raadsvergadering', 'Raadsvergadering', null]]);
+
+    const m = await mediaVoor(c.items[0]);
+    assert.deepEqual(m.delen, [
+      { adres: `${portaal}Document/View/${uuid(11)}`, titel: '1. Opening' },
+      { adres: `${portaal}Document/View/${uuid(22)}`, titel: '2. Parkeerverordening Westerwolde 2026' },
+    ]);
+    assert.equal(typeof m.beurt, 'function', 'ook de downloads met de Crawl-delay');
+
+    // Downloaden: samen één mp3, en de agenda met de tijden uit de lengte van elk deel.
+    const map = tijdelijk();
+    const meta = {};
+    const pad = await downloadAudio({ ...c.items[0], id: 'w1' }, { map, vergadering: mediaVoor, metadata: (x) => Object.assign(meta, x) });
+    const duur = await audioDuur(pad);
+    assert.ok(duur > 2.8 && duur < 3.3, `drie seconden samen (${duur})`);
+    assert.deepEqual(meta.platform.agenda.map((a) => [a.titel, Math.round(a.start), Math.round(a.eind)]), [['1. Opening', 0, 1], ['2. Parkeerverordening Westerwolde 2026', 1, 3]]);
+    assert.equal(meta.platform.versie, 2);
+    assert.equal(Math.round(meta.duur), 3);
+    assert.ok(!existsSync(path.join(map, 'audio', 'w1', 'deel-0.media')) && !existsSync(path.join(map, 'audio', 'w1', 'delen.txt')), 'de losse delen zijn opgeruimd');
+
+    // De agenda komt uit het downloaden; vernieuwen van de platformgegevens laat die staan.
+    const metAgenda = { ...c.items[0], platform: { agenda: meta.platform.agenda, sprekers: [], versie: 1 } };
+    assert.deepEqual((await platformVoor(metAgenda)).agenda, meta.platform.agenda);
+    assert.equal(await platformVoor(c.items[0]), null);
   } finally {
     net.herstel();
   }

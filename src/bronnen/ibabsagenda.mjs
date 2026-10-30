@@ -31,15 +31,23 @@ export function leesKalender(json, agendatype) {
     .sort((a, b) => a.datum.localeCompare(b.datum));
 }
 
-// De agendapunten op /Agenda/Index/<id>, met hun bijlagen. Een punt zonder
+// De agendapunten op /Agenda/Index/<id>, met hun bijlagen (ook voor de
+// geluidsopnames per agendapunt, src/audio/vergaderingen.mjs). Een punt zonder
 // uitklapblok ("Ter kennisname", "Ter afhandeling van het college") is een kopje.
 export function leesAgendapunten(html) {
   const pagina = String(html);
   const begin = [...pagina.matchAll(/<div class="panel panel-default agenda-item" id="([0-9a-f-]{36})"/gi)];
   return begin.map((m, i) => {
     const blok = pagina.slice(m.index, begin[i + 1]?.index ?? pagina.length);
-    const bijlagen = [...blok.matchAll(/<a\b[^>]*href="(\/Agenda\/Document\/[^"]+)"[^>]*\bdata-document-id="([0-9a-f-]{36})"[^>]*>([\s\S]*?)<\/a>/gi)]
-      .map((a) => ({ id: a[2], pad: a[1].replace(/&amp;/g, '&'), naam: tekst(a[3].replace(/<span class="badge[^"]*">[\s\S]*?<\/span>/gi, '')) }));
+    // Naar de viewer (/Agenda/Document/…) of, bij geluidsbestanden, rechtstreeks naar het bestand (/Document/View/<id>).
+    const bijlagen = [...blok.matchAll(/<a\b[^>]*href="(\/(?:Agenda\/)?Document\/[^"]+)"[^>]*\bdata-document-id="([0-9a-f-]{36})"[^>]*>([\s\S]*?)<\/a>/gi)]
+      .map((a) => ({
+        id: a[2],
+        pad: a[1].replace(/&amp;/g, '&'),
+        naam: tekst(a[3].replace(/<span class="badge[^"]*">[\s\S]*?<\/span>/gi, '')),
+        // Het pictogram zegt wat het is: pdf, docx, mp3 (een geluidsopname, src/audio/vergaderingen.mjs).
+        soort: /<span class="icon (\w+)"/i.exec(a[3])?.[1]?.toLowerCase() || null,
+      }));
     return {
       id: m[1],
       nummer: tekst(/<div class="panel-id">([\s\S]*?)<\/div>/i.exec(blok)?.[1] || ''),

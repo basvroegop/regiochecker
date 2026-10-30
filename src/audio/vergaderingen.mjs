@@ -6,14 +6,15 @@
 //   Company Webcast      channel.royalcast.com / channel.companywebcast.com
 //   Notubiz              <gemeente>.raadsinformatie.nl (api.notubiz.nl + HLS-stream);
 //                        <gemeente>.notubiz.nl verwijst naar hetzelfde archief
-//   iBabs                <gemeente>.bestuurlijkeinformatie.nl met opnames in babscast;
-//                        toont zo'n portaal Company Webcast, dan wordt het dat archief
+//   iBabs                <gemeente>.bestuurlijkeinformatie.nl met opnames in babscast,
+//                        of een mp3 per agendapunt (Westerwolde); toont zo'n portaal
+//                        Company Webcast, dan wordt het dat archief
 //   GemeenteOplossingen  eigen gemeentedomein, herkend aan de open-data-API /api/v2/
 //
 // Een andere pagina (de raadspagina van een gemeentesite) mag ook: daarin
 // zoeken we een link naar een van deze platforms.
 //
-// GemeenteOplossingen (Groningen) zet de vergaderpagina achter Anubis, een
+// GemeenteOplossingen (Groningen, Tynaarlo) zet de vergaderpagina achter Anubis, een
 // proof-of-work-poort. De agenda komt uit de open API; alleen het opzoeken van
 // de bestandsnaam van de opname gaat langs de poort: één pagina per vergadering,
 // met een eerlijke user-agent, de Crawl-delay uit de robots.txt van het portaal,
@@ -23,6 +24,7 @@
 import { createHash } from 'node:crypto';
 import { haalJsonOpenbaar, haalTekstOpenbaar, UA } from './ophalen.mjs';
 import { ontsnap, platteTekst } from '../html.mjs';
+import { leesAgendapunten } from '../bronnen/ibabsagenda.mjs';
 
 export const PLATFORMS = { companywebcast: 'Company Webcast', notubiz: 'Notubiz', ibabs: 'iBabs', gemeenteoplossingen: 'GemeenteOplossingen' };
 const COMPANY_WEBCAST = new Set(['channel.royalcast.com', 'channel.companywebcast.com']);
@@ -112,7 +114,9 @@ export function ontdek(bron, { proef = false } = {}) {
   return webcastOntdek(bron);
 }
 
-// Het actuele media-adres van één vergadering: { adres, velden, stream }.
+// Het actuele media-adres van één vergadering: { adres, velden, stream }, of
+// { delen, beurt, velden } voor een opname in losse bestanden (een mp3 per
+// agendapunt): src/audio/ophalen.mjs voegt die samen en maakt er de agenda bij.
 // Elk platform bouwt die link per bezoek opnieuw, dus niet bewaren.
 // `velden.platform` is wat het platform zelf over de opname weet, met tijden
 // in seconden vanaf het begin van de opname:
@@ -150,7 +154,10 @@ export const PLATFORM_MET_SPREKERS = ['cwc:', 'ntb:'];
 export async function platformVoor(af) {
   if (af.vorm !== 'vergadering') return null;
   try {
-    return (await mediaVoor(af)).velden?.platform || { agenda: [], sprekers: [], versie: PLATFORM_VERSIE };
+    const media = await mediaVoor(af);
+    // Een opname in delen: de tijden van de agenda volgen pas uit het downloaden.
+    if (media.delen) return af.platform ? { ...af.platform, versie: PLATFORM_VERSIE } : null;
+    return media.velden?.platform || { agenda: [], sprekers: [], versie: PLATFORM_VERSIE };
   } catch {
     return null;
   }
@@ -469,6 +476,9 @@ export function notubizNaam(naam) {
 // agenda komt uit de kalender van het portaal, de opname uit de openbare
 // babscast-API (afgelopen uitzendingen hebben daar een HLS-afspeellijst).
 // Het tweede wordt gewoon het Company Webcast-archief van die gemeente.
+// Westerwolde heeft geen speler, maar zet de opname als mp3 bij elk agendapunt
+// ("Geluidsbestand agendapunt 1 - Opening"); die bestanden samen zijn de
+// vergadering, en hun lengtes geven de agenda met tijden.
 //
 // Of een vergadering een opname heeft, staat alleen op haar eigen pagina. De
 // portalen vragen 5 seconden tussen verzoeken (robots.txt); we onthouden dus
@@ -485,6 +495,7 @@ const BABSCAST = process.env.BABSCAST_API || 'https://player.babscast.com';
 const BABSCAST_MEDIA = /(^|\.)babscast\.com$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SPELERBLOK = /<div\b[^>]*\bclass="cwc"[^>]*>/i;
+const IBABS_GELUID_DAGEN = 7; // zo lang na de vergadering kan de opname er nog bij komen
 const ibabsBlokken = new Map(); // <host>/<agenda> → spelerblok of null (alleen van afgelopen vergaderingen)
 const ibabsZonder = new Map(); // <host>/<agendasoort> → afgelopen vergaderingen zonder speler (Set)
 const ibabsMet = new Set(); // <host>/<agendasoort> met minstens één speler
@@ -554,10 +565,20 @@ export function ibabsSpelerblok(pagina) {
   return null;
 }
 
+// De geluidsbestanden bij de agendapunten, op volgorde: { type: 'geluid', delen: [{ id, titel }] }.
+export function ibabsGeluid(pagina) {
+  const delen = leesAgendapunten(pagina).flatMap((p) => p.bijlagen.filter((b) => b.soort === 'mp3').map((b) => ({
+    id: b.id.toLowerCase(),
+    titel: p.titel ? `${p.nummer ? `${p.nummer}. ` : ''}${p.titel}` : b.naam.replace(/^Geluidsbestand\s+/i, ''),
+  })));
+  return delen.length ? { type: 'geluid', delen } : null;
+}
+
 async function ibabsBlok(portaal, agenda, { afgelopen = true } = {}) {
   const sleutel = `${new URL(portaal).host}/${agenda}`;
   if (ibabsBlokken.has(sleutel)) return ibabsBlokken.get(sleutel);
-  const blok = ibabsSpelerblok(await ibabsTekst(portaal, `/Agenda/Index/${agenda}`));
+  const pagina = await ibabsTekst(portaal, `/Agenda/Index/${agenda}`);
+  const blok = ibabsSpelerblok(pagina) || ibabsGeluid(pagina);
   // Een toekomstige vergadering kan haar speler nog krijgen.
   if (afgelopen) ibabsBlokken.set(sleutel, blok);
   return blok;
@@ -614,10 +635,12 @@ async function ibabsHerken(u) {
   for (const v of kandidaten.slice(0, 6)) {
     const blok = await ibabsBlok(portaal, v.id, { afgelopen: Boolean(v.start) });
     if (blok?.type === 'companywebcast') return { kind: 'companywebcast', url: `https://channel.royalcast.com/${blok.code.split('/')[0]}/` };
-    if (blok?.type === 'babscast') return { kind: 'ibabs', url: portaal };
+    if (blok?.type === 'babscast' || blok?.type === 'geluid') return { kind: 'ibabs', url: portaal };
   }
   throw new Error('Bij de recente vergaderingen in dit iBabs-portaal staat geen opname. Gebruikt de gemeente een ander videokanaal, plak dan dat adres.');
 }
+
+const ruimAfgelopen = (start, nu) => start < nu - IBABS_GELUID_DAGEN * 86400_000;
 
 async function ibabsOntdek(bron, { proef = false } = {}) {
   const portaal = bron.url;
@@ -643,7 +666,16 @@ async function ibabsOntdek(bron, { proef = false } = {}) {
       const zonder = ibabsZonder.get(soort) || new Set();
       // Een soort die drie keer geen speler had, slaan we over; de laatste maand blijven we kijken.
       if (!ibabsMet.has(soort) && zonder.size >= 3 && v.start < nu - 30 * 86400_000) continue;
-      const blok = await ibabsBlok(portaal, v.id);
+      // Geluidsbestanden komen soms pas dagen na de vergadering: tot dan niet onthouden.
+      const blok = await ibabsBlok(portaal, v.id, { afgelopen: ruimAfgelopen(v.start, nu) });
+      if (blok?.type === 'geluid') {
+        ibabsMet.add(soort);
+        items.push(item({
+          extern: `ibabs:${host}/${v.id}`, url: `${portaal}Agenda/Index/${v.id}`, titel: v.titel || 'Vergadering', auteur: namen.get(v.soort) || '', duur: null,
+        }, v.start));
+        if (proef && items.length >= IBABS_PROEF) break;
+        continue;
+      }
       if (blok?.type !== 'babscast') {
         if (!blok) ibabsZonder.set(soort, zonder.add(v.id));
         continue;
@@ -678,7 +710,15 @@ async function ibabsMedia(af) {
   const u = new URL(af.url);
   const agenda = af.extern.slice(`ibabs:${u.host}/`.length);
   if (!af.extern.startsWith(`ibabs:${u.host}/`) || !IBABS_PORTAAL.test(u.hostname) || !UUID.test(agenda)) throw new Error('Deze vergadering heeft geen herkenbare bronverwijzing meer.');
-  const blok = await ibabsBlok(`https://${u.host}/`, agenda);
+  const blok = await ibabsBlok(`https://${u.host}/`, agenda, { afgelopen: ruimAfgelopen(Date.parse(af.gepubliceerd || '') || 0, Date.now()) });
+  if (blok?.type === 'geluid') {
+    return {
+      delen: blok.delen.map((d) => ({ adres: `https://${u.host}/Document/View/${d.id}`, titel: d.titel })),
+      // Ook bij het downloaden de Crawl-delay van het portaal aanhouden.
+      beurt: () => ibabsBeurt(u.host),
+      velden: { platform: { agenda: [], sprekers: [] } },
+    };
+  }
   if (blok?.type !== 'babscast') throw geenOpname('Deze vergadering biedt geen opname aan.');
   const ev = await babscastEvent(blok.event);
   if (!ev || !ev.openbaar) throw new Error('Deze vergadering heeft geen openbare opname.');

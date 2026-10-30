@@ -341,7 +341,7 @@ Overgenomen uit audioscraper; de code staat in `src/audio/`.
 |---|---|---|
 | Raadsvergadering, Company Webcast | `channel.royalcast.com/<gemeente>/` | archief via de portaal-API; de mp3 (of mp4) van de vergadering |
 | Raadsvergadering, Notubiz | `<gemeente>.raadsinformatie.nl` (of `<gemeente>.notubiz.nl`, dat naar hetzelfde archief wijst) | agenda via api.notubiz.nl; ffmpeg haalt alleen het geluid uit de HLS-stream |
-| Raadsvergadering, iBabs | `<gemeente>.bestuurlijkeinformatie.nl` | agenda uit de kalender van het portaal, de opname uit de openbare babscast-API (HLS, alleen het geluid) |
+| Raadsvergadering, iBabs | `<gemeente>.bestuurlijkeinformatie.nl` | agenda uit de kalender van het portaal, de opname uit de openbare babscast-API (HLS, alleen het geluid), of de mp3's bij de agendapunten, samengevoegd (Westerwolde) |
 | Raadsvergadering, GemeenteOplossingen | eigen domein, bijv. `gemeenteraad.groningen.nl` | agenda via de open API `/api/v2/`; de mp3 van de open mediaserver |
 | YouTube | kanaal, tab (video's, live, Shorts), afspeellijst of losse video | yt-dlp (lijst, daarna audio) |
 | Podcast | RSS-feed | de audiobijlage |
@@ -398,6 +398,14 @@ seconden (via `api.notubiz.nl/events/meetings/<id>`) en de spreekmomenten onder
 `end_offset`; de API geeft die niet; "Vries de, Jannewietske" wordt "Jannewietske
 de Vries"); babscast de tijdlijn (`TimelineEvents` van het soort Topic).
 GemeenteOplossingen geeft via de open API geen agenda met tijden.
+
+**Een mp3 per agendapunt** (Westerwolde). Het iBabs-portaal heeft daar geen
+speler, maar zet bij elk agendapunt een bijlage "Geluidsbestand agendapunt 1 -
+Opening" (`/Document/View/<id>`). Die bestanden samen zijn de vergadering: bij het
+downloaden halen we ze op volgorde op (met de Crawl-delay van het portaal),
+voegen ze met ffmpeg samen tot één opname, en maken de agenda met tijden uit de
+lengte van elk deel. Een opname kan er tot een week na de vergadering bij komen;
+tot dan kijken we bij elke controle opnieuw.
 
 Sinds 28 oktober 2026 zitten de Notubiz-portalen (`*.raadsinformatie.nl`)
 achter een Cloudflare-controle; de API (`api.notubiz.nl`) niet. Daar gaan we
@@ -460,7 +468,9 @@ agenda komt uit de open API; alleen het opzoeken van de bestandsnaam van de
 opname gaat langs de poort, zoals audioscraper deed: één pagina per vergadering,
 met een eerlijke user-agent (`Regiochecker/1.0`), de Crawl-delay uit de robots.txt
 van het portaal, en de verkregen cookie hergebruikt. Dat is een uitdrukkelijke
-keuze van de opdrachtgever (eerder gemaakt voor audioscraper).
+keuze van de opdrachtgever (eerder gemaakt voor audioscraper), op 30 oktober 2026
+ook voor Tynaarlo (raad.tynaarlo.nl). Alleen voor de opnames: de stukken op die
+portalen (zoals de ingekomen stukken) halen we niet langs de poort.
 
 **De Whisper-worker** (de Plaud Whisper Worker met de audio-uitbreiding, zie
 `deploy/` in de audioscraper-repository) draait in het thuisnetwerk en is via de
@@ -596,8 +606,9 @@ Het Authelia-account zelf, en toegang tot deze site, regel je in Authelia
   `data/regios.json` en `data/bronnen.json` (toegevoegd via Beheer): nieuws bij
   alle 33 (27 via RSS, 6 via `html-lijst`), ingekomen stukken (of als
   vervangende bron raadsinformatiebrieven en memo's) uit iBabs of Notubiz bij
-  32, Woo bij 22, en de vergaderingen van 28 gemeenten (22 Company Webcast, 5
-  Notubiz, Stadskanaal via iBabs) met eerste import "alleen nieuwe". Daarnaast
+  32, Woo bij 22, en de vergaderingen van 30 gemeenten (22 Company Webcast, 5
+  Notubiz, Stadskanaal en Westerwolde via iBabs, Tynaarlo via
+  GemeenteOplossingen) met eerste import "alleen nieuwe". Daarnaast
   krijgen ze de bekendmakingen van de provincie Fryslân voor hun gemeente, de
   signalen met een plek (KNMI, ransomware, Raad van State, verkeer,
   inzendingen) en wat via hun sleutelwoorden binnenkomt. Een regio heet naar de gemeente: hernoem hem niet,
