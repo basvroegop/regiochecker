@@ -30,7 +30,7 @@ export const TRANSCRIPT = [
 const NAMEN = [['Drachten', 'location'], ['Anke Postma', 'person'], ['wethouder Kramer', 'person'], ['programmabegroting 2027', 'other']];
 
 export function nepWorker({ token = TOKEN } = {}) {
-  const staat = { verzoeken: [], namen: new Map([[STEM.voorzitter, 'Voorzitter Bos'], [STEM.postma, 'Anke Postma']]), gpuBezig: false, entiteitFout: 0, transcriptieFout: null };
+  const staat = { verzoeken: [], namen: new Map([[STEM.voorzitter, 'Voorzitter Bos'], [STEM.postma, 'Anke Postma']]), gpuBezig: false, entiteitFout: 0, transcriptieFout: null, spel: null, spelTijdensTranscriptie: null };
   const json = (res, data, status = 200) => {
     res.writeHead(status, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(data));
@@ -41,12 +41,25 @@ export function nepWorker({ token = TOKEN } = {}) {
     const ruw = Buffer.concat(delen);
     const url = new URL(req.url, 'http://x');
     staat.verzoeken.push(`${req.method} ${url.pathname}`);
+    // Spelwacht (scripts/windows/spelwacht.ps1): de worker is gestopt voor een
+    // spel, alleen /health antwoordt nog.
+    if (staat.spel) {
+      if (url.pathname === '/health') return json(res, { status: 'paused', reason: 'game', game: staat.spel.game, since: staat.spel.since });
+      return json(res, { detail: 'Gepauzeerd: er draait een spel' }, 503);
+    }
     if (url.pathname === '/health') return json(res, { status: 'ok', model: 'large-v3', device: 'cuda', inference_phase: staat.gpuBezig ? 'transcribing' : null, diarization_available: true });
     if (req.headers.authorization !== `Bearer ${token}`) return json(res, { detail: 'Invalid worker token' }, 401);
     if (req.method === 'POST' && url.pathname === '/v1/media/transcriptions') {
       const tekst = ruw.toString('latin1');
       staat.laatsteUpload = { bytes: ruw.length, mp3: /filename="audio\.mp3"/.test(tekst) && /Content-Type: audio\/mpeg/i.test(tekst), diarize: /name="diarize"\r\n\r\ntrue/.test(tekst), opname: /name="recording_id"\r\n\r\n([^\r]+)/.exec(tekst)?.[1] };
       if (staat.transcriptieFout) return json(res, { detail: staat.transcriptieFout.detail }, staat.transcriptieFout.status);
+      // Een spel begint midden in een transcriptie: Spelwacht stopt de worker
+      // (de verbinding valt weg) en neemt daarna /health over.
+      if (staat.spelTijdensTranscriptie) {
+        staat.spel = staat.spelTijdensTranscriptie;
+        staat.spelTijdensTranscriptie = null;
+        return req.socket.destroy();
+      }
       const segments = TRANSCRIPT.map((s) => ({ ...s, ...(s.speaker_id && staat.namen.has(s.speaker_id) ? { speaker: staat.namen.get(s.speaker_id) } : {}) }));
       return json(res, { text: segments.map((s) => s.text.trim()).join(' '), language: 'nl', duration: 70, segments, diarization_model: 'pyannote', diarization_error: null });
     }

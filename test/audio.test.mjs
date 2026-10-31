@@ -347,6 +347,51 @@ async function opzet() {
   return { opslag, fdb, adb, verwerking, beschikbaar, map };
 }
 
+test('spel op de GPU-machine: niets beginnen, een afgebroken deel telt niet mee, geen Ollama', metAlles, async () => {
+  process.env.REGIOCHECKER_SPEL_WACHT_MS = '20';
+  const worker = await nepWorker();
+  const feed = await nepPodcast({ n: 2 });
+  try {
+    const { opslag, fdb, adb, verwerking } = await opzet();
+    const { koppelSpel } = await import('../src/audio/spel.mjs');
+    const { ollamaJson } = await import('../src/ollama.mjs');
+    koppelSpel(opslag);
+    const jan = herkenGebruiker(opslag, { login: 'jan', email: 'jan@example.nl' });
+    const ctx = { opslag, kdb: null, fdb, adb };
+    opslag.instellingen.audio = { ...opslag.instellingen.audio, workerUrl: worker.url, workerToken: TOKEN, viaTailnet: false };
+    await roep(ctx, jan, 'POST', '/api/beheer/bronnen', { bereik: 'regio', regio: 'smallingerland', lezer: 'audio', soort: 'podcast', url: feed.url, eersteImport: 2 });
+    assert.equal((await verwerking.synchroniseer(opslag.bronnen[0])).nieuw, 2);
+    const eerste = verwerking.volgende()[0].id;
+
+    // Er draait een spel: niets beginnen, niets naar de worker sturen.
+    worker.staat.spel = { game: 'Cyberpunk2077.exe', since: '2026-10-31T17:40:00+01:00' };
+    assert.equal(await verwerking.verwerkEen(), false);
+    assert.ok(!worker.staat.verzoeken.some((v) => v.startsWith('POST')));
+    assert.deepEqual((await roep(ctx, jan, 'GET', '/api/beheer/audio')).data.worker.spel, { naam: 'Cyberpunk2077.exe', sinds: '2026-10-31T16:40:00.000Z' });
+    // Ollama draait op dezelfde machine: ook geen samenvatting, met de reden erbij.
+    await assert.rejects(ollamaJson({ url: worker.url.replace(/:\d+$/, ':11434'), model: 'qwen3.5:9b', systeem: 'x', vraag: 'y', schema: {} }), /Er wordt gegamed op de GPU-machine \(Cyberpunk2077\.exe\); samenvatten kan daarna weer/);
+
+    // Het spel begint midden in een transcriptie: geen mislukte poging, weer in de wachtrij.
+    worker.staat.spel = null;
+    koppelSpel(opslag);
+    worker.staat.spelTijdensTranscriptie = { game: 'eldenring.exe', since: '2026-10-31T18:00:00+01:00' };
+    assert.equal(await verwerking.verwerkEen(), true);
+    let a = adb.aflevering(eerste);
+    assert.deepEqual([a.status, a.pogingen, a.stap, a.fout], ['wacht', 0, 'Wacht tot het spel op de GPU-machine klaar is', null]);
+
+    // Spel voorbij: gewoon verder.
+    worker.staat.spel = null;
+    koppelSpel(opslag);
+    assert.equal(await verwerking.verwerkEen(), true);
+    a = adb.aflevering(eerste);
+    assert.ok(a.transcript, 'na het spel getranscribeerd');
+  } finally {
+    delete process.env.REGIOCHECKER_SPEL_WACHT_MS;
+    worker.server.close();
+    feed.server.close();
+  }
+});
+
 test('verwerking: van podcastfeed tot transcript, namen, stemmen en telefoonnummers', metAlles, async () => {
   const worker = await nepWorker();
   const feed = await nepPodcast({ n: 5 });

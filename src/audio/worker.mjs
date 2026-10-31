@@ -6,7 +6,8 @@
 // Bereikbaar via de Tailscale-container (src/tailnet.mjs); het token staat
 // in de instellingen of in WORKER_TOKEN en gaat nooit naar de browser.
 //
-//   GET   /health                         status; inference_phase = GPU bezig
+//   GET   /health                         status; inference_phase = GPU bezig;
+//                                         status 'paused' + reason 'game': Spelwacht
 //   POST  /v1/media/transcriptions        multipart: file, response_format=verbose_json,
 //                                         recording_id, diarize=true
 //   POST  /v1/entities                    { text } → { entities: [{ name, type }] }
@@ -47,6 +48,18 @@ function onbereikbaar(fout, viaTailnet) {
   if (proxyStatus) return `De worker is niet bereikbaar via Tailscale (proxy gaf HTTP ${proxyStatus})`;
   const diepste = keten.at(-1);
   return `De worker is niet bereikbaar${viaTailnet ? ' via Tailscale' : ''} (${diepste.code || diepste.message})`;
+}
+
+// Speelt er een spel op de GPU-machine? Dan heeft Spelwacht
+// (scripts/windows/spelwacht.ps1) de worker gestopt en antwoordt het zelf op
+// /health: { status: 'paused', reason: 'game', game, since }. Geeft het spel
+// ({ naam, sinds }) of null.
+export function spelUit(health) {
+  if (health?.status !== 'paused' || health.reason !== 'game') return null;
+  // PowerShell schrijft zeven decimalen ("…18:00:00.0000000+01:00"); niet elke
+  // browser leest dat, dus netjes als ISO.
+  const sinds = Date.parse(health.since);
+  return { naam: health.game ? String(health.game).slice(0, 100) : null, sinds: Number.isNaN(sinds) ? null : new Date(sinds).toISOString() };
 }
 
 // Geeft een client, of null als er geen worker is ingesteld.
@@ -99,11 +112,13 @@ export function worker(instellingen) {
     basis,
     tailnet,
     heeftToken: Boolean(token),
-    gezond: async () => lees(await verzoek('/health', { tijd: 10_000 })),
-    // Is de gedeelde GPU nu bezig (Plaud, Storyteller, of onze eigen transcriptie)?
+    gezond: async ({ tijd = 10_000 } = {}) => lees(await verzoek('/health', { tijd })),
+    // Is de gedeelde GPU nu bezig (Plaud, Storyteller, onze eigen transcriptie,
+    // of een spel: dan antwoordt Spelwacht in plaats van de worker)?
     gpuBezig: async () => {
       try {
-        return Boolean((await lees(await verzoek('/health', { tijd: 3000 }))).inference_phase);
+        const h = await lees(await verzoek('/health', { tijd: 3000 }));
+        return Boolean(h.inference_phase) || Boolean(spelUit(h));
       } catch {
         return false;
       }

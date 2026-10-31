@@ -98,6 +98,7 @@ What counts as "new" is `eersteGezien`, the moment of first sight, never the doc
   2. names (off by default);
   3. a 100-word AI summary.
 - `worker.mjs` talks to an external Whisper worker through a Tailscale sidecar proxy.
+- The GPU machine is also a gaming PC. While a game runs, Spelwacht (`scripts/windows/spelwacht.ps1`) stops the worker and answers `/health` itself with `status: "paused", reason: "game"`. `spel.mjs` reads that answer: the queue starts nothing, and `ollama.mjs` refuses to run on that machine. Check `spelBezig()` before any new GPU work. The PowerShell tests need the PowerShell container (see README).
 - Voice profiles and their names live in the worker and apply across all recordings.
 - Meeting-platform data (agenda, who spoke when) is stored per episode as `platform`. Raise `PLATFORM_VERSIE` to refresh it for finished episodes.
 

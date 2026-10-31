@@ -41,10 +41,12 @@ import { Verwerking, isAudio } from './audio/verwerking.mjs';
 import { deelLocatieIn } from './audio/namen.mjs';
 import { api } from './api.mjs';
 import { warmOp } from './feed.mjs';
+import { koppelSpel } from './audio/spel.mjs';
 
 const hier = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIEK = path.join(hier, '..', 'public');
 const opslag = new Opslag(process.env.REGIOCHECKER_DATA || path.join(hier, '..', 'data'));
+koppelSpel(opslag);
 const AUTH_KOP = (process.env.REGIOCHECKER_AUTH_KOP || '').toLowerCase();
 const POORT = Number(process.env.PORT) || 3000;
 const KAMER_INTERVAL_MS = 30 * 60000;

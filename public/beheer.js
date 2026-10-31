@@ -1113,6 +1113,8 @@ function workerRegel(w) {
   if (!w.ingesteld) return '<span class="statusregel fout">De Whisper-worker is nog niet ingesteld (Instellingen › Audio en video).</span>';
   if (!w.token) return '<span class="statusregel fout">Het token van de Whisper-worker ontbreekt (Instellingen › Audio en video).</span>';
   if (!w.bereikbaar) return `<span class="statusregel fout">Worker niet bereikbaar: ${esc(w.fout || '')}</span>`;
+  // Spelwacht op de GPU-machine: de worker staat stil zolang er een spel draait.
+  if (w.spel) return `<span class="statusregel">Gepauzeerd: er wordt gegamed op de GPU-machine${w.spel.naam ? ` (${esc(w.spel.naam)})` : ''}${w.spel.sinds ? `, sinds ${esc(uurMinuut(w.spel.sinds))}` : ''}. De worker start vanzelf weer als het spel een paar minuten dicht is.</span>`;
   return `<span class="statusregel">Worker online${w.viaTailnet ? ' via Tailscale' : ''} · Whisper ${esc(w.model || '')}${w.gpu ? ` op ${esc(w.gpu)}` : ''}${w.stemmen ? ' · stemherkenning' : ''} · GPU ${w.bezig ? 'bezig' : 'vrij'}</span>`;
 }
 

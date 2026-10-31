@@ -12,7 +12,7 @@ import { schoneTermen, vindTermen, vindInSegmenten } from './termen.mjs';
 import { maakKader, routeerItem, routeerAflevering, tekstVan } from './feed.mjs';
 import { herkenBron, ontdek as ontdekCatalogus, YOUTUBE_SOORTEN } from './audio/catalogus.mjs';
 import { PLATFORMS } from './audio/vergaderingen.mjs';
-import { worker as audioWorker } from './audio/worker.mjs';
+import { worker as audioWorker, spelUit } from './audio/worker.mjs';
 import { gooiAudioWeg } from './audio/ophalen.mjs';
 import { isAudio } from './audio/verwerking.mjs';
 import { nieuweGebruiker, werkGebruikerBij, voorClient, InvoerFout } from './gebruikers.mjs';
@@ -537,7 +537,7 @@ async function audioOverzicht(k, verwerking) {
   if (w) {
     try {
       const g = await w.gezond();
-      worker = { ...worker, bereikbaar: true, model: g.model || null, gpu: g.device || null, bezig: Boolean(g.inference_phase), stemmen: Boolean(g.diarization_available) };
+      worker = { ...worker, bereikbaar: true, model: g.model || null, gpu: g.device || null, bezig: Boolean(g.inference_phase), stemmen: Boolean(g.diarization_available), spel: spelUit(g) };
     } catch (fout) {
       worker = { ...worker, bereikbaar: false, fout: fout.message };
     }

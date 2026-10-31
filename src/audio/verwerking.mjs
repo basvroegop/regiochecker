@@ -30,6 +30,7 @@ import { vatKortSamen } from '../vergadering.mjs';
 import { samenvattingAanbieder } from '../samenvatting.mjs';
 import { sprekersVan } from '../feed.mjs';
 import { gehoordDebat, ddVideo, naarVideoTijd } from '../gehoord.mjs';
+import { spelBezig } from './spel.mjs';
 
 const BRON_INTERVAL_MS = 60 * 60_000;
 const ARCHIEF_TUSSEN_MS = 15 * 60_000;
@@ -97,6 +98,10 @@ export function voegDelenSamen(delen) {
     diarization_error: delen.map((d) => d.diarization_error).find(Boolean) || null,
   };
 }
+
+// Na een afgebroken verzoek drie keer kijken of Spelwacht het overnam.
+const SPEL_POGINGEN = 3;
+const SPEL_WACHT_MS = () => Number(process.env.REGIOCHECKER_SPEL_WACHT_MS) || 2500;
 
 const tijdelijkeFout = (fout) => {
   if (fout?.tijdelijk) return true;
@@ -325,6 +330,9 @@ export class Verwerking {
     if (this.adb.gepauzeerd()) return false;
     const w = this.w();
     if (!w || !w.heeftToken) return false;
+    // Een spel op de GPU-machine (Spelwacht): niets beginnen, ook niet wat
+    // weinig GPU kost; na het spel gaat alles vanzelf verder.
+    if (await spelBezig()) return false;
     const nu = Date.now() / 1000;
     const { rijen, groep } = this.kandidaten(nu);
     // Eerst wat geen GPU kost: platformgegevens van afgeronde vergaderingen bijwerken.
@@ -339,7 +347,11 @@ export class Verwerking {
     try {
       await this.verwerk(af, w);
     } catch (fout) {
-      this.mislukt(af, fout);
+      // Stopte Spelwacht de worker voor een spel, dan is dit geen mislukte
+      // poging: de delen die klaar waren, blijven bewaard, en dit deel komt na
+      // het spel opnieuw.
+      if (tijdelijkeFout(fout) && await this.spelGestart()) this.wachtOpSpel(af);
+      else this.mislukt(af, fout);
     } finally {
       this.bezigMet = null;
     }
@@ -585,7 +597,7 @@ export class Verwerking {
         ? { status: 'klaar', stap: 'Klaar', samenvatting: { tekst: s.tekst, model: s.model, tijd: new Date().toISOString() } }
         : { status: 'klaar', stap: 'Klaar' });
     } catch (fout) {
-      const storing = tijdelijkeFout(fout) || /niet bereikbaar|reageert niet|geen antwoord/i.test(fout.message);
+      const storing = tijdelijkeFout(fout) || /niet bereikbaar|reageert niet|geen antwoord|gegamed/i.test(fout.message);
       const pogingen = (vorige.pogingen || 0) + (storing ? 0 : 1);
       const storingen = (vorige.storingen || 0) + (storing ? 1 : 0);
       const wacht = storing ? Math.min(1800, 60 * 2 ** Math.min(storingen - 1, 5)) : 60 * pogingen;
@@ -631,6 +643,22 @@ export class Verwerking {
       }
       return uit;
     }
+  }
+
+  // Na een afgebroken verzoek: begon er net een spel? Spelwacht stopt eerst de
+  // worker en antwoordt een paar tellen later zelf; zo lang kijken we.
+  async spelGestart() {
+    for (let i = 0; i < SPEL_POGINGEN; i++) {
+      if (await spelBezig({ vers: true })) return true;
+      if (i < SPEL_POGINGEN - 1) await new Promise((klaar) => setTimeout(klaar, SPEL_WACHT_MS()));
+    }
+    return false;
+  }
+
+  wachtOpSpel(af) {
+    const huidig = this.adb.aflevering(af.id);
+    if (!huidig) return;
+    this.adb.werkBij(af.id, { status: huidig.transcript ? 'getranscribeerd' : 'wacht', stap: 'Wacht tot het spel op de GPU-machine klaar is', opnieuwOp: 0, fout: null });
   }
 
   mislukt(af, fout) {

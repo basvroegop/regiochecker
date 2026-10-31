@@ -6,6 +6,7 @@
 // Zonder proxy-instelling praten we rechtstreeks met de opgegeven URL, voor het
 // geval Tailscale ooit op de server zelf komt te draaien.
 
+import { spelOpOllama, spelTekst } from './audio/spel.mjs';
 import { fetch } from 'undici';
 import { tailnetDispatcher, langDispatcher, proxyReden } from './tailnet.mjs';
 
@@ -132,6 +133,11 @@ export function ollamaJson(opties) {
 
 async function chat({ url, model, systeem, vraag: vraagTekst, schema, context, vrijgeven = false }) {
   if (!model) throw new Error('Kies in de instellingen een Ollama-model');
+  // Draait Ollama op de GPU-machine en wordt daar gegamed (Spelwacht), dan
+  // nu niet: de weekmail zegt dan waarom er geen samenvatting is, de wachtrij
+  // probeert het na het spel opnieuw.
+  const spel = await spelOpOllama(url);
+  if (spel) throw new Error(`${spelTekst(spel)}; samenvatten kan daarna weer`);
   const denken = await kanDenken(url, model);
   const antwoord = await vraag(url, '/api/chat', {
     tijd: ANTWOORD_MS,

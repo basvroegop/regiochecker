@@ -551,7 +551,54 @@ begint dan niet intussen aan een volgende aflevering. Afleveringen die al klaar
 waren en alleen nog een samenvatting missen, komen als laatste. Tijdelijke storingen blijven herkansen met een oplopende
 wachttijd; een echte fout drie keer, daarna "mislukt" met een knop **Opnieuw**.
 **Pauzeer alles** legt de verwerking stil; een bron pauzeren stopt alleen het
-zoeken naar nieuwe afleveringen.
+zoeken naar nieuwe afleveringen. Een deel dat al naar de worker is, maakt de
+worker nog af (tot ongeveer vier minuten GPU); de worker kent geen afbreken.
+
+**Spelwacht: niet transcriberen als er gegamed wordt.** De GPU-machine is ook een
+spel-pc. Het script `scripts/windows/spelwacht.ps1` draait daar en kijkt om de
+vijf seconden of er een spel draait. Een spel is:
+- een programma met een venster uit een spelbibliotheek (Steam, Epic, GOG,
+  Xbox-app, EA, Ubisoft, Riot);
+- of een programma dat langer dan 20 seconden meer dan 40% van de GPU voor 3D
+  gebruikt.
+
+Browsers, OBS, Discord, launchers en Wallpaper Engine tellen nooit.
+
+Start er een spel, dan gebeurt dit:
+1. Spelwacht stopt de worker meteen, ook midden in een deel, zodat de GPU
+   direct vrij is.
+2. Spelwacht haalt de modellen uit het geheugen van Ollama.
+3. Spelwacht antwoordt zelf op de poort van de worker: `/health` geeft
+   `{ status: "paused", reason: "game", game, since }`.
+
+De Regiochecker leest dat antwoord (`src/audio/spel.mjs`) en doet zolang:
+- **Niets nieuws**: geen transcriptie, stemmen of namen.
+- **Geen Ollama**: geen samenvatting, omdat Ollama op dezelfde machine draait.
+  De weekmail noemt dan de reden.
+- **Geen mislukte poging**: een afgebroken deel staat weer in de wachtrij, en de
+  delen die al klaar waren, blijven bewaard.
+
+Beheer › Audio toont "Gepauzeerd: er wordt gegamed". Is het spel drie minuten
+dicht, dan start Spelwacht de worker weer via diens geplande taak, en gaat de
+Regiochecker vanzelf verder.
+
+Spelwacht installeren op de GPU-machine:
+- **Kopiëren**: zet `spelwacht.ps1` en `installeer-spelwacht.ps1` in één map,
+  bijvoorbeeld bij de worker.
+- **Proberen**: `powershell -ExecutionPolicy Bypass -File spelwacht.ps1 -Proef`
+  laat elke vijf seconden zien wat Spelwacht ziet, zonder iets te doen.
+- **Installeren**: start PowerShell als administrator en voer uit:
+  `powershell -ExecutionPolicy Bypass -File installeer-spelwacht.ps1`. Dat maakt
+  de geplande taak "Spelwacht" (bij het aanmelden, verborgen, met de hoogste
+  rechten) en een firewallregel voor poort 8765, en start de taak.
+- **Weghalen**: hetzelfde met `-Verwijder`.
+- **Logboek**: `%LOCALAPPDATA%\Spelwacht\spelwacht.log`.
+- **Aanpassen** (bovenaan het script): spellen buiten de bibliotheken
+  (`$ExtraProgrammas`, `$ExtraMappen`), programma's die nooit tellen
+  (`$GeenSpel`), en de drempel en tijden.
+
+De herkenning en het antwoord zijn getest zonder Windows:
+`docker run --rm -v "$PWD/scripts/windows:/s" mcr.microsoft.com/powershell pwsh -File /s/spelwacht.tests.ps1`.
 
 **AI-samenvatting**: na de namen maakt het taalmodel van Instellingen ›
 Samenvatting (Claude of Ollama) een samenvatting van de hele opname in hooguit
