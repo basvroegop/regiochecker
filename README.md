@@ -65,6 +65,12 @@ transcripten, ook wat er bij de eerste ronde van een bron al stond (de
 nulmeting; dat staat op de datum van het stuk). Woorden moeten allemaal
 voorkomen, `"woordgroep"` als geheel, `OR` voor alternatieven.
 
+Zoeken gaat ook door de twee **archieven**: de Kamerstukken terug tot 2008, en
+de ingekomen stukken zo ver als iBabs en Notubiz ze nog aanbieden (zie
+Archieven). Zo'n stuk staat in de resultaten op zijn eigen datum en opent
+gewoon in het leespaneel. In de feed, de meldingen en de weekmail komen ze
+niet: die gaan over wat nieuw binnenkomt.
+
 **Audio-archief** is alles van audio en video, ook wat nog in de wachtrij staat:
 
 - **Afleveringen**, te filteren op bron en status en te doorzoeken op titel en transcript;
@@ -453,7 +459,53 @@ uit het open-data-Gegevensmagazijn (opendata.tweedekamer.nl, OData v4).
   regio, met de zin waarin het staat. Een stuk dat we pas later binnenhaalden dan
   het verscheen, staat in de feed op de datum van het stuk.
 - **Zoeken**: de zoekbalk doorzoekt ook alle kamerstukken (FTS5: woorden,
-  `"woordgroep"`, `OR`, `NOT`, `voorvoegsel*`).
+  `"woordgroep"`, `OR`, `NOT`, `voorvoegsel*`), het archief inbegrepen.
+
+## Archieven
+
+Sinds 1 november 2026 heeft de Regiochecker twee archieven, op verzoek van de
+opdrachtgever: zo ver terug als kan, zolang de schijf niet te vol raakt. Ze
+staan elk in een eigen database, los van de feed. Feed, meldingen en weekmail
+lopen dagelijks door de gewone gegevens en blijven zo snel; alleen zoeken en
+lezen gaan ook door de archieven.
+
+**Kamerstukken** (`src/kamer/archief.mjs`, `data/kamerarchief.sqlite`)
+- **Inhoud**: alles van vóór `KAMERSTUKKEN_VANAF` uit het Gegevensmagazijn,
+  vanaf medio 2008. Dat zijn ruim 610.000 stukken, met een schatting van zo'n
+  16 GB.
+- **Vullen**: eerst de lijst van stukken, dan de teksten, nieuwste eerst, in
+  porties van 150 met een korte pauze ertussen. Het eerste vullen duurt een
+  paar dagen; daarna kijkt het eens per dag naar wijzigingen.
+- **Zoeken**: `KamerDb.koppelArchief` koppelt het archief erbij, zodat zoeken
+  en lezen over beide databases gaan. SQLite maakt het fragment alleen voor de
+  getoonde regels: voor alle treffers (tienduizenden bij "Groningen") zou dat
+  seconden duren.
+
+**Ingekomen stukken** (`src/archief.mjs`, `data/archief.sqlite`)
+- **Bronnen**: alle bronnen met ingekomen stukken op iBabs (42) en Notubiz (8).
+  - Een iBabs-overzicht bevat de hele geschiedenis van het portaal: Assen
+    3.239 stukken, Emmen 1.729 plus 949 brieven van het college.
+  - Notubiz gaat vaak verder terug: Veendam 1.981 stukken, vanaf 2013.
+- **Vullen**: per bron eerst de hele lijst (iBabs pagina voor pagina), dan per
+  stuk het document met bijlagen, net als Inhoud achter de links, nieuwste
+  eerst.
+- **Beleefd**: iBabs vraagt vijf seconden tussen verzoeken (robots.txt). Het
+  archief wacht daarom na elk stuk vijf seconden per opgehaald bestand, met
+  vier portalen tegelijk.
+- **Bijwerken**: de lijsten eens per week opnieuw.
+- **Nog niet**: de bronnen op andere platforms (de iBabs-agenda's van
+  Borger-Odoorn en Schiermonnikoog, de weeklijsten van Súdwest-Fryslân, de
+  B&W-besluiten van Groningen).
+
+**Schijfbewaking.** Beide archieven stoppen vanzelf als er minder dan 40 GB
+vrij is op de schijf, of als het archief te groot wordt: 40 GB voor de Kamer, 20
+GB voor de ingekomen stukken. Daarna kijken ze elk uur opnieuw. Beheer ›
+Instellingen toont per archief hoe ver het is, hoe groot, en hoeveel er vrij is.
+- **Instellen**: `KAMERARCHIEF_MIN_VRIJ_GB`, `KAMERARCHIEF_MAX_GB`,
+  `ARCHIEF_MIN_VRIJ_GB` en `ARCHIEF_MAX_GB`.
+- **Uitzetten**: `KAMERARCHIEF=uit` of `ARCHIEF=uit`.
+- **Weggooien**: kan altijd. Zet de dienst stil, verwijder het bestand, en
+  start de dienst weer; de gewone gegevens raken daar niet door.
 
 ## Kamerdebatten (gehoord.de)
 

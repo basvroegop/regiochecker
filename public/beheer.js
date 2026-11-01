@@ -909,6 +909,8 @@ export async function toonInstellingen(hoofd) {
         <form id="form-interval"><label class="veld"><span>Elke … minuten</span><input class="invoer smal" type="number" name="controleIntervalMinuten" min="15" max="1440" step="5" value="${esc(i.controleIntervalMinuten)}"></label>
         <div class="knoppenrij"><button class="knop inkt klein">Bewaren</button></div></form>
         ${kamer ? `<p class="statusregel">Kamerstukken: ${kamer.metTekst || 0} doorzoekbaar sinds ${esc(moment(kamer.vanaf || kamer.oudste))}${kamer.wachtrij ? `, ${kamer.wachtrij} in de wachtrij` : ''}; laatst bijgewerkt ${esc(moment(kamer.ronde?.tijd))}.</p>
+        ${kamer.archief ? `<p class="statusregel${kamer.archief.bezig === 'gestopt' || kamer.archief.bezig === 'fout' ? ' fout' : ''}">${esc(kamerArchiefTekst(kamer.archief))}</p>` : ''}
+        ${kamer.gemeentearchief ? `<p class="statusregel${kamer.gemeentearchief.bezig === 'gestopt' ? ' fout' : ''}">${esc(gemeenteArchiefTekst(kamer.gemeentearchief))}</p>` : ''}
         <div class="knoppenrij"><button class="knop klein" id="kamer-nu">Kamerstukken nu bijwerken</button></div>` : '<p class="statusregel fout">De kamerstukkendatabase is niet beschikbaar.</p>'}`)}
 
       ${instelBlok('Weekmail', 'Iedereen stelt zijn eigen weekmail in bij Meldingen. Dit is het schema voor nieuwe gebruikers.', `
@@ -1103,6 +1105,27 @@ export async function toonInstellingen(hoofd) {
       });
     }
   }, { signal: stop.signal });
+}
+
+// Het archief van de Tweede Kamer (src/kamer/archief.mjs): hoe ver, en hoe vol.
+function kamerArchiefTekst(a) {
+  const getal = (n) => Number(n || 0).toLocaleString('nl-NL');
+  const gb = (n) => `${(n / 1024 ** 3).toLocaleString('nl-NL', { maximumFractionDigits: 1 })} GB`;
+  const stand = a.bezig === 'gestopt' ? `Gestopt: ${a.gestopt}. Het kijkt elk uur opnieuw.`
+    : a.bezig === 'fout' ? `Even niet: ${a.fout}`
+      : a.bezig === 'metadata' ? 'Bezig met de lijst van stukken.'
+        : a.wachtrij ? `Bezig met de teksten, nieuwste eerst (nog ${getal(a.wachtrij)}).` : 'Bij.';
+  return `Archief van de Kamer: ${getal(a.metTekst)} van ${getal(a.verwacht || a.totaal)} stukken doorzoekbaar${a.oudste ? `, terug tot ${a.oudste.slice(0, 4)}` : ''}. ${stand} Archief ${gb(a.grootte)}, ${gb(a.vrij)} vrij op de schijf (stopt onder ${gb(a.minVrij)}).`;
+}
+
+// Het archief van ingekomen stukken (src/archief.mjs).
+function gemeenteArchiefTekst(a) {
+  const getal = (n) => Number(n || 0).toLocaleString('nl-NL');
+  const gb = (n) => `${(n / 1024 ** 3).toLocaleString('nl-NL', { maximumFractionDigits: 1 })} GB`;
+  const stand = a.bezig === 'gestopt' ? `Gestopt: ${a.gestopt}. Het kijkt elk uur opnieuw.`
+    : a.bezig === 'lijst' ? `Bezig met de lijst van ${a.bron}.`
+      : a.wachtrij ? `Bezig met de documenten, nieuwste eerst (nog ${getal(a.wachtrij)}).` : 'Bij.';
+  return `Archief ingekomen stukken: ${getal(a.metTekst)} van ${getal(a.totaal)} stukken met tekst, uit ${getal(a.gelezen)} van ${getal(a.bronnen)} bronnen${a.oudste ? `, terug tot ${a.oudste.slice(0, 4)}` : ''}${a.lijstFouten ? ` (${a.lijstFouten} lijst${a.lijstFouten === 1 ? '' : 'en'} mislukt)` : ''}. ${stand} Archief ${gb(a.grootte)}.`;
 }
 
 // ---------- audio en video: de verwerking ----------

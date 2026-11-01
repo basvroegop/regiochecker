@@ -141,7 +141,7 @@ export async function api(req, res, url, ctx) {
   }
   if (route === 'GET /api/stuk/document') {
     const id = String(z.get('id') || '');
-    if (!id.startsWith('i:') || !opslag.items[id.slice(2)]) throw new Fout(404, 'Dit stuk bestaat niet (meer)');
+    if (!id.startsWith('i:') || !(opslag.items[id.slice(2)] || opslag.archief?.item(id.slice(2)))) throw new Fout(404, 'Dit stuk bestaat niet (meer)');
     let document;
     try {
       document = await documentOpVraag(opslag, id.slice(2));
@@ -217,7 +217,7 @@ export async function api(req, res, url, ctx) {
 
   // ---------- kamerstukken (status en zoeken) ----------
   if (url.pathname.startsWith('/api/kamer/')) {
-    await kamerApi(req, res, url, { opslag, kdb, stuur, Fout });
+    await kamerApi(req, res, url, { opslag, kdb, kamerArchief: ctx.kamerArchief, stuur, Fout });
     return;
   }
 

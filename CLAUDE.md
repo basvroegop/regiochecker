@@ -51,6 +51,10 @@ docker compose run --rm --no-deps -T -v /opt/regiochecker/src:/app/src:ro -v /op
 - `src/opslag.mjs` holds the JSON files in `data/` (the `BESTANDEN` map) in memory; `opslag.bewaar('items', …)` writes them. `src/migratie.mjs` runs data migrations at startup.
 - `data/regiochecker.sqlite` (via `node:sqlite`) holds per-user read/saved/note state and the document cache (`src/feeddb.mjs`), and the audio archive (`src/audio/db.mjs`, table `afleveringen`).
 - `data/kamerstukken.sqlite` holds Tweede Kamer documents with FTS5 (`src/kamer/`).
+- Two archives fill themselves in the background, each with a disk guard:
+  - `data/kamerarchief.sqlite`: Kamerstukken before `KAMERSTUKKEN_VANAF` (`src/kamer/archief.mjs`).
+  - `data/archief.sqlite`: all older ingekomen stukken from iBabs and Notubiz (`src/archief.mjs`).
+- The archives are only for search and the reading panel. Never route them into the feed, alerts or the weekmail. Search code must cover both the live data and the archives.
 
 **Sources.** `src/register.mjs` `alleBronnen(opslag)` combines five sets:
 - built-in municipal sources (`REGIOS` in `src/regios.mjs`);

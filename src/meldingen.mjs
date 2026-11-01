@@ -91,7 +91,7 @@ export function documentVoorMail(k, t, termen = []) {
   const meta = [];
   let totaal = null;
   if (t.stuk) {
-    alineas = tekstBlokken(String(k.kdb?.tekst(t.stuk.nr) || '').slice(0, 200_000)).map(([soort, tekst]) => ({ soort, tekst }));
+    alineas = tekstBlokken(String(k.kdb?.tekstVan(t.stuk) || '').slice(0, 200_000)).map(([soort, tekst]) => ({ soort, tekst }));
     if (t.stuk.datum) meta.push(`datum stuk ${datumLang(t.stuk.datum)}`);
   } else if (t.id.startsWith('i:')) {
     const item = k.opslag.items[t.id.slice(2)];

@@ -126,6 +126,78 @@ test('sleutelwoorden van regio\'s zijn in kamerstukken hoofdlettergevoelig, term
   kdb.sluit();
 });
 
+test('archief van de Kamer: alles van vóór de gewone database, apart, maar samen doorzoekbaar', metSqlite, async () => {
+  const { openKamerDb } = await import('../src/kamer/db.mjs');
+  const { synchroniseer, haalTeksten } = await import('../src/kamer/ophalen.mjs');
+  const { KamerArchief } = await import('../src/kamer/archief.mjs');
+  // Een Gegevensmagazijn dat de datums in $filter echt toepast.
+  const docs = [
+    ['n1', '2026-10-01', 'Nieuw: huisartsenpost Drachten'], ['n2', '2026-09-20', 'Nieuw: Lelylijn'],
+    ['o1', '2019-05-01', 'Oud: huisartsenpost Drachten'], ['o2', '2012-03-01', 'Oud: gaswinning Groningen'], ['o3', '2009-01-15', 'Oud: Afsluitdijk'],
+  ].map(([id, datum, titel], i) => ({ Id: id, DocumentNummer: `D${i}`, Soort: i % 2 ? 'Motie' : 'Brief regering', Titel: titel, Onderwerp: titel, Datum: `${datum}T00:00:00+02:00`, ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', GewijzigdOp: '2026-10-27T14:00:00+01:00', ApiGewijzigdOp: `2026-10-27T13:0${i}:00Z`, Verwijderd: false, Kamerstukdossier: [], Zaak: [], DocumentActor: [] }));
+  const server = http.createServer((req, res) => {
+    const u = new URL(req.url, 'http://x');
+    if (u.pathname.endsWith('/resource')) return res.end(DOCX);
+    const f = u.searchParams.get('$filter') || '';
+    const ge = f.match(/Datum ge (\S+)T/)?.[1];
+    const lt = f.match(/Datum lt (\S+)T/)?.[1];
+    const lijst = docs.filter((d) => (!ge || d.Datum >= ge) && (!lt || d.Datum < lt));
+    res.setHeader('Content-Type', 'application/json');
+    if (u.searchParams.get('$count')) return res.end(JSON.stringify({ '@odata.count': lijst.length, value: [] }));
+    res.end(JSON.stringify({ value: lijst.slice(Number(u.searchParams.get('$skip')) || 0) }));
+  });
+  await new Promise((klaar) => server.listen(0, '127.0.0.1', klaar));
+  process.env.KAMERSTUKKEN_API = `http://127.0.0.1:${server.address().port}`;
+  process.env.KAMERSTUKKEN_VANAF = '2026-09-15';
+  process.env.KAMERARCHIEF_PAUZE_MS = '0';
+  try {
+    const map = tijdelijk();
+    const kdb = await openKamerDb(path.join(map, 'kamerstukken.sqlite'));
+    // Een bestaande database onthield alleen 'vanaf': die begint niet opnieuw.
+    kdb.zetStaat('vanaf', '2026-09-15');
+    kdb.zetStaat('synchronisatiepunt', '1900-01-01T00:00:00Z');
+    await synchroniseer(kdb);
+    await haalTeksten(kdb);
+    assert.deepEqual(kdb.db.prepare('SELECT id FROM stukken ORDER BY id').all().map((r) => r.id), ['n1', 'n2']);
+
+    const pad = path.join(map, 'kamerarchief.sqlite');
+    const archief = new KamerArchief(await openKamerDb(pad), { map, pad });
+    // Eerst de lijst van stukken, dan de teksten, dan is het bij.
+    for (let i = 0; i < 4; i++) await archief.stap();
+    let st = archief.status();
+    assert.deepEqual([st.totaal, st.metTekst, st.verwacht, st.wachtrij, st.bezig], [3, 3, 3, 0, 'bij'], 'alleen van vóór 15 september');
+    assert.equal(st.oudste, '2009-01-15');
+    assert.equal(kdb.db.prepare('SELECT count(*) n FROM stukken').get().n, 2, 'de gewone database blijft klein');
+
+    // Zoeken over beide; het archief gemarkeerd, op datum door elkaar.
+    kdb.koppelArchief(pad);
+    let r = kdb.zoek({ vraag: 'huisartsenpost', sorteer: 'datum' });
+    assert.deepEqual([r.totaal, r.rijen.map((x) => [x.id, Boolean(x.archief)])], [2, [['n1', false], ['o1', true]]]);
+    assert.match(r.rijen[1].fragment, /huisartsenpost/);
+    // Bladeren: de tweede pagina van één.
+    assert.deepEqual(kdb.zoek({ vraag: 'Oud', sorteer: 'datum', perPagina: 1, pagina: 2 }).rijen.map((x) => x.id), ['o2']);
+    assert.equal(kdb.zoek({ vraag: '', perPagina: 10 }).totaal, 5);
+    assert.deepEqual(kdb.soorten().map((x) => x.aantal).reduce((a, b) => a + b), 5);
+    // Een stuk uit het archief openen: de tekst komt uit het archief.
+    const oud = kdb.stuk('o2');
+    assert.equal(oud.archief, true);
+    assert.match(kdb.tekstVan(oud), /\S/);
+    assert.equal(kdb.stuk('n1').archief, undefined);
+    // Wat de feed en de meldingen doen, gaat niet over het archief.
+    assert.equal(kdb.feedTreffers(['huisartsenpost'], { sinds: '2000-01-01', minDatum: '2000-01-01' }).length, 1);
+
+    // Schijfbewaking: te weinig vrij, dan stopt het en kijkt het over een uur weer.
+    process.env.KAMERARCHIEF_MIN_VRIJ_GB = '100000000';
+    assert.equal(await archief.stap(), 3600_000);
+    st = archief.status();
+    assert.equal(st.bezig, 'gestopt');
+    assert.match(st.gestopt, /^minder dan 100000000 GB vrij op de schijf/);
+  } finally {
+    for (const k of ['KAMERSTUKKEN_API', 'KAMERSTUKKEN_VANAF', 'KAMERARCHIEF_PAUZE_MS', 'KAMERARCHIEF_MIN_VRIJ_GB']) delete process.env[k];
+    server.close();
+  }
+});
+
 async function nepKamer() {
   const verzoeken = [];
   const docs = [

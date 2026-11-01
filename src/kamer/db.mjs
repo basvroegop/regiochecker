@@ -145,11 +145,37 @@ class KamerDb {
   }
 
   soorten() {
-    return this.db.prepare('SELECT soort, count(*) aantal FROM stukken GROUP BY soort ORDER BY aantal DESC').all();
+    const bron = this.archief ? '(SELECT soort FROM main.stukken UNION ALL SELECT soort FROM archief.stukken)' : 'stukken';
+    return this.db.prepare(`SELECT soort, count(*) aantal FROM ${bron} GROUP BY soort ORDER BY aantal DESC`).all();
   }
 
-  // De zoekmachine. `vraag` is FTS5-syntax (woorden, "zinnen", OR, NOT, voorvoegsel*);
-  // klopt de syntax niet, dan zoeken we op de losse woorden.
+  // Het archief (src/kamer/archief.mjs) erbij, alleen om te zoeken en te lezen:
+  // de feed, meldingen en de weekmail gebruiken alleen deze database.
+  koppelArchief(pad) {
+    this.db.exec(`ATTACH DATABASE '${String(pad).replace(/'/g, "''")}' AS archief`);
+    this.archief = true;
+  }
+
+  // Een stuk uit deze database of uit het archief (dan met archief: true).
+  stuk(id) {
+    const eigen = this.db.prepare('SELECT * FROM stukken WHERE id = ?').get(id);
+    if (eigen || !this.archief) return eigen || null;
+    const oud = this.db.prepare('SELECT * FROM archief.stukken WHERE id = ?').get(id);
+    return oud ? { ...oud, archief: true } : null;
+  }
+
+  // De tekst van een stuk uit stuk() of zoek(), ook uit het archief.
+  tekstVan(stuk) {
+    if (!stuk?.archief) return this.tekst(stuk.nr);
+    return this.db.prepare('SELECT tekst FROM archief.stuk_fts WHERE rowid = ?').get(stuk.nr)?.tekst ?? '';
+  }
+
+  // De zoekmachine, over deze database en het archief. `vraag` is FTS5-syntax
+  // (woorden, "zinnen", OR, NOT, voorvoegsel*); klopt de syntax niet, dan
+  // zoeken we op de losse woorden. Per database de beste `pagina * perPagina`,
+  // die samen gesorteerd. Het fragment maakt SQLite alleen voor die regels:
+  // voor alle treffers (tienduizenden bij "Groningen" in het archief) duurt
+  // dat seconden.
   zoek({ vraag = '', soort, van, tot, sorteer = 'relevantie', pagina = 1, perPagina = 20 }) {
     const filters = [];
     const waarden = [];
@@ -157,23 +183,36 @@ class KamerDb {
     if (van) { filters.push('s.datum >= ?'); waarden.push(van); }
     if (tot) { filters.push('s.datum <= ?'); waarden.push(tot); }
     const offset = (Math.max(1, pagina) - 1) * perPagina;
+    const tel = offset + perPagina;
+    const schemas = this.archief ? ['main', 'archief'] : ['main'];
+    const opDatum = (a, b) => String(b.datum || '').localeCompare(String(a.datum || '')) || b.nr - a.nr;
+    const samen = (delen, volgorde) => ({
+      totaal: delen.reduce((n, d) => n + d.totaal, 0),
+      rijen: delen.flatMap((d) => d.rijen).sort(volgorde).slice(offset, tel),
+    });
+    const merk = (schema) => (r) => (schema === 'archief' ? { ...r, archief: true } : r);
 
     if (!vraag.trim()) {
       const waar = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
-      const totaal = this.db.prepare(`SELECT count(*) n FROM stukken s ${waar}`).get(...waarden).n;
-      const rijen = this.db.prepare(`SELECT s.*, '' fragment FROM stukken s ${waar} ORDER BY s.datum DESC, s.nr DESC LIMIT ? OFFSET ?`)
-        .all(...waarden, perPagina, offset);
-      return { totaal, rijen };
+      return samen(schemas.map((sc) => ({
+        totaal: this.db.prepare(`SELECT count(*) n FROM ${sc}.stukken s ${waar}`).get(...waarden).n,
+        rijen: this.db.prepare(`SELECT s.*, '' fragment FROM ${sc}.stukken s ${waar} ORDER BY s.datum DESC, s.nr DESC LIMIT ?`).all(...waarden, tel).map(merk(sc)),
+      })), opDatum);
     }
 
     const probeer = (fts) => {
       const waar = ['stuk_fts MATCH ?', ...filters].join(' AND ');
-      const totaal = this.db.prepare(`SELECT count(*) n FROM stuk_fts JOIN stukken s ON s.nr = stuk_fts.rowid WHERE ${waar}`).get(fts, ...waarden).n;
-      const volgorde = sorteer === 'datum' ? 's.datum DESC, s.nr DESC' : 'bm25(stuk_fts, 10.0, 5.0, 1.0), s.datum DESC';
-      const rijen = this.db.prepare(`SELECT s.*, snippet(stuk_fts, -1, '${MARK_BEGIN}', '${MARK_EIND}', '…', 30) fragment
-        FROM stuk_fts JOIN stukken s ON s.nr = stuk_fts.rowid WHERE ${waar} ORDER BY ${volgorde} LIMIT ? OFFSET ?`)
-        .all(fts, ...waarden, perPagina, offset);
-      return { totaal, rijen };
+      const volgorde = sorteer === 'datum' ? 's.datum DESC, s.nr DESC' : 'rang, s.datum DESC';
+      const delen = schemas.map((sc) => ({
+        totaal: this.db.prepare(`SELECT count(*) n FROM ${sc}.stuk_fts JOIN ${sc}.stukken s ON s.nr = stuk_fts.rowid WHERE ${waar}`).get(fts, ...waarden).n,
+        rijen: this.db.prepare(`WITH pagina AS (
+            SELECT stuk_fts.rowid nr, bm25(stuk_fts, 10.0, 5.0, 1.0) rang FROM ${sc}.stuk_fts JOIN ${sc}.stukken s ON s.nr = stuk_fts.rowid
+            WHERE ${waar} ORDER BY ${volgorde} LIMIT ?)
+          SELECT s.*, p.rang, snippet(stuk_fts, -1, '${MARK_BEGIN}', '${MARK_EIND}', '…', 30) fragment
+          FROM pagina p JOIN ${sc}.stuk_fts ON stuk_fts.rowid = p.nr JOIN ${sc}.stukken s ON s.nr = p.nr
+          WHERE stuk_fts MATCH ?`).all(fts, ...waarden, tel, fts).map(merk(sc)),
+      }));
+      return samen(delen, sorteer === 'datum' ? opDatum : (a, b) => a.rang - b.rang || opDatum(a, b));
     };
     try {
       return { ...probeer(vraag), vraag };
@@ -212,10 +251,6 @@ class KamerDb {
   #tel(fts, sinds, tot, minDatum) {
     return this.db.prepare(`SELECT count(*) n FROM stuk_fts JOIN stukken s ON s.nr = stuk_fts.rowid
       WHERE stuk_fts MATCH ? AND s.binnen > ? AND s.binnen <= ? AND s.datum >= ?`).get(fts, sinds, tot, minDatum || '0000').n;
-  }
-
-  stuk(id) {
-    return this.db.prepare('SELECT * FROM stukken WHERE id = ?').get(id) || null;
   }
 
   // Verandert bij elke wijziging aan stukken of teksten; voor caches in de

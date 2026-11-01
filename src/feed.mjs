@@ -493,6 +493,14 @@ export function zoekFeed(ctx, gebruiker, vraag) {
     if (item.basislijn) Object.assign(regel, { tijd: item.datum ? `${item.datum}T12:00:00.000Z` : '', tijdBekend: false });
     voegToe(lijst, regel);
   }
+  // Het archief van de gemeenten: oudere ingekomen stukken, op hun eigen datum.
+  // Wat ook in opslag.items staat, staat er al.
+  for (const r of k.opslag.archief?.zoek(vraag) || []) {
+    if (k.opslag.items[r.sleutel]) continue;
+    const item = k.opslag.archief.alsItem(r);
+    if (!k.bronnen.get(item.bron)) continue;
+    voegToe(lijst, { ...itemRegel(item, [item.regio], { term: vraag.replace(/"/g, '').split(/\s+/)[0], zoek: true }), tijd: item.eersteGezien, tijdBekend: false });
+  }
   if (k.kdb) {
     try {
       for (const s of k.kdb.zoek({ vraag, sorteer: 'datum', perPagina: 100 }).rijen) {
@@ -561,14 +569,15 @@ function redenen(k, gebruiker, zoek, { bronId, regioIds, route = null, zoekRegio
 }
 
 function itemDetail(k, gebruiker, sleutel) {
-  const item = k.opslag.items[sleutel];
+  // Ook een stuk uit het archief van de gemeenten (src/archief.mjs), via Zoeken.
+  const item = k.opslag.items[sleutel] || k.opslag.archief?.item(sleutel);
   if (!item) return null;
   const bron = k.bronnen.get(item.bron) || {};
   const landelijk = isLandelijk(item, bron);
   const regios = landelijk ? routeerItem(k, item, bron).map((r) => r.regio) : [item.regio];
   // Het hele document als het al is opgehaald; anders voorlopig de platte
   // inhoud, en haalt het leespaneel het document op (GET /api/stuk/document).
-  const opgehaald = k.fdb?.document(sleutel);
+  const opgehaald = item.archief ? k.opslag.archief.documentVan(sleutel) : k.fdb?.document(sleutel);
   const plat = item.inhoud || item.tekst || '';
   // In de platte inhoud staan bijlagen achter " || ".
   const platBlokken = () => plat.split(/\s\|\|\s/).flatMap((deel, i) => [...(i ? [['d', 'Bijlage']] : []), ...tekstBlokken(deel)]);
@@ -621,7 +630,7 @@ function kamerDetail(k, gebruiker, id) {
   if (!k.kdb) return null;
   const stuk = k.kdb.stuk(id);
   if (!stuk) return null;
-  const tekst = k.kdb.tekst(stuk.nr);
+  const tekst = k.kdb.tekstVan(stuk);
   const volledig = `${stuk.titel || ''}\n${stuk.onderwerp || ''}\n${tekst}`;
   const treffers = redenen(k, gebruiker, (termen) => vindTermen(volledig, termen), {
     bronId: TWEEDE_KAMER.id, regioIds: gebruiker.regios, zoekRegio: (termen) => vindTermen(volledig, termen, { hoofdletters: true }),

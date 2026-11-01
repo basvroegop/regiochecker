@@ -35,6 +35,8 @@ import { herken } from './gebruikers.mjs';
 import { accountsAan, maakMappen, verwerkAccounts } from './accounts.mjs';
 import { openKamerDb } from './kamer/db.mjs';
 import { kamerRonde } from './kamer/ronde.mjs';
+import { KamerArchief } from './kamer/archief.mjs';
+import { openArchief } from './archief.mjs';
 import { openFeedDb } from './feeddb.mjs';
 import { AudioDb } from './audio/db.mjs';
 import { Verwerking, isAudio } from './audio/verwerking.mjs';
@@ -59,6 +61,29 @@ try {
   opslag.kamer = kdb;
 } catch (fout) {
   console.error('Kamerstukken niet beschikbaar:', fout.message);
+}
+// Het archief van de Tweede Kamer (src/kamer/archief.mjs): een eigen database
+// met een eigen verbinding om te vullen; de gewone verbinding koppelt hem
+// erbij om te zoeken.
+let kamerArchief = null;
+if (kdb && process.env.KAMERARCHIEF !== 'uit') {
+  try {
+    const pad = path.join(opslag.map, 'kamerarchief.sqlite');
+    kamerArchief = new KamerArchief(await openKamerDb(pad), { map: opslag.map, pad, opslag });
+    kdb.koppelArchief(pad);
+  } catch (fout) {
+    console.error('Kamerarchief niet beschikbaar:', fout.message);
+    kamerArchief = null;
+  }
+}
+// Het archief van de gemeenten (src/archief.mjs): oudere ingekomen stukken,
+// doorzoekbaar, niet in de feed.
+if (process.env.ARCHIEF !== 'uit') {
+  try {
+    opslag.archief = await openArchief(path.join(opslag.map, 'archief.sqlite'), opslag, { map: opslag.map });
+  } catch (fout) {
+    console.error('Archief niet beschikbaar:', fout.message);
+  }
 }
 let fdb = null;
 let adb = null;
@@ -119,7 +144,7 @@ const telegram = new TelegramBot(opslag, {
     telegramWekker = setTimeout(meldingen, 10_000);
   },
 });
-const ctx = { opslag, kdb, fdb, adb, verwerking, telegram };
+const ctx = { opslag, kdb, fdb, adb, verwerking, telegram, kamerArchief };
 
 // ---------- planning ----------
 
@@ -347,6 +372,9 @@ server.listen(POORT, () => {
   setInterval(tik, 60000);
   setTimeout(kamerTik, 30000);
   setInterval(kamerTik, KAMER_INTERVAL_MS);
+  // Na de eerste gewone kamerronde: het archief op de achtergrond.
+  setTimeout(() => kamerArchief?.start(), 120_000);
+  setTimeout(() => opslag.archief?.start(), 180_000);
   verwerking?.start();
   telegram.start();
   // Uitslagen van het accountscript op de server (src/accounts.mjs): een

@@ -46,8 +46,12 @@ export function zetOm(d) {
   };
 }
 
-function metadataUrl(punt, skip) {
-  const filter = `Datum ge ${vanaf()}T00:00:00Z and ApiGewijzigdOp gt ${punt}`;
+// `onder` en `boven`: de datums van de stukken (boven niet meer meegeteld).
+// De gewone database: vanaf KAMERSTUKKEN_VANAF; het archief: daarvoor
+// (src/kamer/archief.mjs).
+function metadataUrl(punt, skip, { onder, boven }) {
+  const datums = [onder && `Datum ge ${onder}T00:00:00Z`, boven && `Datum lt ${boven}T00:00:00Z`].filter(Boolean);
+  const filter = [...datums, `ApiGewijzigdOp gt ${punt}`].join(' and ');
   const params = {
     $filter: filter,
     $orderby: 'ApiGewijzigdOp,Id',
@@ -66,17 +70,20 @@ function metadataUrl(punt, skip) {
 // synchronisatieSkip zegt hoeveel stukken met die tijdstempel al binnen zijn.
 // Zo valt er op de grens niets weg, ook niet bij gelijke tijdstempels, en
 // komt een ronde ook verder als er meer dan een ronde vol dezelfde tijdstempel heeft.
-export async function synchroniseer(kdb) {
-  // Ander startpunt dan de vorige keer: opnieuw vanaf het begin synchroniseren.
+export async function synchroniseer(kdb, { onder = vanaf(), boven = null } = {}) {
+  // Andere datums dan de vorige keer: opnieuw vanaf het begin synchroniseren.
   // Anders vraagt hij alleen wijzigingen na het oude punt op, en komen de oudere
   // stukken er nooit bij. Wat er al is, blijft staan; tekst wordt alleen opnieuw
-  // opgehaald voor stukken die echt gewijzigd zijn.
-  const vorigVanaf = kdb.staat('vanaf');
-  if (vorigVanaf && vorigVanaf !== vanaf()) {
+  // opgehaald voor stukken die echt gewijzigd zijn. (De gewone database
+  // onthield alleen 'vanaf'; die geldt als bereik zonder bovengrens.)
+  const bereik = `${onder || ''}..${boven || ''}`;
+  const vorig = kdb.staat('bereik') ?? (kdb.staat('vanaf') !== null ? `${kdb.staat('vanaf')}..` : null);
+  if (vorig !== null && vorig !== bereik) {
     kdb.zetStaat('synchronisatiepunt', '1900-01-01T00:00:00Z');
     kdb.zetStaat('synchronisatieSkip', '0');
   }
-  kdb.zetStaat('vanaf', vanaf());
+  kdb.zetStaat('bereik', bereik);
+  if (!boven) kdb.zetStaat('vanaf', onder);
   const punt = kdb.staat('synchronisatiepunt') || '1900-01-01T00:00:00Z';
   const begin = Number(kdb.staat('synchronisatieSkip') || 0);
   const tijd = (t) => Date.parse(t) || 0;
@@ -88,7 +95,7 @@ export async function synchroniseer(kdb) {
   // Klaar als er een pagina komt die niet vol is (ook als dat de laatste van de ronde is).
   let klaar = false;
   for (let p = 0; p < maxPaginas() && !klaar; p++) {
-    const { value = [] } = await haalJson(metadataUrl(punt, begin + p * pagina()));
+    const { value = [] } = await haalJson(metadataUrl(punt, begin + p * pagina(), { onder, boven }));
     for (const d of value) {
       // Op volgorde van ApiGewijzigdOp: tel hoeveel er op de hoogste milliseconde staan.
       if (tijd(d.ApiGewijzigdOp) > tijd(hoogste)) {
@@ -117,6 +124,13 @@ export async function synchroniseer(kdb) {
   }
   kdb.zetStaat('laatsteSync', new Date().toISOString());
   return { nieuw, bijgewerkt, verwijderd, klaar };
+}
+
+// Hoeveel stukken er tussen die datums zijn (voor de voortgang van het archief).
+export async function telBijDeKamer({ onder, boven }) {
+  const datums = [onder && `Datum ge ${onder}T00:00:00Z`, boven && `Datum lt ${boven}T00:00:00Z`, 'Verwijderd eq false'].filter(Boolean).join(' and ');
+  const { '@odata.count': n } = await haalJson(`${api()}/Document?$filter=${encodeURIComponent(datums)}&$count=true&$top=0`);
+  return Number(n) || null;
 }
 
 // Stap 2.

@@ -46,3 +46,16 @@ export async function haalNotubiz(bron) {
   const start = Math.max(0, totaal - AANTAL);
   return leesNotubizApi(await haalJson(`${pad}&start=${start}&limit=${AANTAL}`), bron.basis.replace(/\/$/, ''), { module: bron.module || 1, moduleNaam: bron.moduleNaam });
 }
+
+// De hele module, voor het archief (src/archief.mjs), in pagina's van AANTAL.
+export async function haalNotubizAlles(bron, { pauze = 1000, wacht = (ms) => new Promise((klaar) => setTimeout(klaar, ms)) } = {}) {
+  const pad = `${API}/organisations/${bron.organisatie}/modules/${bron.module || 1}/items?format=json&version=1.10.8`;
+  const totaal = (await haalJson(`${pad}&limit=1`))?.pagination?.['@attributes']?.total_results;
+  if (!Number.isFinite(totaal)) throw new Error('Notubiz-API gaf geen aantal terug');
+  const uit = [];
+  for (let start = 0; start < totaal; start += AANTAL) {
+    await wacht(pauze);
+    uit.push(...leesNotubizApi(await haalJson(`${pad}&start=${start}&limit=${AANTAL}`), bron.basis.replace(/\/$/, ''), { module: bron.module || 1, moduleNaam: bron.moduleNaam }));
+  }
+  return uit;
+}

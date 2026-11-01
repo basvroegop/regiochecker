@@ -11,11 +11,11 @@ function stukVoorClient(s) {
   return {
     id: s.id, nummer: s.nummer, soort: s.soort, titel: s.titel, onderwerp: s.onderwerp, datum: s.datum,
     dossier: s.dossier, dossiertitel: s.dossiertitel, afzender: s.afzender,
-    url: stukUrl(s), download: downloadUrl(s), fragment: s.fragment || '', tekststatus: s.tekststatus,
+    url: stukUrl(s), download: downloadUrl(s), fragment: s.fragment || '', tekststatus: s.tekststatus, archief: Boolean(s.archief),
   };
 }
 
-export async function kamerApi(req, res, url, { opslag, kdb, stuur, Fout }) {
+export async function kamerApi(req, res, url, { opslag, kdb, kamerArchief = null, stuur, Fout }) {
   const deel = url.pathname.split('/').filter(Boolean); // ['api', 'kamer', ...]
   if (deel[1] !== 'kamer') return false;
   if (!kdb) throw new Fout(503, 'De kamerstukkendatabase is niet beschikbaar');
@@ -23,7 +23,7 @@ export async function kamerApi(req, res, url, { opslag, kdb, stuur, Fout }) {
   const z = url.searchParams;
 
   if (route === 'GET /status') {
-    return stuur({ ...kdb.status(), vanaf: vanaf(), ronde: opslag.status.kamer || null, soorten: kdb.soorten() }), true;
+    return stuur({ ...kdb.status(), vanaf: vanaf(), ronde: opslag.status.kamer || null, soorten: kdb.soorten(), archief: kamerArchief?.status() || null, gemeentearchief: opslag.archief?.status() || null }), true;
   }
 
   if (route === 'GET /zoek') {

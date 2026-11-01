@@ -73,7 +73,7 @@ test('mails: meer stukken: per groep een kop, het oude onderwerp, en de tekst al
 test('mails: de tekst van een stuk, rond de eerste vondst als die ver weg staat', () => {
   const vulling = Array.from({ length: 30 }, (_, i) => `Alinea ${i} met ${'woorden '.repeat(40)}`.trim());
   const tekst = [...vulling, 'Nu over de huisartsenpost in Drachten.', 'En een slotalinea.', 'Een kop zonder tekst'].join('\n\n');
-  const k = { kdb: { tekst: () => tekst }, opslag: { items: {} } };
+  const k = { kdb: { tekstVan: () => tekst }, opslag: { items: {} } };
   const d = documentVoorMail(k, kamerTreffer(), ['huisartsenpost']);
   assert.equal(d.halverwege, true);
   assert.match(d.alineas[0].tekst, /^Alinea 29/, 'één alinea vóór de vondst');
@@ -84,7 +84,7 @@ test('mails: de tekst van een stuk, rond de eerste vondst als die ver weg staat'
   assert.equal(documentVoorMail(k, kamerTreffer(), []).halverwege, false);
   assert.match(documentVoorMail(k, kamerTreffer(), []).alineas[0].tekst, /^Alinea 0/);
   // Geen tekst: geen blok.
-  assert.equal(documentVoorMail({ kdb: { tekst: () => '' }, opslag: { items: {} } }, kamerTreffer(), []), null);
+  assert.equal(documentVoorMail({ kdb: { tekstVan: () => '' }, opslag: { items: {} } }, kamerTreffer(), []), null);
 });
 
 test('mails: bij audio de segmenten rond de treffer, per spreker een alinea met de tijd', () => {

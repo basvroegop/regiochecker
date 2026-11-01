@@ -190,8 +190,21 @@ export async function inhoudVoor(item, bron) {
 // ophalen (en bewaren). Twee keer tegelijk openen haalt het één keer op.
 const bezig = new Map();
 export function documentOpVraag(opslag, sleutel, { nu = new Date() } = {}) {
-  const item = opslag.items[sleutel];
+  const item = opslag.items[sleutel] || opslag.archief?.item(sleutel);
   if (!item) return null;
+  // Een stuk uit het archief (src/archief.mjs): het document staat daar, en
+  // gaat daar ook heen (de documentcache ruimt op wat niet in items staat).
+  if (item.archief) {
+    const bestaand = opslag.archief.documentVan(sleutel);
+    if (bestaand) return bestaand;
+    const bron = alleBronnen(opslag).find((b) => b.id === item.bron);
+    if (!bron) return null;
+    return documentVoor(item, bron).then((doc) => {
+      const uit = doc || { blokken: [], volledig: true };
+      opslag.archief.zetDocument(sleutel, uit);
+      return uit;
+    });
+  }
   const bestaand = opslag.feeddb?.document(sleutel);
   if (bestaand) return bestaand;
   if (bezig.has(sleutel)) return bezig.get(sleutel);

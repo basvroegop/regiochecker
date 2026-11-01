@@ -71,3 +71,22 @@ export async function haalIbabs(bron) {
   );
   return leesRegels(json, basis);
 }
+
+// Het hele overzicht, voor het archief (src/archief.mjs): per pagina van
+// `per` regels, met `pauze` ms ertussen (iBabs vraagt vijf seconden).
+export async function haalIbabsAlles(bron, { per = 500, pauze = 5000, wacht = (ms) => new Promise((klaar) => setTimeout(klaar, ms)) } = {}) {
+  const basis = bron.basis.replace(/\/$/, '');
+  const kolommen = leesKolommen(await haalTekst(`${basis}/Reports/Details/${bron.overzicht}`));
+  const uit = [];
+  for (let start = 0; ; start += per) {
+    await wacht(pauze);
+    const json = await postFormulier(
+      `${basis}/Reports/GetReportData/${bron.overzicht}`,
+      { ...dataTablesVelden(kolommen, per), start: String(start) },
+      { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
+    );
+    uit.push(...leesRegels(json, basis));
+    if (!json?.data?.length || start + per >= Number(json.recordsTotal || 0)) break;
+  }
+  return uit;
+}
