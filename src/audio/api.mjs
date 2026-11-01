@@ -21,7 +21,7 @@ import { worker } from './worker.mjs';
 import { isAudio } from './verwerking.mjs';
 import { namenOverzicht, vermeldingen, stemmen, telefoonnummers, zetKoppeling, transcriptTekst } from './archief.mjs';
 import { GEBIEDEN, SOORTEN as NAAMSOORTEN } from './namen.mjs';
-import { maakZoeker } from '../termen.mjs';
+import { maakZoeker, ftsVoorZoekvraag } from '../termen.mjs';
 import { ENKELVOUD } from '../regios.mjs';
 import { isBeheerder } from '../gebruikers.mjs';
 import { routeerAflevering } from '../feed.mjs';
@@ -91,7 +91,11 @@ export async function audioApi(req, res, url, ctx, kader) {
     const q = String(z.get('q') || '').slice(0, 200).trim();
     const status = z.get('status');
     const groepen = { klaar: ['klaar', 'getranscribeerd', 'analyseren'], bezig: ['wacht', 'downloaden', 'transcriberen'], mislukt: ['mislukt'] };
-    let lijst = adb.lijst({ bron: bron || undefined, status: groepen[status], limiet: q ? 5000 : 400 });
+    // Met een zoekvraag: eerst via de zoekindex (src/audio/db.mjs), zodat ook
+    // oude afleveringen gevonden worden; daarna precies, zoals Zoeken.
+    const ids = q ? adb.zoekIds(ftsVoorZoekvraag(q), { max: 2000 }) : null;
+    let lijst = adb.lijst({ bron: bron || undefined, status: groepen[status], ...(ids ? { ids, limiet: ids.length || 1 } : { limiet: 400 }) });
+    if (ids && !ids.length) lijst = [];
     let term = null;
     if (q) {
       const zoeker = maakZoeker(q);

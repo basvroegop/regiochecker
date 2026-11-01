@@ -18,6 +18,24 @@
 
 import { randomUUID } from 'node:crypto';
 
+// Zoekindex op titel en transcript (FTS5), voor Zoeken en het Audio-archief:
+// eerst de afleveringen waarin de woorden staan, daarna pas per segment. Zonder
+// index liep zoeken door alle transcripten (seconden, en meer naarmate het
+// archief groeit). Triggers houden hem bij, wie er ook schrijft.
+const SCHEMA_ZOEKEN = `
+  CREATE VIRTUAL TABLE IF NOT EXISTS aflevering_fts USING fts5(id UNINDEXED, titel, transcript, tokenize = 'unicode61 remove_diacritics 2');
+  CREATE TRIGGER IF NOT EXISTS afleveringen_fts_in AFTER INSERT ON afleveringen BEGIN
+    INSERT INTO aflevering_fts (id, titel, transcript) VALUES (new.id, new.titel, new.transcript);
+  END;
+  CREATE TRIGGER IF NOT EXISTS afleveringen_fts_uit AFTER DELETE ON afleveringen BEGIN
+    DELETE FROM aflevering_fts WHERE id = old.id;
+  END;
+  CREATE TRIGGER IF NOT EXISTS afleveringen_fts_bij AFTER UPDATE OF titel, transcript ON afleveringen BEGIN
+    DELETE FROM aflevering_fts WHERE id = old.id;
+    INSERT INTO aflevering_fts (id, titel, transcript) VALUES (new.id, new.titel, new.transcript);
+  END;
+`;
+
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS afleveringen (
     id TEXT PRIMARY KEY,
@@ -161,6 +179,10 @@ export class AudioDb {
     const nu = db.prepare("SELECT name FROM pragma_table_info('afleveringen')").all().map((r) => r.name);
     if (!nu.includes('transcript_delen')) db.exec('ALTER TABLE afleveringen ADD COLUMN transcript_delen TEXT');
     if (!nu.includes('samenvatting')) db.exec('ALTER TABLE afleveringen ADD COLUMN samenvatting TEXT');
+    // De zoekindex; de eerste keer met alles wat er al is.
+    const nieuweIndex = !db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'aflevering_fts'").get();
+    db.exec(SCHEMA_ZOEKEN);
+    if (nieuweIndex) db.exec('INSERT INTO aflevering_fts (id, titel, transcript) SELECT id, titel, transcript FROM afleveringen');
     if (!nu.includes('platform')) db.exec('ALTER TABLE afleveringen ADD COLUMN platform TEXT');
     // Na een herstart: wat bezig was, gaat terug in de wachtrij.
     db.prepare("UPDATE afleveringen SET status = CASE WHEN transcript IS NULL OR sprekers_gevraagd = 1 THEN 'wacht' ELSE 'getranscribeerd' END, stap = 'Hervatten na herstart' WHERE status IN ('downloaden', 'transcriberen', 'analyseren')").run();
@@ -285,6 +307,15 @@ export class AudioDb {
   metTranscriptSinds(sinds, tot = '9999') {
     return this.db.prepare(`SELECT * FROM afleveringen WHERE transcript IS NOT NULL AND eerst_gezien > ? AND eerst_gezien <= ? ORDER BY eerst_gezien DESC`)
       .all(sinds, tot).map((r) => aflevering(r));
+  }
+
+  // Ids van afleveringen waarin de FTS5-zoekvraag voorkomt (titel of
+  // transcript), nieuwste eerst. `fts` uit ftsVoorZoekvraag (src/termen.mjs).
+  zoekIds(fts, { metTranscript = false, max = 2000 } = {}) {
+    if (!fts) return [];
+    return this.db.prepare(`SELECT a.id FROM aflevering_fts JOIN afleveringen a ON a.id = aflevering_fts.id
+      WHERE aflevering_fts MATCH ? ${metTranscript ? 'AND a.transcript IS NOT NULL' : ''}
+      ORDER BY COALESCE(a.gepubliceerd_op, a.aangemaakt) DESC LIMIT ?`).all(fts, max).map((r) => r.id);
   }
 
   // Alle afleveringen met transcript, in delen, om het hele archief te doorzoeken.

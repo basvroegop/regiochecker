@@ -15,7 +15,7 @@
 import { createHash } from 'node:crypto';
 import { alleRegios, alleBronnen, TWEEDE_KAMER, geldtVoor, actieveTermen } from './register.mjs';
 import { ENKELVOUD, GROEPEN, groepVan } from './regios.mjs';
-import { vindTermen, vindInSegmenten, maakZoeker } from './termen.mjs';
+import { vindTermen, vindInSegmenten, maakZoeker, ftsVoorZoekvraag } from './termen.mjs';
 import { stukUrl, downloadUrl, minDatum } from './kamer/db.mjs';
 import { stukTitel } from './kamer/weergave.mjs';
 import { lokaleDatum } from './datum.mjs';
@@ -511,8 +511,11 @@ export function zoekFeed(ctx, gebruiker, vraag) {
     }
   }
   if (k.adb) {
-    for (const a of k.adb.alleMetTranscript()) {
-      const bron = k.bronnen.get(a.bron);
+    // Via de zoekindex alleen de afleveringen waarin de woorden staan; daarna
+    // per segment, voor de tijd.
+    for (const id of k.adb.zoekIds(ftsVoorZoekvraag(vraag), { metTranscript: true, max: 300 })) {
+      const a = k.adb.aflevering(id);
+      const bron = a && k.bronnen.get(a.bron);
       if (!bron) continue;
       const i = a.segmenten.findIndex((s) => zoeker(s.text));
       if (i < 0 && !zoeker(a.titel)) continue;

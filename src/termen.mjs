@@ -215,6 +215,21 @@ export function vindInSegmenten(segmenten, termen, { maxPerTerm = 20 } = {}) {
   return termen.map((t) => perTerm.get(t)).filter(Boolean);
 }
 
+// Dezelfde zoekvraag als maakZoeker, als FTS5-zoekvraag: alle woorden van een
+// deel in hetzelfde stuk, woordgroepen aaneen, delen met OR. Om in een grote
+// verzameling (de transcripten) eerst de kandidaten te vinden; maakZoeker kijkt
+// daarna precies, per segment. Alles tussen aanhalingstekens, dus nooit een
+// syntaxfout.
+export function ftsVoorZoekvraag(vraag) {
+  return String(vraag || '').split(/\s+OR\s+/).map((deel) => [...deel.matchAll(/"([^"]+)"|(\S+)/g)]
+    .map((m) => normaliseer((m[1] || m[2]).replace(AANHALING, '')).split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(' '))
+    .filter(Boolean)
+    .map((t) => `"${t}"`))
+    .filter((d) => d.length)
+    .map((d) => `(${d.join(' ')})`)
+    .join(' OR ');
+}
+
 // Een vrije zoekvraag (de zoekbalk): delen gescheiden door OR; binnen een deel
 // moeten alle woorden en "woordgroepen" voorkomen, als hele woorden. Geeft een
 // functie die voor een tekst de eerste treffer geeft (term en fragment), of null.

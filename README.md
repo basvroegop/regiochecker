@@ -65,6 +65,12 @@ transcripten, ook wat er bij de eerste ronde van een bron al stond (de
 nulmeting; dat staat op de datum van het stuk). Woorden moeten allemaal
 voorkomen, `"woordgroep"` als geheel, `OR` voor alternatieven.
 
+Transcripten hebben een zoekindex (FTS5, `aflevering_fts` in
+`src/audio/db.mjs`, bijgehouden door triggers). Zoeken en het Audio-archief
+vinden daarmee eerst de opnames waarin de woorden staan, en zoeken pas daarna
+per segment naar de tijd. Een zeldzaam woord kostte zo 1,1 seconde en nu 0,05;
+het Audio-archief vindt nu ook opnames die ouder zijn dan de nieuwste 5.000.
+
 Zoeken gaat ook door de twee **archieven**: de Kamerstukken terug tot 2008, en
 de ingekomen stukken zo ver als iBabs en Notubiz ze nog aanbieden (zie
 Archieven). Zo'n stuk staat in de resultaten op zijn eigen datum en opent

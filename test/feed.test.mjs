@@ -300,6 +300,27 @@ test('snelheid: opwarmen in stapjes, en normaliseren blijft teken voor teken gel
   assert.deepEqual(vindInSegmenten(segmenten, ['Drachten', 'Ureterp']).map((t) => [t.term, t.aantal, t.treffers[0].tijd]), [['Drachten', 1, 5]]);
 });
 
+test('zoeken in transcripten via de zoekindex: bijgehouden bij nieuw, gewijzigd en weg', metSqlite, async () => {
+  const { zoekFeed } = await import('../src/feed.mjs');
+  const { ftsVoorZoekvraag } = await import('../src/termen.mjs');
+  const { ctx, adb, sanne } = await opzet();
+  assert.equal(ftsVoorZoekvraag('"De Drait" Drachten OR huisartsenpost'), '("de drait" "drachten") OR ("huisartsenpost")');
+  assert.equal(ftsVoorZoekvraag('kapot AND ( "'), '("kapot" "and")', 'nooit een syntaxfout');
+  // De index kende de afleveringen uit opzet() al (de triggers).
+  assert.deepEqual(adb.zoekIds(ftsVoorZoekvraag('huisartsenpost'), { metTranscript: true }), [E1]);
+  assert.deepEqual(zoekFeed(ctx, sanne, 'huisartsenpost').items.filter((i) => i.id.startsWith('a:')).map((i) => [i.id, i.match.tijd]), [[`a:${E1}`, 10]]);
+  // Een nieuw transcript wordt meteen vindbaar, een oud niet meer.
+  adb.werkBij(E3, { transcript: 'Over de Sneker Pop.', segmenten: [{ start: 3, end: 6, text: 'Over de Sneker Pop.' }] });
+  assert.deepEqual(adb.zoekIds(ftsVoorZoekvraag('"Sneker Pop"')), [E3]);
+  assert.deepEqual(adb.zoekIds(ftsVoorZoekvraag('weer')), [], 'het oude transcript van E3 staat er niet meer in');
+  assert.deepEqual(zoekFeed(ctx, sanne, '"Sneker Pop"').items.map((i) => [i.id, i.match.tijd]), [[`a:${E3}`, 3]]);
+  // Alle woorden in hetzelfde segment, zoals altijd: Drachten en huisartsenpost wel, Drachten en Kramer niet.
+  assert.equal(zoekFeed(ctx, sanne, 'Drachten huisartsenpost').items.some((i) => i.id === `a:${E1}`), true);
+  assert.equal(zoekFeed(ctx, sanne, 'Drachten Kramer').items.some((i) => i.id === `a:${E1}`), false);
+  adb.db.prepare('DELETE FROM afleveringen WHERE id = ?').run(E3);
+  assert.deepEqual(adb.zoekIds(ftsVoorZoekvraag('"Sneker Pop"')), []);
+});
+
 test('het hele document doorzoeken: zoeken, sleutelwoorden en meldingen, ook na vijf weken', metSqlite, async () => {
   const { zoekFeed, routeerItem, meldingTreffers, maakKader } = await import('../src/feed.mjs');
   const { ctx, opslag, fdb, sanne } = await opzet();
