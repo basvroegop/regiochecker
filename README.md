@@ -806,11 +806,26 @@ bij een eerste import van alles, en wat nog niet in de database staat, gaat
 alsnog als archief (nulmeting) in de wachtrij; ook wat bij "alleen nieuwe" als
 gezien was gemarkeerd. Na de gewone controles, hooguit één bron per kwartier (het
 lezen van een iBabs-archief duurt met vijf seconden per pagina een paar uur);
-mislukt het drie keer, dan stopt het en staat de fout bij de bron. **Volgorde in
-de wachtrij:** eerst wat nieuw is, in de volgorde van de bronnen; het archief
-daarna, het nieuwste eerst over alle bronnen heen, zodat van elke gemeente eerst
-het recente verleden binnenkomt. Binnen het archief gaat wat geen GPU kost (een
-Kamerdebat) voor. Een archiefopname die al ouder is dan de
+mislukt het drie keer, dan stopt het en staat de fout bij de bron.
+
+**Volgorde in de wachtrij** (sinds 2 november 2026, op verzoek van de
+opdrachtgever: "nieuwe raadsvergaderingen altijd voor, het archief als er verder
+niets is"):
+- **Nieuw gaat altijd voor**, in de volgorde van de bronnen, het nieuwste eerst.
+  Dat geldt voor elke stap van een nieuwe opname, ook de samenvatting, en ook
+  voor stemmen die een beheerder opnieuw laat herkennen.
+- **Het archief komt pas als er niets nieuws te doen is**, het nieuwste eerst
+  over alle bronnen heen. Zo komt van elke gemeente eerst het recente verleden
+  binnen. Binnen het archief gaat wat geen GPU kost (een Kamerdebat) voor.
+- **Een archiefopname die bezig is, wijkt** zodra er iets nieuws klaarstaat:
+  - tussen twee delen van 45 minuten; de klare delen blijven bewaard;
+  - na het downloaden; de audio blijft bewaard;
+  - tijdens het downloaden: elke 30 seconden kijkt hij of er iets nieuws is,
+    stopt dan, en begint later opnieuw met downloaden. Sommige streams komen
+    niet veel sneller binnen dan ze duren.
+  - Wijken telt niet als mislukte poging.
+- **Wachttijd voor iets nieuws**: hooguit één deel (een paar minuten GPU) of de
+  samenvatting van een archiefopname. Een archiefopname die al ouder is dan de
 bewaartermijn van de audio, verliest haar audio direct na het transcriberen (het
 transcript blijft); anders zou een heel archief de schijf vullen.
 

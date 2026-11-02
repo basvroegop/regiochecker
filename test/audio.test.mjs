@@ -798,6 +798,97 @@ test('lange opnames in delen naar de worker, met tussenstand', metAlles, async (
   }
 });
 
+test('nieuw gaat altijd voor het archief: een archiefopname wijkt tussen twee delen en tijdens het downloaden', metSqlite, async () => {
+  const { Verwerking } = await import('../src/audio/verwerking.mjs');
+  assert.equal(Verwerking.isArchief({ nulmeting: 1, sprekers_gevraagd: 0 }), true);
+  assert.equal(Verwerking.isArchief({ nulmeting: 1, sprekers_gevraagd: 1 }), false, 'stemmen opnieuw vroeg een beheerder zelf');
+
+  process.env.AUDIO_DEEL_S = '1';
+  process.env.AUDIO_VOORRANG_MS = '30';
+  const worker = await nepWorker();
+  const feed = await nepPodcast({ n: 3 });
+  // Een bron die een stream nooit afmaakt, zoals een trage HLS-stream.
+  const traag = http.createServer((req, res) => { res.writeHead(200, { 'content-type': 'audio/wav' }); res.write(Buffer.alloc(1000)); });
+  await new Promise((klaar) => traag.listen(0, '127.0.0.1', klaar));
+  try {
+    const { opslag, adb, verwerking } = await opzet();
+    opslag.instellingen.audio = { ...opslag.instellingen.audio, workerUrl: worker.url, workerToken: TOKEN, viaTailnet: false };
+    const bron = { id: 'p', naam: 'p', soort: 'podcast', bereik: 'landelijk', type: 'audio', url: feed.url, aangemaakt: '2026-10-01', audio: { kind: 'rss', eersteImport: 0, actief: true, geinitialiseerd: true, prioriteit: 0 } };
+    opslag.bronnen.push(bron);
+    const basis = feed.url.replace(/\/feed\.xml$/, '');
+    const voegToe = (n, titel, nulmeting, mediaUrl = `${basis}/audio/${n}.wav`) => adb.voegToe(bron, { extern: `rss:${n}`, vorm: 'rss', url: `${basis}/afl/${n}`, mediaUrl, titel, gepubliceerdOp: Date.now() / 1000 - n * 86400 }, { nulmeting });
+    const id = (titel) => adb.lijst({ bron: 'p' }).find((x) => x.titel === titel).id;
+    const uploads = () => worker.staat.verzoeken.filter((v) => v === 'POST /v1/media/transcriptions').length;
+    voegToe(1, 'Uit het archief', true);
+
+    // Terwijl het eerste deel van de archiefopname bij de worker is, komt er een nieuwe vergadering binnen.
+    const echt = verwerking.w.bind(verwerking);
+    let binnen = false;
+    verwerking.w = () => {
+      const w = echt();
+      const transcribeer = w.transcribeer.bind(w);
+      w.transcribeer = async (...args) => {
+        const r = await transcribeer(...args);
+        if (!binnen) {
+          binnen = true;
+          voegToe(2, 'Nieuw', false);
+        }
+        return r;
+      };
+      return w;
+    };
+    assert.equal(await verwerking.verwerkEen(), true);
+    const archief = adb.aflevering(id('Uit het archief'));
+    assert.equal(archief.status, 'wacht');
+    assert.match(archief.stap, /nieuwe opname gaat voor · 1 van 2 delen klaar/);
+    assert.equal(archief.transcriptDelen.length, 1, 'het eerste deel blijft bewaard');
+    assert.equal(uploads(), 1);
+    // Eerst het nieuwe helemaal, ook de laatste stap; dan het archief verder bij deel 2.
+    assert.deepEqual(verwerking.volgende().map((r) => adb.aflevering(r.id).titel), ['Nieuw', 'Uit het archief']);
+    assert.equal(await verwerking.verwerkEen(), true);
+    assert.equal(adb.aflevering(id('Nieuw')).status, 'getranscribeerd');
+    assert.deepEqual(verwerking.volgende().map((r) => adb.aflevering(r.id).titel), ['Nieuw', 'Uit het archief'], 'ook de samenvatting van het nieuwe gaat voor');
+    assert.equal(await verwerking.verwerkEen(), true);
+    assert.equal(adb.aflevering(id('Nieuw')).status, 'klaar');
+    assert.equal(uploads(), 3);
+    assert.equal(await verwerking.verwerkEen(), true);
+    assert.equal(uploads(), 4, 'alleen het tweede deel');
+    assert.equal(adb.aflevering(id('Uit het archief')).status, 'getranscribeerd');
+    assert.equal(await verwerking.verwerkEen(), true);
+    assert.equal(adb.aflevering(id('Uit het archief')).status, 'klaar');
+
+    // Tijdens het downloaden: de archiefopname stopt zodra er iets nieuws klaarstaat.
+    voegToe(4, 'Traag archief', true, `http://127.0.0.1:${traag.address().port}/traag.wav`);
+    const bezig = verwerking.verwerkEen();
+    await new Promise((klaar) => setTimeout(klaar, 150));
+    assert.equal(adb.aflevering(id('Traag archief')).status, 'downloaden');
+    voegToe(3, 'Nog nieuwer', false);
+    assert.equal(await bezig, true);
+    const traagArchief = adb.aflevering(id('Traag archief'));
+    assert.equal(traagArchief.status, 'wacht');
+    assert.match(traagArchief.stap, /nieuwe opname gaat voor · downloaden begint later opnieuw/);
+    assert.equal(traagArchief.pogingen, 0, 'geen mislukte poging');
+    assert.equal(verwerking.volgende()[0].id, id('Nog nieuwer'));
+  } finally {
+    delete process.env.AUDIO_DEEL_S;
+    delete process.env.AUDIO_VOORRANG_MS;
+    traag.closeAllConnections();
+    traag.close();
+    worker.server.close();
+    feed.server.close();
+  }
+});
+
+test('een download is af te breken', async () => {
+  const { draai } = await import('../src/audio/ophalen.mjs');
+  const stop = new AbortController();
+  const begin = Date.now();
+  setTimeout(() => stop.abort(), 100);
+  await assert.rejects(draai(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { signaal: stop.signal }), /afgebroken/);
+  assert.ok(Date.now() - begin < 5000);
+  await assert.rejects(draai(process.execPath, ['-e', ''], { signaal: stop.signal }), /afgebroken/, 'al afgebroken: niet eens beginnen');
+});
+
 test('een eerste import van alleen nieuwe afleveringen, en later toch het hele archief, achter wat nieuw is', metSqlite, async () => {
   const feed = await nepPodcast({ n: 4 });
   try {

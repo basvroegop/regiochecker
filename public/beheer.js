@@ -1168,7 +1168,7 @@ export async function toonAudio(hoofd) {
           ${d.bezig.length ? d.bezig.map((a) => afleveringRij(a)).join('') : '<p class="leeg" style="padding-left:0">Niets.</p>'}
         </section>
         <section class="sectie">
-          <div class="sectiekop"><span class="titel">Wachtrij</span><span class="uitleg">${d.inWachtrij} ${d.inWachtrij === 1 ? 'stap' : 'stappen'} te gaan. Eerst wat nieuw is, per bron het nieuwste eerst; het archief daarna, het nieuwste eerst over alle bronnen.${d.buitenGrens ? ` Nog ${d.buitenGrens} oudere opnames uit het archief wachten buiten de grens van ${d.archiefJaren} jaar (Instellingen › Audio en video).` : ''}</span></div>
+          <div class="sectiekop"><span class="titel">Wachtrij</span><span class="uitleg">${d.inWachtrij} ${d.inWachtrij === 1 ? 'stap' : 'stappen'} te gaan. Wat nieuw is, gaat altijd voor (per bron het nieuwste eerst); het archief alleen als er verder niets is, het nieuwste eerst over alle bronnen. Een archiefopname die bezig is, wijkt tussen twee delen of tijdens het downloaden.${d.buitenGrens ? ` Nog ${d.buitenGrens} oudere opnames uit het archief wachten buiten de grens van ${d.archiefJaren} jaar (Instellingen › Audio en video).` : ''}</span></div>
           ${d.wachtrij.length ? d.wachtrij.map((a) => afleveringRij(a)).join('') : '<p class="leeg" style="padding-left:0">Leeg.</p>'}
         </section>
         ${d.mislukt.length ? `<section class="sectie">

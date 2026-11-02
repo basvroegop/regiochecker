@@ -36,6 +36,8 @@ const BRON_INTERVAL_MS = 60 * 60_000;
 const ARCHIEF_TUSSEN_MS = 15 * 60_000;
 const ARCHIEF_POGINGEN = 3;
 const DAG_MS = 86400_000;
+// Hoe vaak een archiefdownload kijkt of er iets nieuws voor moet (in tests korter).
+const voorrangMs = () => Number(process.env.AUDIO_VOORRANG_MS) || 30_000;
 
 export const isAudio = (b) => b?.type === 'audio' && b.audio;
 
@@ -277,15 +279,16 @@ export class Verwerking {
 
   // ---------- de wachtrij ----------
 
-  // Per aflevering drie fasen: transcript, namen, AI-samenvatting. Een
-  // aflevering die al begonnen is, wordt eerst helemaal afgemaakt; daarna de
-  // volgende, in de volgorde van de bronnen en het nieuwste eerst. Het archief
-  // (een eerste import, of het hele archief van een bron) komt achter alles wat
-  // nieuw is: anders wacht een nieuwe vergadering weken op de jaren ervoor. Dat
-  // archief gaat het nieuwste eerst, over alle bronnen heen; wat geen GPU kost
-  // (een Kamerdebat van gehoord.de), gaat daarbinnen voor. Afleveringen die al
-  // klaar waren en alleen nog een samenvatting missen (een overgenomen archief,
-  // of een samenvatting die mislukte), komen als laatste.
+  // Per aflevering drie fasen: transcript, namen, AI-samenvatting. Wat nieuw is,
+  // gaat altijd voor het archief (een eerste import, of het hele archief van een
+  // bron): het archief is alleen voor als er verder niets te doen is. Anders
+  // wacht een nieuwe vergadering op de jaren ervoor. Een archiefopname die al
+  // half klaar is, wijkt ook: tussen twee delen of tijdens het downloaden
+  // (voorrangBoven). Binnen elk van de twee: wat al begonnen is, eerst
+  // afmaken; dan het transcript van de volgende; als laatste afleveringen die
+  // alleen nog een samenvatting missen. Het nieuwe gaat in de volgorde van de
+  // bronnen en het nieuwste eerst, het archief het nieuwste eerst over alle
+  // bronnen heen; wat geen GPU kost (een Kamerdebat van gehoord.de) gaat voor.
   static fase(r, namen = true) {
     return r.zonder_transcript || r.sprekers_gevraagd ? 0 : namen && r.zonder_entiteiten ? 1 : 2;
   }
@@ -297,6 +300,17 @@ export class Verwerking {
 
   static lopend(r) {
     return r.status !== 'klaar' && (!r.zonder_transcript || Boolean(r.met_delen));
+  }
+
+  // Archief: de nulmeting. Stemmen opnieuw laten herkennen vroeg een beheerder
+  // zelf; dat telt als nieuw. (Een rij uit de wachtrij of een aflevering.)
+  static isArchief(r) {
+    return Boolean(r.nulmeting) && !(r.sprekers_gevraagd || r.sprekersGevraagd);
+  }
+
+  // Moet deze archiefopname nu wijken: staat er iets nieuws klaar?
+  voorrangBoven(af) {
+    return Verwerking.isArchief(af) && this.volgende().some((r) => r.id !== af.id && !Verwerking.isArchief(r));
   }
 
   // Het archief (de nulmeting) alleen tot zoveel jaar terug transcriberen
@@ -328,7 +342,7 @@ export class Verwerking {
     const samenvatten = samenvattingAanbieder(this.opslag).klaar;
     const namen = this.namenZoeken();
     const fase = (r) => Verwerking.fase(r, namen);
-    const { lopend } = Verwerking;
+    const { lopend, isArchief } = Verwerking;
     const grens = this.archiefGrens();
     const rijen = this.adb.wachtrij(nu).filter((r) => volgorde.has(r.bron) && ['wacht', 'getranscribeerd', 'klaar'].includes(r.status)
       && !Verwerking.buitenGrens(r, grens)
@@ -338,10 +352,10 @@ export class Verwerking {
     const groep = (r) => (lopend(r) ? 0 : fase(r) === 0 ? 1 : 2);
     // Een Kamerdebat (gehoord.de) kost geen GPU en is in seconden binnen.
     const metGpu = (r) => (r.vorm === 'gehoord' ? 0 : 1);
-    rijen.sort((a, b) => groep(a) - groep(b)
-      || a.nulmeting - b.nulmeting
+    rijen.sort((a, b) => isArchief(a) - isArchief(b)
+      || groep(a) - groep(b)
       || metGpu(a) - metGpu(b)
-      || (a.nulmeting
+      || (isArchief(a)
         ? b.moment - a.moment || volgorde.get(a.bron) - volgorde.get(b.bron)
         : volgorde.get(a.bron) - volgorde.get(b.bron) || b.moment - a.moment));
     return { rijen, groep };
@@ -366,8 +380,11 @@ export class Verwerking {
     const volgende = rijen.find((r) => r.klaarVoor);
     if (!volgende) return false;
     // Wacht de lopende aflevering even (op de gedeelde GPU, of een herkansing
-    // over een paar minuten), dan niet intussen aan een volgende beginnen.
-    if (groep(volgende) > 0 && rijen.some((r) => groep(r) === 0 && !r.klaarVoor && r.opnieuw_op - nu < 300)) return false;
+    // over een paar minuten), dan niet intussen aan een volgende beginnen. Een
+    // lopende archiefopname houdt iets nieuws niet op.
+    const { isArchief } = Verwerking;
+    if (groep(volgende) > 0 && rijen.some((r) => groep(r) === 0 && !r.klaarVoor && r.opnieuw_op - nu < 300
+      && !(isArchief(r) && !isArchief(volgende)))) return false;
     const af = this.adb.aflevering(volgende.id);
     this.bezigMet = af.id;
     try {
@@ -416,6 +433,10 @@ export class Verwerking {
     for (let i = klaar.length; i < n; i++) {
       if (this.adb.gepauzeerd()) {
         werk({ status: 'wacht', stap: `Gepauzeerd · ${i} van ${n} delen klaar` });
+        return null;
+      }
+      if (this.voorrangBoven(af)) {
+        werk({ status: 'wacht', stap: `Een nieuwe opname gaat voor · ${i} van ${n} delen klaar` });
         return null;
       }
       werk({ status: 'transcriberen', stap: `${wat} · deel ${i + 1} van ${n}`, fout: null });
@@ -478,25 +499,43 @@ export class Verwerking {
       let pad = af.audioPad;
       if (!pad || !existsSync(pad)) {
         werk({ status: 'downloaden', stap: 'Audio downloaden', fout: null });
-        pad = await downloadAudio(af, {
-          map: this.map,
-          vergadering: mediaVoor,
-          metadata: (m) => {
-            const velden = {};
-            if (m.titel) velden.titel = m.titel;
-            if (m.auteur) velden.auteur = m.auteur;
-            if (m.duur) velden.duur = m.duur;
-            if (m.platform) velden.platform = { ...m.platform, opgehaald: Date.now() / 1000 };
-            if (m.gepubliceerd && /^\d{8}$/.test(m.gepubliceerd) && !af.gepubliceerd) {
-              Object.assign(velden, { gepubliceerdTekst: m.gepubliceerd, gepubliceerdOp: Date.UTC(+m.gepubliceerd.slice(0, 4), +m.gepubliceerd.slice(4, 6) - 1, +m.gepubliceerd.slice(6, 8)) / 1000 });
-            }
-            if (Object.keys(velden).length) werk(velden);
-          },
-        });
+        // Een archiefopname stopt met downloaden zodra er iets nieuws klaarstaat,
+        // en begint daar later opnieuw mee (sommige platforms leveren een stream
+        // niet veel sneller dan hij duurt).
+        const stop = new AbortController();
+        const kijk = Verwerking.isArchief(af) ? setInterval(() => { if (this.voorrangBoven(af)) stop.abort(); }, voorrangMs()) : null;
+        try {
+          pad = await downloadAudio(af, {
+            map: this.map,
+            signaal: stop.signal,
+            vergadering: mediaVoor,
+            metadata: (m) => {
+              const velden = {};
+              if (m.titel) velden.titel = m.titel;
+              if (m.auteur) velden.auteur = m.auteur;
+              if (m.duur) velden.duur = m.duur;
+              if (m.platform) velden.platform = { ...m.platform, opgehaald: Date.now() / 1000 };
+              if (m.gepubliceerd && /^\d{8}$/.test(m.gepubliceerd) && !af.gepubliceerd) {
+                Object.assign(velden, { gepubliceerdTekst: m.gepubliceerd, gepubliceerdOp: Date.UTC(+m.gepubliceerd.slice(0, 4), +m.gepubliceerd.slice(4, 6) - 1, +m.gepubliceerd.slice(6, 8)) / 1000 });
+              }
+              if (Object.keys(velden).length) werk(velden);
+            },
+          });
+        } catch (fout) {
+          if (!stop.signal.aborted) throw fout;
+          werk({ status: 'wacht', stap: 'Een nieuwe opname gaat voor · downloaden begint later opnieuw' });
+          return;
+        } finally {
+          clearInterval(kijk);
+        }
         werk({ audioPad: pad });
       }
       if (this.adb.gepauzeerd()) {
         werk({ status: 'wacht', stap: 'Gepauzeerd · audio klaar' });
+        return;
+      }
+      if (this.voorrangBoven(af)) {
+        werk({ status: 'wacht', stap: 'Een nieuwe opname gaat voor · audio klaar' });
         return;
       }
       const lengte = (await audioDuur(pad)) || af.duur || null;
@@ -552,6 +591,10 @@ export class Verwerking {
     for (let i = klaar.length; i < stukken.length; i++) {
       if (this.adb.gepauzeerd()) {
         werk({ status: 'getranscribeerd', stap: 'Namen zoeken gepauzeerd' });
+        return;
+      }
+      if (this.voorrangBoven(af)) {
+        werk({ status: 'getranscribeerd', stap: 'Een nieuwe opname gaat voor · namen volgen' });
         return;
       }
       if (await w.gpuBezig()) {

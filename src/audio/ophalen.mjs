@@ -48,7 +48,8 @@ export async function openbaar(url) {
 // Ophalen met elke doorverwijzing gecontroleerd. Zonder `naar` komt de inhoud
 // terug als Buffer; met `naar` (een pad) wordt hij gestreamd weggeschreven.
 // `cookies` (Map host → string) houdt koekjes vast tussen verzoeken.
-export async function haalOpenbaar(url, { naar, maxBytes = 10 * 1024 ** 2, ua = UA, tijd = 90_000, cookies, headers = {} } = {}) {
+// `signaal`: af te breken (een archiefopname die wijkt voor een nieuwe).
+export async function haalOpenbaar(url, { naar, maxBytes = 10 * 1024 ** 2, ua = UA, tijd = 90_000, cookies, headers = {}, signaal } = {}) {
   let adres = url;
   for (let hop = 0; hop < 8; hop++) {
     await openbaar(adres);
@@ -58,7 +59,7 @@ export async function haalOpenbaar(url, { naar, maxBytes = 10 * 1024 ** 2, ua = 
       // Ook bij het verbinden zelf: geen privéadres (src/netwerk.mjs).
       dispatcher: openbaarDispatcher,
       headers: { 'User-Agent': ua, ...(cookies?.get(host) ? { Cookie: cookies.get(host) } : {}), ...headers },
-      signal: AbortSignal.timeout(naar ? 4 * 3600_000 : tijd),
+      signal: signaal ? AbortSignal.any([AbortSignal.timeout(naar ? 4 * 3600_000 : tijd), signaal]) : AbortSignal.timeout(naar ? 4 * 3600_000 : tijd),
     });
     if (cookies) {
       const nieuw = antwoord.headers.getSetCookie?.() || [];
@@ -108,9 +109,12 @@ export const haalTekstOpenbaar = async (url, opties) => (await haalOpenbaar(url,
 export const haalJsonOpenbaar = async (url, opties) => JSON.parse(await haalTekstOpenbaar(url, opties));
 
 // Een programma draaien met een tijdslimiet; geeft stdout, gooit bij een fout.
-export function draai(programma, args, { tijd = 240_000 } = {}) {
+export function draai(programma, args, { tijd = 240_000, signaal } = {}) {
   return new Promise((klaar, mislukt) => {
+    if (signaal?.aborted) return mislukt(new Error(`${programma} afgebroken`));
     const proces = spawn(programma, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const breekAf = () => proces.kill('SIGKILL');
+    signaal?.addEventListener('abort', breekAf, { once: true });
     let uit = '';
     let fout = '';
     proces.stdout.on('data', (d) => { uit += d; });
@@ -118,36 +122,39 @@ export function draai(programma, args, { tijd = 240_000 } = {}) {
     const wekker = setTimeout(() => proces.kill('SIGKILL'), tijd);
     proces.on('error', (e) => {
       clearTimeout(wekker);
+      signaal?.removeEventListener('abort', breekAf);
       mislukt(new Error(e.code === 'ENOENT' ? `${programma} is niet geïnstalleerd` : e.message));
     });
-    proces.on('close', (code, signaal) => {
+    proces.on('close', (code, procesSignaal) => {
       clearTimeout(wekker);
+      signaal?.removeEventListener('abort', breekAf);
       if (code === 0) return klaar(uit);
+      if (signaal?.aborted) return mislukt(new Error(`${programma} afgebroken`));
       // Geen ondertekende media-adressen of paden in de foutmelding.
       const melding = fout.slice(-1500).replace(/https?:\/\/\S+/g, '[URL]').trim();
-      return mislukt(new Error(signaal === 'SIGKILL' ? `${programma} duurde te lang` : melding || `${programma} mislukt (code ${code})`));
+      return mislukt(new Error(procesSignaal === 'SIGKILL' ? `${programma} duurde te lang` : melding || `${programma} mislukt (code ${code})`));
     });
   });
 }
 
-export function ytdlp(args, { map, tijd = 240_000 } = {}) {
+export function ytdlp(args, { map, tijd = 240_000, signaal } = {}) {
   const basis = ['--ignore-config', '--no-warnings', '--js-runtimes', 'node', '--socket-timeout', '30', '--retries', '3'];
   // Lukt YouTube niet zonder inlog ("bevestig dat je geen bot bent"), dan kan een
   // beheerder een cookiesbestand neerzetten; dat gebruiken we dan.
   const koekjes = map && path.join(map, 'youtube-cookies.txt');
   if (koekjes && existsSync(koekjes)) basis.push('--cookies', koekjes);
-  return draai(process.env.YTDLP || 'yt-dlp', [...basis, ...args], { tijd });
+  return draai(process.env.YTDLP || 'yt-dlp', [...basis, ...args], { tijd, signaal });
 }
 
 // Eén compacte mono-mp3, uit een bestand of rechtstreeks van een stream.
 // Bij een stream (HLS van een raadsvergadering) staat de invoer vast op
 // HTTPS zonder doorverwijzingen: ffmpeg mag nergens anders heen dan de bron.
 // `lijst`: de invoer is een lijst lokale bestanden die na elkaar komen.
-export async function zetOm(bron, doel, { netwerk = false, lijst = false } = {}) {
+export async function zetOm(bron, doel, { netwerk = false, lijst = false, signaal } = {}) {
   const bereik = netwerk ? ['-protocol_whitelist', 'https,tls,tcp,crypto,hls', '-max_redirects', '0', '-user_agent', UA,
     '-reconnect', '1', '-reconnect_on_network_error', '1', '-reconnect_delay_max', '60']
     : lijst ? ['-f', 'concat', '-protocol_whitelist', 'file'] : [];
-  await draai(process.env.FFMPEG || 'ffmpeg', ['-nostdin', '-y', '-v', 'error', ...bereik, '-i', bron, '-vn', '-ac', '1', '-ar', '24000', '-b:a', '64k', doel], { tijd: 2 * 3600_000 });
+  await draai(process.env.FFMPEG || 'ffmpeg', ['-nostdin', '-y', '-v', 'error', ...bereik, '-i', bron, '-vn', '-ac', '1', '-ar', '24000', '-b:a', '64k', doel], { tijd: 2 * 3600_000, signaal });
 }
 
 // Een opname in losse bestanden (een mp3 per agendapunt): na elkaar ophalen,
@@ -186,14 +193,15 @@ export async function haalDelen(delen, mapAf, doel, { beurt } = {}) {
 // De audio van één aflevering, als mp3 in data/audio/<id>/. `bron`: de
 // aflevering met vorm youtube, rss of vergadering; `vergadering(af)` zoekt bij
 // een vergadering het actuele media-adres op (src/audio/vergaderingen.mjs).
-export async function downloadAudio(af, { map, vergadering, metadata }) {
+// `signaal`: de download afbreken (src/audio/verwerking.mjs, voorrang voor iets nieuws).
+export async function downloadAudio(af, { map, vergadering, metadata, signaal }) {
   const mapAf = path.join(map, 'audio', af.id);
   await mkdir(mapAf, { recursive: true });
   const doel = path.join(mapAf, 'audio.mp3');
   let pad;
   if (af.vorm === 'youtube') {
     const uit = await ytdlp(['--no-playlist', '-f', 'bestaudio/best', '--max-filesize', String(MAX_BYTES), '--write-info-json',
-      '-o', path.join(mapAf, 'bron.%(ext)s'), '--print', 'after_move:filepath', af.url], { map, tijd: 2 * 3600_000 });
+      '-o', path.join(mapAf, 'bron.%(ext)s'), '--print', 'after_move:filepath', af.url], { map, tijd: 2 * 3600_000, signaal });
     const regels = uit.split('\n').map((r) => r.trim()).filter(Boolean);
     if (!regels.length) throw new Error('YouTube leverde geen audiobestand op.');
     pad = regels.at(-1);
@@ -219,18 +227,18 @@ export async function downloadAudio(af, { map, vergadering, metadata }) {
     }
     if (!pad && !adres) throw new Error('Deze aflevering heeft geen mediabestand.');
     if (!pad && stream) {
-      await zetOm(await openbaar(adres), doel, { netwerk: true });
+      await zetOm(await openbaar(adres), doel, { netwerk: true, signaal });
       pad = doel;
     } else if (!pad) {
       const deel = path.join(mapAf, 'bron.deel');
-      await haalOpenbaar(adres, { naar: deel, maxBytes: MAX_BYTES });
+      await haalOpenbaar(adres, { naar: deel, maxBytes: MAX_BYTES, signaal });
       pad = path.join(mapAf, 'bron.media');
       await rename(deel, pad);
     }
   }
   if (!existsSync(pad) || (await stat(pad)).size === 0) throw new Error('Het gedownloade audiobestand is leeg.');
   if (pad !== doel) {
-    await zetOm(pad, doel);
+    await zetOm(pad, doel, { signaal });
     await rm(pad, { force: true });
   }
   return doel;
