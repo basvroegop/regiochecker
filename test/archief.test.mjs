@@ -89,6 +89,11 @@ test('archief: het hele iBabs-overzicht, documenten, zoeken en lezen; niet in de
     assert.match(archief.zoek('Thialfplein')[0].fragment, /\u0001Thialfplein\u0002/);
     assert.equal(archief.zoek('brief').length, 7);
     assert.equal(archief.zoek('kapot AND (').length, 0, 'foute syntax: losse woorden');
+    // Filters in de database: regio, soort en datum van het stuk.
+    assert.equal(archief.zoek('brief', { regios: ['smallingerland'] }).length, 7);
+    assert.equal(archief.zoek('brief', { regios: ['opsterland'] }).length, 0);
+    assert.equal(archief.zoek('brief', { soorten: ['woo'] }).length, 0);
+    assert.deepEqual(archief.zoek('brief', { van: '2023-01-01', tot: '2024-12-31' }).map((r) => r.datum), ['2024-03-07', '2023-03-06']);
 
     // In Zoeken van de webUI, op de eigen datum, en het stuk uit de feed niet dubbel.
     const ctx = { opslag, kdb: null, fdb };

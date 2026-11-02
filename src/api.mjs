@@ -103,7 +103,12 @@ export async function api(req, res, url, ctx) {
     if (!fdb) throw new Fout(503, 'Bewaren is niet beschikbaar (database ontbreekt)');
     return stuur(bewaardeFeed(k(), gebruiker, filters));
   }
-  if (route === 'GET /api/zoek') return stuur(zoekFeed(k(), gebruiker, String(z.get('q') || '').slice(0, 300)));
+  if (route === 'GET /api/zoek') {
+    // regios=a,b: alleen die regio's (onbekende ids vallen weg).
+    const bekend = new Set(alleRegios(opslag).map((r) => r.id));
+    const regios = String(z.get('regios') || '').split(',').filter((id) => bekend.has(id));
+    return stuur(zoekFeed(k(), gebruiker, String(z.get('q') || '').slice(0, 300), { regios }));
+  }
   if (route === 'GET /api/stuk') {
     const d = detail(k(), gebruiker, String(z.get('id') || ''));
     if (!d) throw new Fout(404, 'Dit stuk bestaat niet (meer)');

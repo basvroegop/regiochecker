@@ -323,6 +323,27 @@ test('zoeken in transcripten via de zoekindex: bijgehouden bij nieuw, gewijzigd 
   assert.deepEqual(adb.zoekIds(ftsVoorZoekvraag('"Sneker Pop"')), []);
 });
 
+test('zoeken met filters: regio\'s, soorten en datums, ook voor kamerstukken en audio', metSqlite, async () => {
+  const { zoekFeed } = await import('../src/feed.mjs');
+  const { ctx, sanne } = await opzet();
+  const ids = (opties, vraag = 'huisartsenpost') => zoekFeed(ctx, sanne, vraag, opties).items.map((i) => i.id).sort();
+  // Zonder filter: overal (Opsterland, het kamerstuk, de raadsvergadering van Smallingerland).
+  assert.deepEqual(ids(), [`a:${E1}`, 'i:opsterland-nieuws:b', 'k:doc1']);
+  // Alleen Smallingerland: het kamerstuk telt mee (Drachten is een sleutelwoord), Opsterland niet.
+  const r = zoekFeed(ctx, sanne, 'huisartsenpost', { regios: ['smallingerland'] }).items;
+  assert.deepEqual(r.map((i) => i.id).sort(), [`a:${E1}`, 'k:doc1']);
+  assert.equal(r.find((i) => i.id === 'k:doc1').regioNaam, 'Smallingerland');
+  assert.deepEqual(ids({ regios: ['opsterland'] }), ['i:opsterland-nieuws:b']);
+  // Heerenveen heeft de Kamer uitgezet, en Thialf staat niet in deze stukken.
+  assert.deepEqual(ids({ regios: ['heerenveen'] }), []);
+  // "drachten" met een kleine letter (doc3) telt niet voor Smallingerland.
+  assert.deepEqual(ids({ regios: ['smallingerland'] }, 'kledingstuk'), []);
+  // Soorten en datums.
+  assert.deepEqual(ids({ groepen: ['kamerstuk'] }), ['k:doc1']);
+  assert.deepEqual(ids({ groepen: ['raadsvergadering', 'nieuws'] }), [`a:${E1}`, 'i:opsterland-nieuws:b']);
+  assert.deepEqual(ids({ tot: '2020-01-01' }), [], 'alles is van nu');
+});
+
 test('het hele document doorzoeken: zoeken, sleutelwoorden en meldingen, ook na vijf weken', metSqlite, async () => {
   const { zoekFeed, routeerItem, meldingTreffers, maakKader } = await import('../src/feed.mjs');
   const { ctx, opslag, fdb, sanne } = await opzet();

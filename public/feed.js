@@ -16,7 +16,11 @@ const groepNaam = (g) => (g === 'alles' ? 'Alles' : app.ik.groepen?.[g] || g);
 
 // Filters blijven staan als je even naar een andere pagina gaat. `open`: het
 // filtervak onder de knop Filters is opengeklapt.
-const filters = { groep: 'alles', regio: '', ongelezen: false, open: false };
+const filters = { groep: 'alles', regio: '', ongelezen: false, open: false, zoekRegios: [] };
+// Welke regio's Zoeken doorzoekt (leeg: alle); bewaard in de browser.
+try {
+  filters.zoekRegios = JSON.parse(localStorage.getItem('zoekRegios') || '[]').filter((id) => typeof id === 'string');
+} catch { /* dan alle */ }
 
 const staat = {
   modus: 'feed',
@@ -40,14 +44,20 @@ async function laad() {
     return (await vraag('GET', `/api/audio/archief?${q}`)).items;
   }
   if (staat.modus === 'bewaard') return (await vraag('GET', '/api/feed/bewaard')).items;
-  if (staat.modus === 'zoeken') return staat.zoekvraag ? (await vraag('GET', `/api/zoek?q=${encodeURIComponent(staat.zoekvraag)}`)).items : [];
+  if (staat.modus === 'zoeken') {
+    // De regio's gaan mee naar de server, zodat hij ook diep in de archieven filtert.
+    const regios = filters.zoekRegios.filter((id) => app.ik.regios.some((r) => r.id === id));
+    return staat.zoekvraag ? (await vraag('GET', `/api/zoek?q=${encodeURIComponent(staat.zoekvraag)}${regios.length ? `&regios=${encodeURIComponent(regios.join(','))}` : ''}`)).items : [];
+  }
   return (await vraag('GET', '/api/feed')).items;
 }
 
 function voorFilters() {
   // Het archief heeft eigen filters (bron, status, zoeken), op de server.
   if (staat.modus === 'archief') return staat.items;
-  return staat.items.filter((i) => (!filters.regio || i.regios.includes(filters.regio))
+  // Bij Zoeken filtert de server op regio (filters.zoekRegios), niet de feedkeuze.
+  const regio = staat.modus === 'zoeken' ? '' : filters.regio;
+  return staat.items.filter((i) => (!regio || i.regios.includes(regio))
     && (!filters.ongelezen || !i.gelezen || i.id === staat.gekozen));
 }
 
@@ -81,8 +91,10 @@ function tekenFilters() {
   }
   const zoeken = staat.modus === 'zoeken';
   const gevolgd = app.ik.gebruiker.regios;
+  const zoekRegios = filters.zoekRegios.filter((id) => app.ik.regios.some((r) => r.id === id));
   const actief = [
     !zoeken && filters.regio && regioNaam(filters.regio),
+    zoeken && zoekRegios.length && (zoekRegios.length === 1 ? regioNaam(zoekRegios[0]) : `${zoekRegios.length} regio's`),
     filters.groep !== 'alles' && groepNaam(filters.groep),
     filters.ongelezen && 'ongelezen',
   ].filter(Boolean);
@@ -95,7 +107,12 @@ function tekenFilters() {
       <span class="filteruitleg">${zoeken ? `<strong>${staat.items.length}</strong> resultaten voor ${esc(aanhalen(staat.zoekvraag))}` : esc(actief.join(' · '))}</span>
     </div>
     ${filters.open ? `<div class="filtervak" id="filtervak">
-      ${zoeken ? '' : `<div class="filtergroep"><span class="filterlabel">Regio's</span><div class="filterchips">${regios}<button class="chip-plus" id="regio-plus" title="Regio's volgen" aria-haspopup="true">+ volgen</button></div></div>`}
+      ${zoeken ? `<div class="filtergroep"><span class="filterlabel">Regio's</span><div class="filterchips">
+        ${zoekRegios.length ? zoekRegios.map((id) => `<button class="chip" data-zoekregio="${esc(id)}" title="${esc(regioNaam(id))} weghalen">${esc(regioNaam(id))} ×</button>`).join('') : '<span class="klein zacht">Alle regio\'s</span>'}
+        <button class="chip-plus" id="zoekregio-kies" title="Kies in welke regio's je zoekt" aria-haspopup="true">+ kiezen</button>
+        ${gevolgd.length && zoekRegios.join() !== gevolgd.join() ? '<button class="linkknop" id="zoekregio-mijn">Mijn regio\'s</button>' : ''}
+        ${zoekRegios.length ? '<button class="linkknop" id="zoekregio-alle">Alle regio\'s</button>' : ''}
+      </div></div>` : `<div class="filtergroep"><span class="filterlabel">Regio's</span><div class="filterchips">${regios}<button class="chip-plus" id="regio-plus" title="Regio's volgen" aria-haspopup="true">+ volgen</button></div></div>`}
       <div class="filtergroep"><span class="filterlabel">Soort</span><div class="filterchips" role="radiogroup">
         ${groepen().map((g) => `<button class="soortkeuze" role="radio" data-groep="${g}" aria-checked="${filters.groep === g}">${esc(groepNaam(g))} <span class="n">${tellingen[g] || 0}</span></button>`).join('')}
       </div></div>
@@ -104,6 +121,58 @@ function tekenFilters() {
         ${actief.length ? '<button class="linkknop" id="wis-filters">Wis filters</button>' : ''}
       </div>
     </div>` : ''}`;
+}
+
+// Zoeken opnieuw, na een andere keuze van regio's.
+async function zoekOpnieuw(regios) {
+  filters.zoekRegios = regios;
+  try { localStorage.setItem('zoekRegios', JSON.stringify(regios)); } catch { /* privémodus */ }
+  $('#lijst').innerHTML = '<p class="leeg">Zoeken…</p>';
+  try {
+    staat.items = await laad();
+  } catch (fout) {
+    toast(fout.message, 'fout');
+  }
+  tekenFilters();
+  tekenLijst();
+}
+
+function zoekRegioPopover(knop) {
+  $('.popover')?.remove();
+  const p = document.createElement('div');
+  p.className = 'popover popover-breed';
+  const gekozen = new Set(filters.zoekRegios);
+  p.innerHTML = `<h4>Zoeken in</h4>
+    <div class="popover-lijst">${app.ik.regios.map((r) => `<label><input type="checkbox" value="${esc(r.id)}" ${gekozen.has(r.id) ? 'checked' : ''}><span class="vakje"></span>${esc(r.naam)}</label>`).join('')}</div>
+    <div class="popover-voet">Niets aangevinkt: alle regio's. Een kamerstuk telt bij een regio als er een sleutelwoord van die regio in staat.</div>
+    <div class="popover-knoppen"><button class="linkknop" data-alles-uit>Alles uit</button><button class="knop inkt klein" data-zoek>Zoeken</button></div>`;
+  document.body.append(p);
+  const rect = knop.getBoundingClientRect();
+  p.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - p.offsetWidth - 8))}px`;
+  p.style.top = `${rect.bottom + window.scrollY + 8}px`;
+  // Pas zoeken als de keuze klaar is (knop, klik ernaast of Escape), niet bij elk vinkje.
+  let gewijzigd = false;
+  p.addEventListener('change', () => { gewijzigd = true; });
+  const sluit = (zoeken) => {
+    const regios = $$('input:checked', p).map((i) => i.value);
+    p.remove();
+    document.removeEventListener('mousedown', weg);
+    document.removeEventListener('keydown', toets);
+    if (zoeken && gewijzigd) zoekOpnieuw(regios);
+  };
+  const weg = (e) => { if (!p.contains(e.target) && !knop.contains(e.target)) sluit(true); };
+  const toets = (e) => { if (e.key === 'Escape') sluit(true); };
+  p.addEventListener('click', (e) => {
+    if (e.target.closest('[data-zoek]')) sluit(true);
+    if (e.target.closest('[data-alles-uit]')) {
+      for (const i of $$('input:checked', p)) i.checked = false;
+      gewijzigd = true;
+    }
+  });
+  setTimeout(() => {
+    document.addEventListener('mousedown', weg);
+    document.addEventListener('keydown', toets);
+  });
 }
 
 function regioPopover(knop) {
@@ -1145,12 +1214,20 @@ export async function toonFeed(hoofd, { modus, params }) {
       return;
     }
     if (e.target.closest('#wis-filters')) {
+      const zoekregios = staat.modus === 'zoeken' && filters.zoekRegios.length;
       Object.assign(filters, { groep: 'alles', regio: '', ongelezen: false });
+      if (zoekregios) return zoekOpnieuw([]);
       tekenFilters();
       tekenLijst();
       return;
     }
     if (e.target.closest('#regio-plus')) regioPopover(e.target.closest('#regio-plus'));
+    // Zoeken: in welke regio's.
+    const weg = e.target.closest('[data-zoekregio]');
+    if (weg) return zoekOpnieuw(filters.zoekRegios.filter((id) => id !== weg.dataset.zoekregio));
+    if (e.target.closest('#zoekregio-kies')) zoekRegioPopover(e.target.closest('#zoekregio-kies'));
+    if (e.target.closest('#zoekregio-mijn')) zoekOpnieuw([...app.ik.gebruiker.regios]);
+    if (e.target.closest('#zoekregio-alle')) zoekOpnieuw([]);
   });
   $('#filterbalk').addEventListener('change', (e) => {
     if (e.target.id === 'alleen-ongelezen') {

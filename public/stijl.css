@@ -111,6 +111,12 @@ input:focus-visible + .vakje { outline: 2px solid var(--color-accent); outline-o
 .popover label:hover { background: var(--color-surface); }
 .popover input { position: absolute; opacity: 0; width: 0; height: 0; }
 .popover .popover-voet { padding: 8px 16px 0; font-size: 12px; color: var(--color-neutral-700); }
+/* Veertig regio's passen niet onder elkaar: lijst scrollt binnen het vak. */
+.popover { max-height: 70vh; overflow-y: auto; }
+.popover-breed { width: min(480px, calc(100vw - 16px)); display: flex; flex-direction: column; overflow: hidden; }
+.popover-breed .popover-lijst { overflow-y: auto; columns: 2; column-gap: 0; min-height: 0; }
+.popover-breed .popover-lijst label { break-inside: avoid; }
+.popover .popover-knoppen { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px 0; }
 
 /* ---------- feed: lijst + leespaneel ---------- */
 /* De feed neemt de rest van het scherm; de lijstkolom heeft de filters bovenaan. */

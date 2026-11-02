@@ -71,6 +71,19 @@ vinden daarmee eerst de opnames waarin de woorden staan, en zoeken pas daarna
 per segment naar de tijd. Een zeldzaam woord kostte zo 1,1 seconde en nu 0,05;
 het Audio-archief vindt nu ook opnames die ouder zijn dan de nieuwste 5.000.
 
+Bij **Filters** kies je in welke regio's je zoekt. De keuze gaat mee naar de
+server, zodat het ook diep in de archieven filtert, en de browser onthoudt hem.
+- **Standaard**: alle regio's; "Mijn regio's" kiest de regio's die je volgt.
+- **Kiezen**: "+ kiezen" opent een lijst met vinkjes. Er wordt pas gezocht als
+  je op "Zoeken" klikt, naast het vak klikt of Esc drukt, niet bij elk vinkje.
+  Een gekozen regio haal je weg met het kruisje achter de naam.
+- **Landelijk stuk**: telt mee als het naar die regio gaat (via sleutelwoord of
+  plek).
+- **Kamerstuk**: telt mee als er een sleutelwoord van de regio in staat, met
+  hoofdletters, zoals in de feed. SQLite zoekt daarvoor eerst op de zoekvraag én
+  de sleutelwoorden van de gekozen regio's; de treffers worden daarna nog op
+  hoofdletters gecontroleerd.
+
 Zoeken gaat ook door de twee **archieven**: de Kamerstukken terug tot 2008, en
 de ingekomen stukken zo ver als iBabs en Notubiz ze nog aanbieden (zie
 Archieven). Zo'n stuk staat in de resultaten op zijn eigen datum en opent

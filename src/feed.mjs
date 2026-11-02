@@ -15,7 +15,7 @@
 import { createHash } from 'node:crypto';
 import { alleRegios, alleBronnen, TWEEDE_KAMER, geldtVoor, actieveTermen } from './register.mjs';
 import { ENKELVOUD, GROEPEN, groepVan } from './regios.mjs';
-import { vindTermen, vindInSegmenten, maakZoeker, ftsVoorZoekvraag } from './termen.mjs';
+import { vindTermen, vindInSegmenten, maakZoeker, ftsVoorZoekvraag, ftsVoorTermen } from './termen.mjs';
 import { stukUrl, downloadUrl, minDatum } from './kamer/db.mjs';
 import { stukTitel } from './kamer/weergave.mjs';
 import { lokaleDatum } from './datum.mjs';
@@ -491,36 +491,73 @@ export function bewaardeFeed(ctx, gebruiker, opties = {}) {
 }
 
 // De zoekbalk: alle regio's en bronnen, niet alleen de gevolgde.
-export function zoekFeed(ctx, gebruiker, vraag) {
+// Bij welke regio's hoort een kamerstuk uit de zoekresultaten? Zoals in de
+// feed: een sleutelwoord van de regio in het stuk (met hoofdletters).
+function kamerRegios(k, stuk) {
+  return onthoud(`kr|${stuk.archief ? 'a' : ''}${stuk.id}|${stuk.gewijzigd}|${k.termVersie}`, () => {
+    const tekst = `${stuk.titel || ''}\n${stuk.onderwerp || ''}\n${k.kdb.tekstVan(stuk)}`;
+    return routeer(k, TWEEDE_KAMER.id, (termen) => vindTermen(tekst, termen, { hoofdletters: true })).map((r) => r.regio);
+  });
+}
+
+// Zoeken door alles: de stukken van nu, de archieven, kamerstukken en
+// transcripten. Filters gaan zoveel mogelijk mee naar de database, zodat een
+// zoekvraag in één regio of één jaar ook diep in de archieven vindt:
+//   regios   ids; alleen stukken van die regio's (een landelijk stuk dat erheen
+//            gaat telt mee; een kamerstuk via de sleutelwoorden van de regio)
+//   groepen  soorten zoals de tabbladen (ingekomen, woo, kamerstuk, …)
+//   van, tot JJJJ-MM-DD, op de datum van het stuk
+export function zoekFeed(ctx, gebruiker, vraag, { regios = null, groepen = null, van = null, tot = null } = {}) {
   const k = ctx.regios ? ctx : maakKader(ctx);
   const zoeker = maakZoeker(vraag);
   if (!zoeker) return { items: [], tellingen: tel([]), totaal: 0 };
+  const regioFilter = regios?.length ? new Set(regios) : null;
+  const groepFilter = groepen?.length ? new Set(groepen) : null;
+  const wilGroep = (g) => !groepFilter || groepFilter.has(g);
+  const wilRegio = (lijst) => !regioFilter || lijst.some((r) => regioFilter.has(r));
+  const wilDatum = (d) => (!van || (d && d >= van)) && (!tot || (d && d <= tot));
+  const term = vraag.replace(/"/g, '').split(/\s+/)[0];
   const lijst = new Map();
   for (const item of Object.values(k.opslag.items)) {
     const bron = k.bronnen.get(item.bron);
-    if (!bron) continue;
+    if (!bron || !wilGroep(groepVan(item.soort)) || !wilDatum(item.datum || item.eersteGezien?.slice(0, 10))) continue;
     const t = zoeker(tekstVan(k, item));
     if (!t) continue;
-    const regios = isLandelijk(item, bron) ? routeerItem(k, item, bron).map((r) => r.regio) : [item.regio];
-    const regel = itemRegel(item, regios, { term: t.term, zoek: true });
+    const regs = isLandelijk(item, bron) ? routeerItem(k, item, bron).map((r) => r.regio) : [item.regio];
+    if (!wilRegio(regs)) continue;
+    const regel = itemRegel(item, regs, { term: t.term, zoek: true });
     // Ook wat bij de eerste ronde van een bron al bestond (de nulmeting): niet
     // nieuw, wel archief. Op de datum van het stuk, niet op die eerste ronde;
     // een stuk zonder datum (Meppel, Westerveld) onderaan, met een streepje.
     if (item.basislijn) Object.assign(regel, { tijd: item.datum ? `${item.datum}T12:00:00.000Z` : '', tijdBekend: false });
     voegToe(lijst, regel);
   }
-  // Het archief van de gemeenten: oudere ingekomen stukken, op hun eigen datum.
-  // Wat ook in opslag.items staat, staat er al.
-  for (const r of k.opslag.archief?.zoek(vraag) || []) {
-    if (k.opslag.items[r.sleutel]) continue;
-    const item = k.opslag.archief.alsItem(r);
-    if (!k.bronnen.get(item.bron)) continue;
-    voegToe(lijst, { ...itemRegel(item, [item.regio], { term: vraag.replace(/"/g, '').split(/\s+/)[0], zoek: true }), tijd: item.eersteGezien, tijdBekend: false });
+  // Het archief van de gemeenten: oudere ingekomen stukken en Woo, op hun
+  // eigen datum. Wat ook in opslag.items staat, staat er al.
+  const archiefSoorten = ['ingekomen', 'woo'].filter(wilGroep);
+  if (archiefSoorten.length) {
+    for (const r of k.opslag.archief?.zoek(vraag, { regios: regioFilter && [...regioFilter], soorten: groepFilter && archiefSoorten, van, tot }) || []) {
+      if (k.opslag.items[r.sleutel]) continue;
+      const item = k.opslag.archief.alsItem(r);
+      if (!k.bronnen.get(item.bron)) continue;
+      voegToe(lijst, { ...itemRegel(item, [item.regio], { term, zoek: true }), tijd: item.eersteGezien, tijdBekend: false });
+    }
   }
-  if (k.kdb) {
+  if (k.kdb && wilGroep('kamerstuk')) {
     try {
-      for (const s of k.kdb.zoek({ vraag, sorteer: 'datum', perPagina: 100 }).rijen) {
-        voegToe(lijst, kamerRegel(s, [], { term: vraag.replace(/"/g, '').split(/\s+/)[0], zoek: true }));
+      let rijen;
+      if (regioFilter) {
+        // Diep in het archief: de zoekvraag én een sleutelwoord van de regio's,
+        // daarna per stuk precies (hoofdletters).
+        const termen = [...new Set([...regioFilter].map((id) => k.regioMap.get(id)).filter((r) => r && geldtVoor(r, TWEEDE_KAMER.id)).flatMap(actieveTermen))];
+        rijen = termen.length ? k.kdb.zoek({ vraag: `(${ftsVoorZoekvraag(vraag)}) AND (${ftsVoorTermen(termen)})`, sorteer: 'datum', perPagina: 200, van, tot }).rijen : [];
+      } else {
+        rijen = k.kdb.zoek({ vraag, sorteer: 'datum', perPagina: 100, van, tot }).rijen;
+      }
+      for (const s of rijen) {
+        const regs = regioFilter ? kamerRegios(k, s).filter((r) => regioFilter.has(r)) : [];
+        if (regioFilter && !regs.length) continue;
+        voegToe(lijst, kamerRegel(s, regs, { term, zoek: true }));
       }
     } catch {
       // Een zoekvraag die SQLite niet snapt: dan alleen de andere bronnen.
@@ -532,11 +569,12 @@ export function zoekFeed(ctx, gebruiker, vraag) {
     for (const id of k.adb.zoekIds(ftsVoorZoekvraag(vraag), { metTranscript: true, max: 300 })) {
       const a = k.adb.aflevering(id);
       const bron = a && k.bronnen.get(a.bron);
-      if (!bron) continue;
-      const i = a.segmenten.findIndex((s) => zoeker(s.text));
+      if (!bron || !wilGroep(groepVan(a.soort)) || !wilDatum(String(a.gepubliceerd || '').slice(0, 10) || null)) continue;
+      const i = a.segmenten.findIndex((seg) => zoeker(seg.text));
       if (i < 0 && !zoeker(a.titel)) continue;
-      const regios = bron.bereik === 'landelijk' ? routeerAflevering(k, a).map((r) => r.regio) : [bron.regio];
-      voegToe(lijst, audioRegel(a, regios, { term: vraag, zoek: true, tijd: i >= 0 ? a.segmenten[i].start : undefined }));
+      const regs = bron.bereik === 'landelijk' ? routeerAflevering(k, a).map((r) => r.regio) : [bron.regio];
+      if (!wilRegio(regs)) continue;
+      voegToe(lijst, audioRegel(a, regs, { term: vraag, zoek: true, tijd: i >= 0 ? a.segmenten[i].start : undefined }));
     }
   }
   const statussen = k.fdb ? k.fdb.statussen(gebruiker.id) : new Map();

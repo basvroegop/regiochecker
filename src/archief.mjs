@@ -288,13 +288,21 @@ export class Archief {
 
   // Zoeken met FTS5-syntax (woorden, "zinnen", OR); klopt die niet, dan op de
   // losse woorden. Nieuwste eerst; het fragment alleen voor de getoonde regels.
-  zoek(vraag, { max = 200 } = {}) {
+  // Filters: regios en soorten (lijsten), van en tot (JJJJ-MM-DD, datum van het stuk).
+  zoek(vraag, { max = 200, regios = null, soorten = null, van = null, tot = null } = {}) {
+    const filters = [];
+    const waarden = [];
+    if (regios?.length) { filters.push(`s.regio IN (${regios.map(() => '?').join(', ')})`); waarden.push(...regios); }
+    if (soorten?.length) { filters.push(`s.soort IN (${soorten.map(() => '?').join(', ')})`); waarden.push(...soorten); }
+    if (van) { filters.push('s.datum >= ?'); waarden.push(van); }
+    if (tot) { filters.push('s.datum <= ?'); waarden.push(tot); }
+    const waar = ['stuk_fts MATCH ?', ...filters].join(' AND ');
     const probeer = (fts) => this.db.prepare(`WITH pagina AS (
         SELECT stuk_fts.rowid nr FROM stuk_fts JOIN stukken s ON s.nr = stuk_fts.rowid
-        WHERE stuk_fts MATCH ? ORDER BY s.datum DESC, s.nr DESC LIMIT ?)
+        WHERE ${waar} ORDER BY s.datum DESC, s.nr DESC LIMIT ?)
       SELECT s.*, snippet(stuk_fts, -1, '${MARK_BEGIN}', '${MARK_EIND}', '…', 24) fragment
       FROM pagina p JOIN stuk_fts ON stuk_fts.rowid = p.nr JOIN stukken s ON s.nr = p.nr
-      WHERE stuk_fts MATCH ? ORDER BY s.datum DESC, s.nr DESC`).all(fts, max, fts);
+      WHERE stuk_fts MATCH ? ORDER BY s.datum DESC, s.nr DESC`).all(fts, ...waarden, max, fts);
     if (!String(vraag || '').trim()) return [];
     try {
       return probeer(vraag);
