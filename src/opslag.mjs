@@ -55,7 +55,9 @@ export const STANDAARD_INSTELLINGEN = {
   // namenZoeken: personen, plaatsen en organisaties laten zoeken door het
   // taalmodel van de worker. Standaard uit: het kost veel GPU-tijd, en namen van
   // sprekers komen uit de gegevens van het vergaderplatform.
-  audio: { workerUrl: '', workerToken: '', viaTailnet: true, bewaarAudio: 'vergaderingen', bewaarDagen: 180, namenZoeken: false },
+  // archiefJaren: het archief (de nulmeting) transcriberen tot zoveel jaar
+  // terug; null: alles (src/audio/verwerking.mjs archiefGrens).
+  audio: { workerUrl: '', workerToken: '', viaTailnet: true, bewaarAudio: 'vergaderingen', bewaarDagen: 180, namenZoeken: false, archiefJaren: null },
 };
 
 const BESTANDEN = {

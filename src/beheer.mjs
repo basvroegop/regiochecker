@@ -553,6 +553,8 @@ async function audioOverzicht(k, verwerking) {
     bezig: adb.bezig().map(regel),
     wachtrij: volgendeIds.map((id) => perId.get(id)).filter(Boolean).map(regel),
     inWachtrij: volgende.length,
+    buitenGrens: verwerking ? verwerking.buitenArchiefGrens() : 0,
+    archiefJaren: k.opslag.instellingen.audio?.archiefJaren || null,
     mislukt: adb.lijst({ status: ['mislukt'], limiet: 50 }).map(regel),
     bronnen: (verwerking ? verwerking.bronVolgorde() : []).map((b) => bronVoorClient(k, b, {})),
   };

@@ -817,6 +817,19 @@ transcript blijft); anders zou een heel archief de schijf vullen.
 Sinds 30 oktober 2026 staat voor alle raadsvergaderingen het hele archief aan, op
 verzoek van de opdrachtgever.
 
+**Hoe ver terug** (Instellingen › Audio en video, "Archief transcriberen (jaren
+terug)", `audio.archiefJaren`; leeg is alles):
+- **Ouder dan de grens**: een archiefopname die nog niet begonnen is, blijft in
+  de wachtrij staan maar wordt niet getranscribeerd. Een ruimere grens pakt hem
+  later gewoon op.
+- **Al begonnen**: wat al een deel klaar had, maakt de wachtrij af.
+- **Niet geraakt**: nieuwe opnames en Kamerdebatten (geen GPU).
+- **Beheer › Audio** toont hoeveel opnames er buiten de grens wachten.
+- **Waarom**: het hele archief (16.000 vergaderingen, terug tot 2002) kostte
+  in november 2026 zo'n 2,5 maand GPU-tijd, vijf jaar zo'n maand.
+- **Stand**: sinds 2 november 2026 staat de grens op vijf jaar, op verzoek van de
+  opdrachtgever.
+
 **Lange opnames** gaan in delen van 45 minuten naar de worker (met een paar
 seconden overlap; het laatste deel neemt de rest mee, dus pas vanaf zo'n 56
 minuten). Een vergadering van ruim drie uur in één keer liet de worker crashen.

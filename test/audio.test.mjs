@@ -825,6 +825,33 @@ test('een eerste import van alleen nieuwe afleveringen, en later toch het hele a
     assert.deepEqual(volgorde.slice(0, 2), ['afl-nieuw', 'Nieuw bij de tweede bron'], 'eerst wat nieuw is, ook van een latere bron');
     assert.equal(volgorde.length, 6);
 
+    // Het archief alleen tot zoveel jaar terug (Instellingen › Audio en video):
+    // wat ouder is, blijft wachten maar begint niet. Een oude opname die niet
+    // uit het archief komt, valt er niet onder.
+    const tienJaar = Date.now() / 1000 - 10 * 365 * 86400;
+    adb.voegToe(bron, { extern: 'oud', vorm: 'rss', url: `${feed.url}#oud`, mediaUrl: `${feed.url}#oud`, titel: 'Uit het oude archief', gepubliceerdOp: tienJaar }, { nulmeting: true });
+    adb.voegToe(tweede, { extern: 'q:oud', vorm: 'rss', url: `${feed.url}#q-oud`, mediaUrl: `${feed.url}#q-oud`, titel: 'Oud, maar nieuw binnen', gepubliceerdOp: tienJaar });
+    const titels = () => verwerking.volgende(Date.now() / 1000 + 60).map((r) => adb.aflevering(r.id).titel);
+    assert.equal(titels().length, 8);
+    const { werkInstellingenBij } = await import('../src/instellingen.mjs');
+    werkInstellingenBij(opslag, { audio: { archiefJaren: 5 } });
+    assert.equal(opslag.instellingen.audio.archiefJaren, 5);
+    assert.ok(!titels().includes('Uit het oude archief'));
+    assert.ok(titels().includes('Oud, maar nieuw binnen'));
+    assert.equal(titels().length, 7);
+    assert.equal(verwerking.buitenArchiefGrens(), 1);
+    // Al begonnen (een deel klaar): die maakt de wachtrij af.
+    const oud = adb.lijst({ bron: 'p' }).find((a) => a.titel === 'Uit het oude archief');
+    adb.werkBij(oud.id, { transcriptDelen: [{ start: 0, text: 'Deel een.', segments: [{ start: 0, end: 1, text: ' Deel een.' }], language: 'nl' }] });
+    assert.ok(titels().includes('Uit het oude archief'));
+    assert.equal(verwerking.buitenArchiefGrens(), 0);
+    adb.werkBij(oud.id, { transcriptDelen: null });
+    // Leeg: weer het hele archief. Onzin wordt geweigerd.
+    werkInstellingenBij(opslag, { audio: { archiefJaren: '' } });
+    assert.equal(opslag.instellingen.audio.archiefJaren, null);
+    assert.equal(titels().length, 8);
+    assert.throws(() => werkInstellingenBij(opslag, { audio: { archiefJaren: 2.5 } }), /tussen 1 en 100/);
+
     // Audio van een archiefopname ouder dan de bewaartermijn gaat meteen weg.
     opslag.instellingen.audio = { ...opslag.instellingen.audio, bewaarAudio: 'alles', bewaarDagen: 180 };
     assert.equal(verwerking.bewaarAudio({ soort: 'podcast', nulmeting: true, gepubliceerd: new Date(Date.now() - 400 * 86400_000).toISOString() }), false);

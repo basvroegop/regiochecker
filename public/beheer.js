@@ -959,6 +959,8 @@ export async function toonInstellingen(hoofd) {
             ${[['vergaderingen', 'Alleen raadsvergaderingen'], ['alles', 'Alles'], ['niets', 'Niets (alleen het transcript)']].map(([w, t]) => `<option value="${w}" ${i.audio.bewaarAudio === w ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
           <label class="veld"><span>Hoe lang (dagen)</span><input class="invoer smal" type="number" name="bewaarDagen" min="1" max="3650" value="${esc(i.audio.bewaarDagen)}"></label></div>
           <p class="uitleg-klein">Een uur audio is zo'n 29 MB. YouTube speelt altijd af bij YouTube zelf; een podcast bij de bron.</p>
+          <label class="veld"><span>Archief transcriberen (jaren terug)</span><input class="invoer smal" type="number" name="archiefJaren" min="1" max="100" value="${esc(i.audio.archiefJaren || '')}" placeholder="alles"></label>
+          <p class="uitleg-klein">Oudere opnames uit het archief blijven in de wachtrij staan, maar worden niet getranscribeerd; een ruimere grens pakt ze later gewoon op. Leeg: het hele archief. Nieuwe vergaderingen en Kamerdebatten vallen er niet onder.</p>
           <label class="vinkregel"><input type="checkbox" name="namenZoeken" ${i.audio.namenZoeken ? 'checked' : ''}><span class="vakje"></span>Namen zoeken met AI (personen, plaatsen, organisaties)</label>
           <p class="uitleg-klein">Kost bij een lange vergadering een kwartier GPU-tijd op de worker. Namen van sprekers komen uit de gegevens van het vergaderplatform, ook als dit uit staat.</p>
           <div class="knoppenrij"><button class="knop inkt klein">Bewaren</button><button type="button" class="knop klein" id="worker-test">Verbinding testen</button>${i.audio.heeftToken && !i.audio.tokenUitOmgeving ? '<button type="button" class="knop zacht klein" id="wis-token">Token wissen</button>' : ''}<span class="statusregel" id="worker-status"></span></div>
@@ -1018,7 +1020,7 @@ export async function toonInstellingen(hoofd) {
       if (f.ollamaUrl) w.ollama = { url: f.ollamaUrl.value, model: f.ollamaModel.value, maxContext: Number(f.maxContext.value), modelOpnames: f.modelOpnames.value };
       bewaar(knop, w);
     }
-    if (f.id === 'form-audio') bewaar(knop, { audio: { workerUrl: f.workerUrl.value, workerToken: f.workerToken.value || undefined, viaTailnet: f.viaTailnet.checked, bewaarAudio: f.bewaarAudio.value, bewaarDagen: Number(f.bewaarDagen.value), namenZoeken: f.namenZoeken.checked } });
+    if (f.id === 'form-audio') bewaar(knop, { audio: { workerUrl: f.workerUrl.value, workerToken: f.workerToken.value || undefined, viaTailnet: f.viaTailnet.checked, bewaarAudio: f.bewaarAudio.value, bewaarDagen: Number(f.bewaarDagen.value), archiefJaren: f.archiefJaren.value === '' ? null : Number(f.archiefJaren.value), namenZoeken: f.namenZoeken.checked } });
   }, { signal: stop.signal });
 
   hoofd.addEventListener('click', async (e) => {
@@ -1166,7 +1168,7 @@ export async function toonAudio(hoofd) {
           ${d.bezig.length ? d.bezig.map((a) => afleveringRij(a)).join('') : '<p class="leeg" style="padding-left:0">Niets.</p>'}
         </section>
         <section class="sectie">
-          <div class="sectiekop"><span class="titel">Wachtrij</span><span class="uitleg">${d.inWachtrij} ${d.inWachtrij === 1 ? 'stap' : 'stappen'} te gaan. Eerst wat nieuw is, per bron het nieuwste eerst; het archief daarna, het nieuwste eerst over alle bronnen.</span></div>
+          <div class="sectiekop"><span class="titel">Wachtrij</span><span class="uitleg">${d.inWachtrij} ${d.inWachtrij === 1 ? 'stap' : 'stappen'} te gaan. Eerst wat nieuw is, per bron het nieuwste eerst; het archief daarna, het nieuwste eerst over alle bronnen.${d.buitenGrens ? ` Nog ${d.buitenGrens} oudere opnames uit het archief wachten buiten de grens van ${d.archiefJaren} jaar (Instellingen › Audio en video).` : ''}</span></div>
           ${d.wachtrij.length ? d.wachtrij.map((a) => afleveringRij(a)).join('') : '<p class="leeg" style="padding-left:0">Leeg.</p>'}
         </section>
         ${d.mislukt.length ? `<section class="sectie">

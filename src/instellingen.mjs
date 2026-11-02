@@ -100,6 +100,12 @@ export function werkInstellingenBij(opslag, invoer) {
       if (!(n >= 1 && n <= 3650)) throw new InvoerFout('Bewaartermijn moet tussen 1 en 3650 dagen liggen');
       i.audio.bewaarDagen = n;
     }
+    // Leeg (of 0): het hele archief.
+    if (a.archiefJaren !== undefined) {
+      const n = a.archiefJaren === null || a.archiefJaren === '' ? 0 : Number(a.archiefJaren);
+      if (!(Number.isInteger(n) && n >= 0 && n <= 100)) throw new InvoerFout('Archief transcriberen: een aantal jaren tussen 1 en 100, of leeg voor alles');
+      i.audio.archiefJaren = n || null;
+    }
   }
   opslag.bewaar('instellingen');
 }

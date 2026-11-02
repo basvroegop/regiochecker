@@ -299,13 +299,39 @@ export class Verwerking {
     return r.status !== 'klaar' && (!r.zonder_transcript || Boolean(r.met_delen));
   }
 
+  // Het archief (de nulmeting) alleen tot zoveel jaar terug transcriberen
+  // (Instellingen › Audio en video), anders is de GPU maanden bezig met
+  // vergaderingen van twintig jaar geleden. Op de klok van nu, niet op de `nu`
+  // van volgende(): Beheer kijkt daarmee een jaar vooruit naar herkansingen.
+  archiefGrens() {
+    const jaren = Number(this.opslag.instellingen.audio?.archiefJaren);
+    return jaren > 0 ? Date.now() / 1000 - jaren * 365.25 * 86400 : null;
+  }
+
+  // Wat ouder is, blijft in de wachtrij staan maar begint niet; een ruimere
+  // grens pakt het later gewoon op. Wat al begonnen was, maakt de wachtrij af.
+  // Een Kamerdebat van gehoord.de kost geen GPU en valt er niet onder.
+  static buitenGrens(r, grens) {
+    return grens !== null && Boolean(r.nulmeting) && r.vorm !== 'gehoord' && Boolean(r.zonder_transcript) && !r.met_delen && r.moment < grens;
+  }
+
+  // Hoeveel archiefopnames er nu buiten de grens wachten (voor Beheer › Audio).
+  buitenArchiefGrens() {
+    const grens = this.archiefGrens();
+    if (grens === null) return 0;
+    const bronnen = new Set(this.bronVolgorde().map((b) => b.id));
+    return this.adb.wachtrij().filter((r) => bronnen.has(r.bron) && r.status === 'wacht' && Verwerking.buitenGrens(r, grens)).length;
+  }
+
   kandidaten(nu = Date.now() / 1000) {
     const volgorde = new Map(this.bronVolgorde().map((b, i) => [b.id, i]));
     const samenvatten = samenvattingAanbieder(this.opslag).klaar;
     const namen = this.namenZoeken();
     const fase = (r) => Verwerking.fase(r, namen);
     const { lopend } = Verwerking;
+    const grens = this.archiefGrens();
     const rijen = this.adb.wachtrij(nu).filter((r) => volgorde.has(r.bron) && ['wacht', 'getranscribeerd', 'klaar'].includes(r.status)
+      && !Verwerking.buitenGrens(r, grens)
       // Een samenvatting alleen als er een taalmodel is; staat hij nog op
       // "getranscribeerd" (herstart, of het taalmodel ging uit), dan rondt de stap hem af.
       && (fase(r) < 2 || (samenvatten && r.zonder_samenvatting) || r.status !== 'klaar'));
