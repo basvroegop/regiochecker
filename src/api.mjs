@@ -37,7 +37,6 @@ import { verstuur, stelMailSamen } from './mail.mjs';
 import { volgendeWeekmail } from './planning.mjs';
 import { documentOpVraag } from './inhoud.mjs';
 import { accountsAan } from './accounts.mjs';
-import { wachtwoordAan } from './inloggen.mjs';
 import { stijl, mailHtml, rij } from './mailstijl.mjs';
 import { basisUrl, mcpAdres } from './oauth.mjs';
 
@@ -89,8 +88,6 @@ export async function api(req, res, url, ctx) {
       audio: Boolean(adb),
       // Maakt Uitnodigen ook het Authelia-account aan (src/accounts.mjs)?
       autheliaAccounts: beheerder && accountsAan(),
-      // Inloggen met het gedeelde wachtwoord (src/inloggen.mjs): dan kan je uitloggen.
-      wachtwoord: wachtwoordAan(),
     });
   }
   if (route === 'PUT /api/ik') {

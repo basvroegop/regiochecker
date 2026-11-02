@@ -1,9 +1,6 @@
 // De dienst: webUI + API, en de klok die de bronnen afgaat en de mails verstuurt.
 //
 //   REGIOCHECKER_DATA      map voor de data (standaard ./data)
-//   REGIOCHECKER_WACHTWOORD  één gedeeld wachtwoord (als hash; src/inloggen.mjs).
-//                          Is het ingesteld, dan logt iedereen daarmee in en is
-//                          iedereen de beheerder; Remote-User telt dan niet.
 //   REGIOCHECKER_AUTH_KOP  koptekst met de ingelogde gebruiker, die Traefik na
 //                          het inloggen via Authelia meestuurt (Remote-User; zie
 //                          docker-compose.yml). Is hij ingesteld, dan weigert de
@@ -34,8 +31,7 @@ import { stelMailSamen, mailGebruiker, mailronde, teMailen, allemaalMetWeekmail,
 import { verwerkMeldingen } from './meldingen.mjs';
 import { verwerkKanalen } from './kanalen.mjs';
 import { TelegramBot } from './telegram.mjs';
-import { herken, isBeheerder } from './gebruikers.mjs';
-import { wachtwoordAan, Sessies, Pogingen, sessieGeheim, leesKoekje, zetKoekje, inlogRoute } from './inloggen.mjs';
+import { herken } from './gebruikers.mjs';
 import { accountsAan, maakMappen, verwerkAccounts } from './accounts.mjs';
 import { openKamerDb } from './kamer/db.mjs';
 import { kamerRonde } from './kamer/ronde.mjs';
@@ -301,23 +297,8 @@ async function leesJson(req) {
   }
 }
 
-// Het gedeelde wachtwoord (src/inloggen.mjs): een sessiekoekje, en iedereen is
-// dezelfde gebruiker, de beheerder. Op een nieuwe installatie zonder beheerder
-// wordt dat "redactie" (herken: de eerste wordt beheerder).
-const sessies = new Sessies(sessieGeheim(opslag.map));
-const pogingen = new Pogingen();
-const gedeeldeGebruiker = () => opslag.gebruikers.find((g) => g.login && isBeheerder(g)) || herken(opslag, { login: 'redactie', naam: 'Redactie' });
-
-// Wie is dit? Met het wachtwoord: wie een geldige sessie heeft (die wordt bij
-// gebruik verlengd, via `res`). Achter Authelia uit de koppen; zonder
-// allebei (lokaal) de gebruiker "lokaal".
-function wie(req, res) {
-  if (wachtwoordAan()) {
-    const s = sessies.bekijk(leesKoekje(req));
-    if (!s.geldig) return undefined;
-    if (s.verlengen && res && !res.headersSent) res.setHeader('Set-Cookie', zetKoekje(sessies.maak()));
-    return gedeeldeGebruiker();
-  }
+// Wie is dit? Achter Authelia uit de koppen; zonder (lokaal) de gebruiker "lokaal".
+function wie(req) {
   if (!AUTH_KOP) return herken(opslag, { login: 'lokaal', naam: 'Lokaal' });
   const kop = (naam) => {
     const waarde = req.headers[naam];
@@ -364,23 +345,17 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/plain' });
       return res.end('ok');
     }
-    if (wachtwoordAan() && (url.pathname === '/inloggen' || url.pathname === '/uitloggen')) return await inlogRoute(req, res, url, { sessies, pogingen });
     // De MCP-server en OAuth: buiten Authelia om (zie docker-compose.yml), met
     // een eigen token. Alleen /oauth/authorize kijkt naar wie er is ingelogd.
     if (url.pathname === '/mcp') return await mcpRoute(req, res, url, ctx);
     if (isOAuthPad(url.pathname)) return await oauthRoute(req, res, url, { oauth, opslag, wie });
     if (url.pathname.startsWith('/api/')) {
-      const gebruiker = wie(req, res);
+      const gebruiker = wie(req);
       if (gebruiker === undefined) throw new Fout(401, 'Niet ingelogd');
       if (!gebruiker) throw new Fout(403, 'Je bent ingelogd, maar hebt nog geen toegang tot de Regiochecker. Vraag een beheerder om je uit te nodigen.');
       return await api(req, res, url, { ...ctx, gebruiker, stuur, leesJson, Fout, taken });
     }
     if (req.method !== 'GET') throw new Fout(405, 'Methode niet toegestaan');
-    // Zonder sessie alleen het inlogscherm, met zijn opmaak.
-    if (wachtwoordAan() && !['/modernist.css', '/stijl.css'].includes(url.pathname) && wie(req, res) === undefined) {
-      res.writeHead(302, { Location: '/inloggen', 'Cache-Control': 'no-store' });
-      return res.end();
-    }
     return await statisch(req, res, url.pathname);
   } catch (fout) {
     const status = fout.status || 500;
@@ -401,8 +376,7 @@ if (!opslag.status.planningVanaf) {
 
 server.listen(POORT, () => {
   console.log(`Regiochecker luistert op poort ${POORT}; data in ${opslag.map}`);
-  if (wachtwoordAan()) console.log('Inloggen met het gedeelde wachtwoord (REGIOCHECKER_WACHTWOORD).');
-  else if (!AUTH_KOP) console.warn('Let op: REGIOCHECKER_WACHTWOORD en REGIOCHECKER_AUTH_KOP staan niet ingesteld, de API is zonder inlog bereikbaar.');
+  if (!AUTH_KOP) console.warn('Let op: REGIOCHECKER_AUTH_KOP staat niet ingesteld, de API is zonder inlog bereikbaar.');
   setTimeout(tik, 5000);
   setInterval(tik, 60000);
   setTimeout(kamerTik, 30000);

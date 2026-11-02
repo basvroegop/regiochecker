@@ -83,12 +83,7 @@ function tekenKop(r) {
       <button class="zoekknop" id="zoekknop" ${hier === 'zoeken' ? 'hidden' : ''}>${icoon('search')}Zoeken</button>
       ${ik.beheerder ? '<a class="kop-link" href="#/beheer/regios">Beheer</a>' : ''}
       <a class="gebruikersnaam${hier === 'koppelingen' ? ' actief' : ''}" href="#/koppelingen" title="Koppelingen: een AI-assistent laten zoeken in de Regiochecker">${naam}</a>
-      ${ik.wachtwoord ? '<button class="kop-link linkknop" id="uitloggen">Uitloggen</button>' : ''}
     </div>`;
-  $('#uitloggen')?.addEventListener('click', async () => {
-    await fetch('/uitloggen', { method: 'POST', redirect: 'manual' }).catch(() => {});
-    location.href = '/inloggen';
-  });
   $('#zoekknop').addEventListener('click', () => {
     $('#zoekknop').hidden = true;
     $('#zoekformulier').hidden = false;

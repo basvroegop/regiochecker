@@ -20,7 +20,6 @@
 
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { html } from './html.mjs';
-import { wachtwoordAan } from './inloggen.mjs';
 
 export const SCOPE = 'zoeken';
 const TOEGANG_MS = 3600_000;
@@ -572,11 +571,6 @@ export async function oauthRoute(req, res, url, { oauth, opslag, wie }) {
 
 async function toestemming(req, res, url, { oauth, opslag, wie, basis }) {
   const gebruiker = wie(req);
-  // Met het gedeelde wachtwoord: eerst inloggen, daarna terug naar dit scherm.
-  if (gebruiker === undefined && req.method === 'GET' && wachtwoordAan()) {
-    res.writeHead(303, { Location: `/inloggen?terug=${encodeURIComponent(url.pathname + url.search)}`, 'Cache-Control': 'no-store' });
-    return res.end();
-  }
   if (!gebruiker) {
     return pagina(res, gebruiker === undefined ? 401 : 403, 'Geen toegang', foutHtml(gebruiker === undefined
       ? 'Je bent niet ingelogd.'

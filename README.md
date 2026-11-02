@@ -9,9 +9,8 @@ Daarnaast een **weekmail** per journalist met per gemeente een samenvatting van
 wat er speelt, en **directe meldingen** op zoektermen.
 
 Draait op https://checker.mh-n.nl (sinds 30 oktober 2026; daarvoor
-regiochecker.vroeg.app, dat nu doorverwijst). Inloggen met één gedeeld
-wachtwoord (sinds 2 november 2026; daarvoor Authelia, zie Gebruikers en
-inloggen). Het ontwerp volgt de overdracht uit Claude Design
+regiochecker.vroeg.app, dat nu doorverwijst). Inloggen via de Authelia op deze
+server (authelia.mh-n.nl). Het ontwerp volgt de overdracht uit Claude Design
 (Modernist-ontwerpsysteem, `public/modernist.css`), met per titel een eigen
 signaalkleur: LC paars (#482AA5), DVHN blauw (#006ED1).
 
@@ -133,8 +132,8 @@ MCP-server op `https://checker.mh-n.nl/mcp` (`src/mcpserver.mjs`).
     toevoegen, met dat adres.
   - **Claude Code**: `claude mcp add --transport http regiochecker
     https://checker.mh-n.nl/mcp`, daarna `/mcp` om in te loggen.
-  - **Wat er dan gebeurt**: de app opent de Regiochecker in de browser. Daar
-    log je in (het gedeelde wachtwoord) en geef je toestemming.
+  - **Wat er dan gebeurt**: de app vraagt in de browser om in te loggen
+    (Authelia), en de Regiochecker vraagt toestemming.
 - **Koppelingen**: klik rechtsboven op je naam. Daar staan het adres en de apps
   die namens jou mogen zoeken, en daar trek je een koppeling in.
 - **Tools**, alle alleen lezen:
@@ -992,38 +991,6 @@ zodat het DNS-record wordt aangemaakt.
 
 ### Gebruikers en inloggen
 
-**Inloggen: één gedeeld wachtwoord** (sinds 2 november 2026, op verzoek van de
-opdrachtgever: "haal Authelia ervoor weg, gewoon een simpel wachtwoord", en dan
-alleen het wachtwoord, zonder naam). Zie `src/inloggen.mjs`.
-- **Eén gebruiker**: wie het wachtwoord kent, is de beheerder (de beheerder in
-  `data/gebruikers.json`; op een nieuwe installatie "redactie"). Iedereen deelt
-  dus één feed, één lijst bewaarde stukken en één set meldingen, en kan bij
-  Beheer, ook bij de Telegram-inzendingen met de gegevens van tipgevers.
-- **Het wachtwoord** staat als scrypt-hash in `.env`
-  (`REGIOCHECKER_WACHTWOORD`), nooit in de repo.
-  - Maken: `node src/inloggen.mjs hash` (vraagt het wachtwoord).
-  - Wijzigen: de nieuwe regel in `.env`, dan `docker compose up -d`. Alle
-    sessies vervallen dan.
-- **De sessie**: een ondertekend koekje (HttpOnly, Secure, SameSite=Lax) van 30
-  dagen, dat bij gebruik weer 30 dagen krijgt. Uitloggen staat rechtsboven.
-  - Uitloggen haalt het koekje alleen uit die browser weg. Alles intrekken kan
-    met een nieuw wachtwoord, of door `data/sessiegeheim` weg te halen en de
-    dienst te herstarten.
-- **Raden**: per adres tien mislukte pogingen per kwartier; over alle adressen
-  samen 200 per uur. Daarna weigert het inlogscherm, ook het goede wachtwoord.
-- **Op de server zelf**, zonder wachtwoord: `docker exec regiochecker node
-  src/lokaal.mjs PUT /api/beheer/audio '{"gepauzeerd":true}'`.
-  - Dat maakt een sessie van een minuut, ondertekend met `data/sessiegeheim`.
-  - Wie in de container kan, kan dat dus; verder niemand.
-- **Beheer › Gebruikers** is nu de lijst van wie de weekmail en meldingen
-  krijgt. Uitnodigen maakt geen account meer aan.
-
-**Tot 2 november 2026: Authelia.** De code staat er nog: zonder
-`REGIOCHECKER_WACHTWOORD`, met `REGIOCHECKER_AUTH_KOP=remote-user` en
-`authelia@docker` in `docker-compose.yml`, werkt het weer zo. De accounts van de
-22 gebruikers (groep `checker`) en de toegangsregel staan nog in
-`/opt/authelia`, maar geven geen toegang meer tot de Regiochecker. Zo werkte het:
-
 Beheer › Gebruikers: per persoon rol (journalist of admin), **titel** (LC of DVHN:
 bepaalt de huisstijl), regio's en weekmail. **+ Uitnodigen** zet iemand erin met
 e-mailadres (en eventueel inlognaam); bij de eerste keer inloggen koppelt de
@@ -1169,8 +1136,8 @@ gedraaid (er stond geen token).
 
 - **Instellen** bij Beheer › Telegram: een bot maken via @BotFather en het token
   plakken (of `TELEGRAM_BOT_TOKEN` in `.env`). De Regiochecker haalt de
-  berichten zelf op (long polling); een webhook zou een openbare route langs het
-  inloggen vragen. Heeft de bot al een webhook (de checker,
+  berichten zelf op (long polling); de site zit achter Authelia, en een webhook
+  zou een openbare uitzondering vragen. Heeft de bot al een webhook (de checker,
   of een andere server), dan neemt de Regiochecker hem niet over maar meldt dat.
 - **Goedkeuren**: een nieuwe chat wacht. De inzender krijgt daar een bericht
   over, met (1-op-1) een knop om het telefoonnummer te delen. Een admin keurt
@@ -1190,7 +1157,7 @@ gedraaid (er stond geen token).
 
 Niet overgenomen: het insturen via een eigen API met een token (in de checker
 `POST /api/inbound/submit`, nooit gebruikt). Dat vraagt een openbare route langs
-het inloggen.
+Authelia.
 
 ### Van audioscraper naar de Regiochecker
 
@@ -1242,11 +1209,7 @@ De Tailscale-identiteit van de sidecar staat apart in `./tailscale`.
 
 ### Beveiliging
 
-- Inloggen gaat sinds 2 november 2026 met het gedeelde wachtwoord (zie
-  Gebruikers en inloggen). Traefik haalt de `Remote-*`-koppen weg (middleware
-  `regiochecker-anoniem`), en met `REGIOCHECKER_WACHTWOORD` kijkt de app er ook
-  niet meer naar: niemand kan zich daarmee als gebruiker voordoen.
-- Tot 2 november 2026 ging inloggen via de gedeelde Authelia in `/opt/authelia` (authelia.mh-n.nl,
+- Inloggen gaat via de gedeelde Authelia in `/opt/authelia` (authelia.mh-n.nl,
   sessiecookie voor `mh-n.nl`), met de Traefik-middleware `authelia@docker`. Op 30
   oktober 2026 (de verhuizing naar checker.mh-n.nl) is daar de toegangsregel voor
   `checker.mh-n.nl` gekomen, zijn de accounts uit de Verhalenplanner toegevoegd
@@ -1258,12 +1221,14 @@ De Tailscale-identiteit van de sidecar staat apart in `./tailscale`.
   accountscript hierboven). Terugdraaien: de bestanden uit
   `/opt/authelia/backups/accounts-smtp-*` (of eerder `checker-mhn-*`)
   terugzetten en daar `docker compose up -d --force-recreate`.
-  Vóór Authelia haalde Traefik de `Authorization`-kop weg (een browser met oude
-  basic-auth-gegevens kreeg anders een wachtwoord-pop-up). Die kop blijft nu
-  staan: `/mcp` heeft hem nodig.
-- De API en de pagina's weigeren verzoeken zonder geldige sessie. Alleen het
-  inlogscherm, de opmaak daarvan, `/gezond` en de paden van de MCP-server (met
-  hun eigen token) zijn zonder sessie te bereiken.
+- Vóór Authelia haalt Traefik de `Authorization`-kop weg (middleware
+  `regiochecker-zonder-basic`), anders kreeg een browser met oude basic-auth-
+  gegevens een wachtwoord-pop-up in plaats van het inlogscherm.
+- De API weigert verzoeken zonder de `Remote-User`-koptekst die Traefik na het
+  inloggen meestuurt (`REGIOCHECKER_AUTH_KOP`); de middleware overschrijft wat een
+  browser zelf meestuurt (ook `Remote-Email` en `Remote-Name`). Journalisten zien
+  alleen hun eigen meldingen, notities en bewaarde stukken; Beheer is alleen
+  voor admins.
 - Alles wat de Regiochecker zelf ophaalt (bronnen, de links in een feed, bijlagen,
   opnames) gaat alleen naar openbare internetadressen, nooit naar iets in het eigen
   netwerk (`src/netwerk.mjs`). Dat wordt gecontroleerd in de URL, bij elke
@@ -1280,14 +1245,14 @@ De Tailscale-identiteit van de sidecar staat apart in `./tailscale`.
   niet op het gedeelde `traefik`-netwerk.
 - Schrijfacties accepteren alleen `application/json`, wat formulieren van andere
   sites tegenhoudt.
-- De MCP-server en het inloggen daarvoor (`src/oauth.mjs`) hebben een eigen
-  token, want claude.ai kan niet door een inlogscherm.
-  - **Paden zonder sessie**: alleen `/mcp`, `/oauth/token`, `/oauth/register`,
-    `/oauth/revoke` en de metadata onder `/.well-known/`. De app kijkt daar niet
-    naar wie er is ingelogd.
-  - **Toestemmingsscherm**: `/oauth/authorize` vraagt eerst het wachtwoord en
-    gaat daarna terug naar het scherm. (Tot 2 november 2026 stond het achter
-    Authelia, en hadden deze paden een eigen Traefik-router buiten Authelia om.)
+- De MCP-server en het inloggen daarvoor (`src/oauth.mjs`) gaan buiten Authelia
+  om, want claude.ai kan niet door een inlogscherm. In `docker-compose.yml` is
+  daarvoor een tweede router (`regiochecker-mcp`).
+  - **Paden**: alleen `/mcp`, `/oauth/token`, `/oauth/register`,
+    `/oauth/revoke` en de metadata onder `/.well-known/`.
+  - **Remote-koppen**: de router haalt de `Remote-*`-koppen weg, en de app kijkt
+    op die paden niet naar wie er is ingelogd.
+  - **Toestemmingsscherm**: `/oauth/authorize` blijft achter Authelia.
   - **OAuth 2.1**:
     - PKCE (S256) is verplicht;
     - een app meldt zich zelf aan (RFC 7591), maar kan niets zonder

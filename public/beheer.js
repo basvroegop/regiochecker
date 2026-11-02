@@ -537,9 +537,7 @@ export async function toonGebruikers(hoofd) {
       </form>
       <div class="tabelkop gebruikersrij"><span>Naam</span><span>Rol</span><span>Titel</span><span>Regio's</span><span>Weekmail</span><span>Laatst actief</span><span></span></div>
       ${gebruikers.map(gebruikerRij).join('')}
-      <p class="uitleg-klein" style="margin-top:20px;max-width:760px">${app.ik.wachtwoord
-    ? 'Inloggen gaat met één gedeeld wachtwoord, zonder naam: wie het heeft, is de beheerder. Deze lijst is voor de weekmail en de meldingen; een uitnodiging maakt geen account meer aan.'
-    : app.ik.autheliaAccounts
+      <p class="uitleg-klein" style="margin-top:20px;max-width:760px">${app.ik.autheliaAccounts
     ? 'Inloggen gaat via Authelia. Uitnodigen maakt daar ook het account aan (de inlognaam komt uit het e-mailadres als je er geen invult) en mailt de uitnodiging; het wachtwoord kiest de nieuwe gebruiker zelf. Heeft iemand met dat e-mailadres al een Authelia-account, dan wordt dat gebruikt. Verwijderen zet een account dat via de Regiochecker is gemaakt ook in Authelia uit.'
     : 'Inloggen gaat via Authelia. Iemand die je uitnodigt, kan inloggen zodra er bij Authelia een account is met hetzelfde e-mailadres (of dezelfde inlognaam) en Authelia diegene toegang geeft tot deze site; dat regel je in Authelia zelf.'} De titel bepaalt de huisstijl (LC of DVHN). Gebruikers zonder inlog krijgen alleen de weekmail.</p>`;
   };

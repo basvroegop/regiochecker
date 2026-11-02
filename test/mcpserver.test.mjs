@@ -200,17 +200,6 @@ test('MCP: wat niet mag bij aanmelden, toestemming en inwisselen', metSqlite, as
     const autoriseer = (velden, login = 'sanne') => t.haal(`/oauth/authorize?${new URLSearchParams({ response_type: 'code', client_id: reg.client_id, redirect_uri: TERUG, code_challenge: uitdaging, code_challenge_method: 'S256', ...velden })}`, login ? { headers: { 'x-test-gebruiker': login } } : {});
     // Niet ingelogd, of geen gebruiker van de Regiochecker.
     assert.equal((await autoriseer({}, null)).status, 401);
-    // Met het gedeelde wachtwoord (src/inloggen.mjs): eerst inloggen, daarna terug naar dit scherm.
-    process.env.REGIOCHECKER_WACHTWOORD = 'scrypt:a:b';
-    try {
-      const naarInloggen = await autoriseer({ state: 's0' }, null);
-      assert.equal(naarInloggen.status, 303);
-      const doel = new URL(naarInloggen.headers.get('location'), BASIS);
-      assert.equal(doel.pathname, '/inloggen');
-      assert.match(doel.searchParams.get('terug'), /^\/oauth\/authorize\?.*client_id=rca_.*state=s0/);
-    } finally {
-      delete process.env.REGIOCHECKER_WACHTWOORD;
-    }
     assert.equal((await autoriseer({}, 'onbekend')).status, 403);
     // Een ander terugkeeradres of een onbekende app: een foutpagina, níet terug naar dat adres.
     const vreemd = await autoriseer({ redirect_uri: 'https://aanvaller.example/x' });
