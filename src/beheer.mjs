@@ -130,26 +130,64 @@ function bronVoorClient(k, bron, nieuw) {
   };
 }
 
-// Hoeveel stukken uit landelijke bronnen bevatten deze term (afgelopen `dagen`)?
-function telTerm(k, term, regio, dagen = 30) {
+// Lang rekenwerk in stapjes: om de 20 ms even ruimte voor andere verzoeken,
+// zodat de server niet stilstaat zolang één pagina rekent.
+function maakPauze(ms = 20) {
+  let sinds = Date.now();
+  return async () => {
+    if (Date.now() - sinds < ms) return;
+    await new Promise((klaar) => setImmediate(klaar));
+    sinds = Date.now();
+  };
+}
+
+// De tellingen per sleutelwoord, tien minuten onthouden: opnieuw openen kost
+// dan niets, en een sleutelwoord toevoegen telt alleen dat nieuwe woord.
+const TEL_MS = 10 * 60_000;
+const telGeheugen = new Map();
+
+// Hoeveel stukken uit landelijke bronnen bevatten elk van deze termen (afgelopen
+// `dagen`)? Elke tekst één keer doorzoeken, op alle termen tegelijk, in
+// stapjes. Per term apart ging elke tekst voor elk sleutelwoord opnieuw door de
+// normalisatie: met honderden lange transcripten kostte een regio met 36
+// sleutelwoorden een halve minuut, en zolang stond de hele server stil.
+async function telTermen(k, termen, regio, dagen = 30) {
+  const nu = Date.now();
+  // Nieuwe stukken of Kamerstukken: opnieuw tellen.
+  const versie = `${Object.keys(k.opslag.items).length}|${k.kamerVersie}`;
+  const sleutel = (t) => `${regio?.id || '-'}|${JSON.stringify(regio?.landelijkUit || [])}|${dagen}|${versie}|${t}`;
+  for (const [s, w] of telGeheugen) if (nu - w.tijd > TEL_MS) telGeheugen.delete(s);
+  const tellingen = new Map(termen.map((t) => [t, telGeheugen.get(sleutel(t))?.n]));
+  const nieuw = [...tellingen.keys()].filter((t) => tellingen.get(t) === undefined);
+  if (!nieuw.length) return tellingen;
+  for (const t of nieuw) tellingen.set(t, 0);
+  const pauze = maakPauze();
   const grens = geleden(dagen);
-  let n = 0;
-  if (k.kdb && (!regio || geldtVoor(regio, TWEEDE_KAMER.id))) n += k.kdb.telStukken([term], grens.slice(0, 10), { hoofdletters: true });
+  const tel = (gevonden) => {
+    for (const t of new Set(gevonden.map((g) => g.term))) tellingen.set(t, tellingen.get(t) + 1);
+  };
+  if (k.kdb && (!regio || geldtVoor(regio, TWEEDE_KAMER.id))) {
+    for (const [t, n] of await k.kdb.telPerTerm(nieuw, grens.slice(0, 10), { hoofdletters: true, pauze })) tellingen.set(t, tellingen.get(t) + n);
+  }
   for (const item of Object.values(k.opslag.items)) {
     if (item.regio || item.basislijn || item.eersteGezien <= grens) continue;
     const bron = k.bronnen.get(item.bron);
     if (bron?.bereik !== 'landelijk' || (regio && !geldtVoor(regio, bron.id))) continue;
-    if (vindTermen(tekstVan(k, item), [term]).length) n++;
+    tel(vindTermen(tekstVan(k, item), nieuw));
+    await pauze();
   }
   if (k.adb) {
     for (const a of k.adb.metTranscriptSinds(grens)) {
       const bron = k.bronnen.get(a.bron);
       if (bron?.bereik !== 'landelijk' || (regio && !geldtVoor(regio, bron.id))) continue;
-      if (vindInSegmenten(a.segmenten, [term]).length) n++;
+      tel(vindInSegmenten(a.segmenten, nieuw, { maxPerTerm: 1 }));
+      await pauze();
     }
   }
-  return n;
+  for (const t of nieuw) telGeheugen.set(sleutel(t), { n: tellingen.get(t), tijd: nu });
+  return tellingen;
 }
+const telTerm = async (k, term, regio) => (await telTermen(k, [term], regio)).get(term);
 
 const weekmailTekst = (g) => {
   const w = g.weekmail;
@@ -179,9 +217,10 @@ function regioOverzicht(k) {
   });
 }
 
-function regioDetail(k, id) {
+async function regioDetail(k, id) {
   const r = k.regioMap.get(id);
   if (!r) return null;
+  const pauze = maakPauze();
   const nieuw = nieuwPerBron(k);
   const grens7 = geleden(7);
   const lokaal = bronnenVanRegio(k.opslag, id);
@@ -190,12 +229,14 @@ function regioDetail(k, id) {
     if (item.regio || item.basislijn || item.eersteGezien <= grens7) continue;
     const bron = k.bronnen.get(item.bron);
     if (bron?.bereik === 'landelijk' && routeerItem(k, item, bron).some((x) => x.regio === id)) stukken++;
+    await pauze();
   }
   if (k.adb) {
     for (const a of k.adb.metTranscriptSinds(grens7)) {
       const bron = k.bronnen.get(a.bron);
       if (!bron) continue;
       if (bron.bereik === 'regio' ? bron.regio === id : routeerAflevering(k, a).some((x) => x.regio === id)) stukken++;
+      await pauze();
     }
   }
   if (k.kdb && geldtVoor(r, TWEEDE_KAMER.id) && actieveTermen(r).length) {
@@ -210,10 +251,13 @@ function regioDetail(k, id) {
     stukken7: stukken,
     lokaleBronnen: lokaal.map((b) => bronVoorClient(k, b, nieuw)),
     landelijk: landelijkeBronnen(k.opslag).map((b) => ({ id: b.id, naam: b.naam.replace(/ · Kamerstukken$/, ''), aan: geldtVoor(r, b.id) })),
-    sleutelwoorden: (r.sleutelwoorden || []).map((s) => {
-      const n = telTerm(k, s.term, r);
-      return { term: s.term, actief: s.actief !== false, aantal: n, ruis: n >= RUIS };
-    }),
+    sleutelwoorden: await (async () => {
+      const tellingen = await telTermen(k, (r.sleutelwoorden || []).map((s) => s.term), r);
+      return (r.sleutelwoorden || []).map((s) => {
+        const n = tellingen.get(s.term);
+        return { term: s.term, actief: s.actief !== false, aantal: n, ruis: n >= RUIS };
+      });
+    })(),
     volgers: volgers.map((g) => ({ id: g.id, naam: g.naam || g.email, mail: weekmailTekst(g) })),
   };
 }
@@ -593,13 +637,13 @@ export async function beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, t
   if (deel[2] === 'regios' && deel[3]) {
     const id = deel[3];
     if (req.method === 'GET') {
-      const d = regioDetail(k, id);
+      const d = await regioDetail(k, id);
       if (!d) throw new Fout(404, 'Regio niet gevonden');
       return stuur(d);
     }
     if (req.method === 'PUT') {
       werkRegioBij(k, id, await leesJson(req));
-      return stuur(regioDetail(maakKader({ opslag, kdb, fdb, adb }), id));
+      return stuur(await regioDetail(maakKader({ opslag, kdb, fdb, adb }), id));
     }
     if (req.method === 'DELETE') {
       const r = k.regioMap.get(id);
@@ -617,7 +661,7 @@ export async function beheerApi(req, url, { opslag, kdb, fdb, adb, verwerking, t
     const term = schoneTermen([url.searchParams.get('term') || ''])[0];
     if (!term) return stuur({ term: null, aantal: 0 });
     const regio = k.regioMap.get(url.searchParams.get('regio')) || null;
-    return stuur({ term, aantal: telTerm(k, term, regio) });
+    return stuur({ term, aantal: await telTerm(k, term, regio) });
   }
 
   if (route === 'GET /bronnen') {

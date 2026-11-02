@@ -104,6 +104,25 @@ test('beheer: regio\'s, sleutelwoorden, landelijke bronnen aan en uit, gebruiker
   r = await roep(ctx, jan, 'GET', '/api/beheer/termproef?term=Thialf&regio=heerenveen');
   assert.deepEqual(r.data, { term: 'Thialf', aantal: 0 });
 
+  // Hoe vaak elk sleutelwoord voorkwam (30 dagen, landelijke bronnen): alle
+  // termen in één keer per tekst, met dezelfde uitkomst als per term apart.
+  const { opslag } = ctx;
+  const landelijk = (sleutel, tekst, uur, extra = {}) => {
+    opslag.items[sleutel] = { sleutel, bron: 'raad-van-state', regio: null, soort: 'uitspraak', titel: sleutel, tekst, url: `https://x/${sleutel}`, eersteGezien: new Date(Date.now() - uur * 3600_000).toISOString(), basislijn: false, ...extra };
+  };
+  landelijk('rvs:a', 'Thialf en Thialf, en de Sportstad Heerenveen.', 2);
+  landelijk('rvs:b', 'Alleen thialf.', 3);
+  landelijk('rvs:c', 'Niets.', 4);
+  landelijk('rvs:oud', 'Thialf, maar lang geleden.', 40 * 24);
+  landelijk('rvs:nul', 'Thialf in de nulmeting.', 5, { basislijn: true });
+  r = await roep(ctx, jan, 'PUT', '/api/beheer/regios/heerenveen', { sleutelwoorden: ['Thialf', '"Sportstad Heerenveen"', 'Kuipers'] });
+  assert.deepEqual(r.data.sleutelwoorden.map((s) => [s.term, s.aantal]), [['Thialf', 2], ['Sportstad Heerenveen', 1], ['Kuipers', 0]]);
+  for (const s of r.data.sleutelwoorden) {
+    assert.equal((await roep(ctx, jan, 'GET', `/api/beheer/termproef?term=${encodeURIComponent(s.term)}&regio=heerenveen`)).data.aantal, s.aantal, s.term);
+  }
+  for (const sleutel of ['rvs:a', 'rvs:b', 'rvs:c', 'rvs:oud', 'rvs:nul']) delete opslag.items[sleutel];
+  await roep(ctx, jan, 'PUT', '/api/beheer/regios/heerenveen', { sleutelwoorden: [{ term: 'Thialf', actief: false }] });
+
   // Een eigen regio: maken, hernoemen, verwijderen (en volgers verliezen hem).
   r = await roep(ctx, jan, 'POST', '/api/beheer/regios', { naam: 'Leeuwarden' });
   assert.deepEqual(r.data, { id: 'leeuwarden', stukken: 0 });

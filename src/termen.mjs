@@ -64,15 +64,19 @@ function vooraf(term) {
 const woordenVan = (norm) => new Set(norm.split(/[^\p{L}\p{N}]+/u));
 
 // De laatste genormaliseerde tekst met zijn woorden: bij het routeren zoekt
-// elke regio (veertig keer) in dezelfde tekst.
+// elke regio (veertig keer) in dezelfde tekst. De woordenset pas bij de tweede
+// keer: wie een tekst één keer met een paar termen doorzoekt (de tellingen bij
+// Beheer › Regio's, honderden lange Kamerstukken), is sneller klaar met zoeken
+// in de tekst zelf dan met het bouwen van die set.
 let laatsteTekst = null;
 let laatste = null;
-function genormaliseerd(tekst) {
+function genormaliseerd(tekst, veel = false) {
   if (tekst !== laatsteTekst) {
     laatsteTekst = tekst;
-    const norm = normaliseer(tekst);
-    laatste = { norm, woorden: woordenVan(norm) };
+    laatste = { norm: normaliseer(tekst), woorden: null, keer: 0 };
   }
+  laatste.keer++;
+  if (!laatste.woorden && (laatste.keer > 1 || veel)) laatste.woorden = woordenVan(laatste.norm);
   return laatste;
 }
 
@@ -150,11 +154,12 @@ function inLink(tekst, positie) {
 // Welke van de termen komen in de tekst voor? Per term het eerste fragment en
 // het aantal keer dat hij voorkomt.
 export function vindTermen(tekst, termen, { hoofdletters = false } = {}) {
-  const { norm, woorden } = genormaliseerd(tekst);
+  const { norm, woorden } = genormaliseerd(tekst, termen.length > 100);
   const treffers = [];
   for (const term of termen) {
     const v = vooraf(term);
-    if (!v || !woorden.has(v.deel)) continue;
+    // Zonder woordenset: staat het woord ergens, dan kijkt het patroon of het een heel woord is.
+    if (!v || !(woorden ? woorden.has(v.deel) : norm.includes(v.deel))) continue;
     let gevonden = [...norm.matchAll(v.re)];
     // normaliseer() houdt de lengte gelijk: dezelfde plek in het origineel.
     if (hoofdletters) gevonden = gevonden.filter((m) => hoofdlettersKloppen(term, tekst.slice(m.index, m.index + m[0].length)) || inLink(tekst, m.index));
@@ -178,22 +183,25 @@ export const zoekvraagTekst = (termen) => termen.map(toonTerm).join(' OR ');
 // Termen in een transcript: per term het aantal en de eerste treffers, met de
 // tijd van het segment en de zin eromheen. `segmenten`: [{ start, text }].
 // De genormaliseerde segmenten per transcript, één keer: bij het routeren
-// zoekt elke regio in hetzelfde transcript.
+// zoekt elke regio in hetzelfde transcript. De woordenset pas bij de tweede
+// keer, net als bij genormaliseerd(): één keer zoeken gaat sneller zonder.
 const SEGMENTNORM = new WeakMap();
 function segmentNormen(segmenten) {
   let n = SEGMENTNORM.get(segmenten);
   if (!n) {
     const normen = segmenten.map((s) => normaliseer(String(s.text || '')));
-    n = { normen, woorden: woordenVan(normen.join('\n')) };
+    n = { normen, samen: normen.join('\n'), woorden: null, keer: 0 };
     SEGMENTNORM.set(segmenten, n);
   }
+  n.keer++;
+  if (!n.woorden && n.keer > 1) n.woorden = woordenVan(n.samen);
   return n;
 }
 
 export function vindInSegmenten(segmenten, termen, { maxPerTerm = 20 } = {}) {
-  const { normen, woorden } = segmentNormen(segmenten);
+  const { normen, samen, woorden } = segmentNormen(segmenten);
   // Alleen de termen die ergens in het transcript staan.
-  const patronen = termen.map((t) => [t, vooraf(t)]).filter(([, v]) => v && woorden.has(v.deel));
+  const patronen = termen.map((t) => [t, vooraf(t)]).filter(([, v]) => v && (woorden ? woorden.has(v.deel) : samen.includes(v.deel)));
   if (!patronen.length) return [];
   const perTerm = new Map();
   segmenten.forEach((s, index) => {

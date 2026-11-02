@@ -105,6 +105,13 @@ test('sleutelwoorden van regio\'s zijn in kamerstukken hoofdlettergevoelig, term
   assert.deepEqual(ids(kdb.treffers(['Assen'], { ...opties, hoofdletters: true })), ['2', '3']);
   assert.equal(kdb.treffers(['Assen'], { ...opties, hoofdletters: true }).find((t) => t.stuk.id === '2').gevonden[0].aantal, 1);
   assert.equal(kdb.telStukken(['Assen'], '2026-10-01', { hoofdletters: true }), 2);
+  // Voor veel termen tegelijk: hetzelfde als per term apart.
+  const termen = ['Assen', 'vrachtwagens', '"De gemeente"', 'Emmen'];
+  assert.deepEqual([...await kdb.telPerTerm(termen, '2026-10-01', { hoofdletters: true })], termen.map((t) => [t, kdb.telStukken([t], '2026-10-01', { hoofdletters: true })]));
+  let pauzes = 0;
+  assert.deepEqual([...await kdb.telPerTerm(['Assen', 'vrachtwagens'], '2026-10-01', { hoofdletters: true, pauze: async () => { pauzes++; } })], [['Assen', 2], ['vrachtwagens', 2]]);
+  assert.ok(pauzes >= 2, 'na elk stuk ruimte voor andere verzoeken');
+  assert.deepEqual([...await kdb.telPerTerm(['Assen'], '2026-10-01')], [['Assen', 3]]);
   // Een zoekterm van een melding blijft ongevoelig voor hoofdletters…
   assert.deepEqual(ids(kdb.feedTreffers(['Assen'], opties)), ['1', '2', '3']);
   assert.equal(kdb.telStukken(['Assen'], '2026-10-01'), 3);

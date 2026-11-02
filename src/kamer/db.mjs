@@ -331,6 +331,34 @@ class KamerDb {
 
   // Hoeveel stukken (op datum van het stuk, sinds `vanaf`) bevatten een van de
   // termen? Met `hoofdletters` zoals bij feedTreffers.
+  // Per term het aantal stukken sinds `vanaf`, zoals telStukken, voor veel
+  // termen tegelijk (Beheer › Regio's): één zoekvraag, en elk stuk één keer
+  // lezen en doorzoeken. Per term apart kwam een stuk van honderden pagina's
+  // voor elk sleutelwoord dat erin staat (ook in kleine letters) opnieuw langs.
+  // `pauze`: wordt na elk stuk afgewacht (ruimte voor andere verzoeken).
+  async telPerTerm(termen, vanaf, { hoofdletters = false, pauze = null } = {}) {
+    const tellingen = new Map(termen.map((t) => [t, 0]));
+    if (!hoofdletters) {
+      for (const t of tellingen.keys()) tellingen.set(t, this.telStukken([t], vanaf));
+      return tellingen;
+    }
+    // Van de schone term (zonder aanhalingstekens) terug naar wat er gevraagd was.
+    const naar = new Map();
+    for (const t of tellingen.keys()) {
+      const schoon = schoneTermen([t])[0];
+      if (schoon) naar.set(schoon, [...(naar.get(schoon) || []), t]);
+    }
+    const fts = ftsVoorTermen([...naar.keys()]);
+    if (!fts) return tellingen;
+    for (const r of this.db.prepare('SELECT s.nr, s.titel, s.onderwerp FROM stuk_fts JOIN stukken s ON s.nr = stuk_fts.rowid WHERE stuk_fts MATCH ? AND s.datum >= ?').all(fts, vanaf)) {
+      for (const g of vindTermen(`${r.titel || ''}\n${r.onderwerp || ''}\n${this.tekst(r.nr)}`, [...naar.keys()], { hoofdletters: true })) {
+        for (const t of naar.get(g.term) || []) tellingen.set(t, tellingen.get(t) + 1);
+      }
+      if (pauze) await pauze();
+    }
+    return tellingen;
+  }
+
   telStukken(termen, vanaf, { hoofdletters = false } = {}) {
     const schoon = schoneTermen(termen);
     const fts = ftsVoorTermen(schoon);
