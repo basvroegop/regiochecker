@@ -31,15 +31,10 @@ services:
         required: false
     environment:
       - REGIOCHECKER_SITE_URL=https://checker.mh-n.nl
-      # Na inloggen via Authelia zet Traefik de gebruiker in Remote-User (de
-      # forward-auth-middleware overschrijft wat de browser zelf meestuurt). Zonder
-      # die koptekst weigert de API alles; zo kan een verzoek dat de inlog omzeilt
-      # (van binnen het Docker-netwerk) niets.
-      - REGIOCHECKER_AUTH_KOP=remote-user
-      # Uitnodigen in Beheer › Gebruikers maakt ook het Authelia-account aan. De
-      # app zet daarvoor een aanvraag in data/authelia/; het hulpscript op de
-      # server (scripts/authelia-accounts.py, via systemd) schrijft in Authelia.
-      - REGIOCHECKER_AUTHELIA_ACCOUNTS=1
+      # Inloggen gaat met één gedeeld wachtwoord: REGIOCHECKER_WACHTWOORD in .env,
+      # als hash (node src/inloggen.mjs hash). Sinds 2 november 2026; daarvoor
+      # Authelia, met Remote-User (REGIOCHECKER_AUTH_KOP) en accounts per persoon
+      # (REGIOCHECKER_AUTHELIA_ACCOUNTS).
       # Ollama en de Whisper-worker draaien op een machine in het tailnet. Deze
       # server zit daar zelf niet in; de Tailscale-container hieronder wel. Alleen
       # dat verkeer gaat door zijn proxy.
@@ -64,28 +59,12 @@ services:
       - "traefik.http.middlewares.regiochecker-naar-mhn.redirectregex.regex=^https://[^/]+/(.*)"
       - "traefik.http.middlewares.regiochecker-naar-mhn.redirectregex.replacement=https://checker.mh-n.nl/$${1}"
       - "traefik.http.middlewares.regiochecker-naar-mhn.redirectregex.permanent=true"
-      # Inloggen via de gedeelde Authelia op authelia.mh-n.nl (/opt/authelia). De
-      # middleware staat in de labels van die container; de cookie voor mh-n.nl en
-      # de toegangsregel voor deze site in /opt/authelia/config/configuration.yml.
-      #
-      # Eerst de Authorization-kop weghalen. Authelia accepteert op forward-auth
-      # ook basic auth; een browser die nog de oude basic-auth-gegevens van deze
-      # site onthoudt, stuurt die mee en krijgt dan een wachtwoord-pop-up in plaats
-      # van het inlogscherm. De app zelf gebruikt die kop niet.
-      - "traefik.http.middlewares.regiochecker-zonder-basic.headers.customrequestheaders.Authorization="
-      - "traefik.http.routers.regiochecker.middlewares=regiochecker-zonder-basic,authelia@docker"
-      # De MCP-server voor AI-apps (src/mcpserver.mjs) en het inloggen daarvoor
-      # (src/oauth.mjs) gaan buiten Authelia om: claude.ai kan niet door het
-      # inlogscherm en heeft een eigen token. Alleen deze paden; het
-      # toestemmingsscherm (/oauth/authorize) blijft achter Authelia. De
-      # Remote-*-koppen gaan eruit, zodat niemand zich hier als gebruiker voordoet.
-      - "traefik.http.routers.regiochecker-mcp.rule=Host(`checker.mh-n.nl`) && (Path(`/mcp`) || Path(`/oauth/token`) || Path(`/oauth/register`) || Path(`/oauth/revoke`) || PathPrefix(`/.well-known/oauth-`) || Path(`/.well-known/openid-configuration`))"
-      - "traefik.http.routers.regiochecker-mcp.priority=1000"
-      - "traefik.http.routers.regiochecker-mcp.entrypoints=websecure"
-      - "traefik.http.routers.regiochecker-mcp.tls=true"
-      - "traefik.http.routers.regiochecker-mcp.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.regiochecker-mcp.service=regiochecker"
-      - "traefik.http.routers.regiochecker-mcp.middlewares=regiochecker-anoniem"
+      # Inloggen doet de Regiochecker zelf, met het gedeelde wachtwoord
+      # (src/inloggen.mjs); de MCP-server heeft eigen tokens (src/oauth.mjs).
+      # Traefik haalt de Remote-*-koppen weg: daar mag niemand zich nog mee als
+      # gebruiker voordoen, ook niet als iemand REGIOCHECKER_AUTH_KOP terugzet.
+      # De Authorization-kop blijft: /mcp heeft hem nodig.
+      - "traefik.http.routers.regiochecker.middlewares=regiochecker-anoniem"
       - "traefik.http.middlewares.regiochecker-anoniem.headers.customrequestheaders.Remote-User="
       - "traefik.http.middlewares.regiochecker-anoniem.headers.customrequestheaders.Remote-Email="
       - "traefik.http.middlewares.regiochecker-anoniem.headers.customrequestheaders.Remote-Name="

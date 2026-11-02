@@ -19,7 +19,7 @@ docker compose run --rm --no-deps -T -v /opt/regiochecker/src:/app/src:ro -v /op
 ```
 
 - **Build and deploy:** `docker compose build && docker compose up -d`, then wait until `docker inspect -f '{{.State.Health.Status}}' regiochecker` says `healthy`. `public/` and `src/` are baked into the image, so frontend changes also need a rebuild.
-- **Calling the live API:** the app listens on `127.0.0.1:3056` and trusts the `Remote-User` header that Traefik/Authelia sets, e.g. `curl -H 'Remote-User: <admin-login>' http://127.0.0.1:3056/api/beheer/status`.
+- **Calling the live API:** `docker exec regiochecker node src/lokaal.mjs GET /api/beheer/status` (or `PUT <pad> '<json>'`). It signs a one-minute session with `data/sessiegeheim`, so no password is needed on the server. The `Remote-User` header no longer works.
 - **Trial collection round:** `npm run verzamel` (`src/verzamel-eenmalig.mjs`) runs on a temporary copy of `data/`.
 - **Trying a reader on a live site:** put a script in a scratch dir that imports from `/app/src/…`, then `docker run --rm -v /opt/regiochecker/src:/app/src:ro -v <dir>:/proef --entrypoint node regiochecker:latest /proef/x.mjs`. All traffic goes through the SSRF guard in `src/netwerk.mjs`, as in production.
 - There is no linter configured.
@@ -27,7 +27,7 @@ docker compose run --rm --no-deps -T -v /opt/regiochecker/src:/app/src:ro -v /op
 ## Operational rules
 
 - **Deploying with audio running.** The Whisper worker's GPU is shared with other services, so never restart during a transcription part:
-  1. pause audio: `PUT /api/beheer/audio {"gepauzeerd":true}`;
+  1. pause audio: `docker exec regiochecker node src/lokaal.mjs PUT /api/beheer/audio '{"gepauzeerd":true}'`;
   2. wait until `GET /api/beheer/audio` shows nothing `transcriberen` or `analyseren`;
   3. deploy;
   4. unpause.
@@ -112,8 +112,15 @@ What counts as "new" is `eersteGezien`, the moment of first sight, never the doc
 - Readers parse HTML with regexes and the helpers in `src/html.mjs`; there is no parser library.
 
 **Auth and secrets.**
-- Users are in `data/gebruikers.json`; the Authelia login arrives as the `Remote-User` header. The first login becomes admin.
-- Inviting a user also creates their Authelia account (`src/accounts.mjs`, on with `REGIOCHECKER_AUTHELIA_ACCOUNTS=1`). The app never writes to Authelia itself: it drops a request in `data/authelia/aanvragen/`, and a systemd path unit on the host runs `scripts/authelia-accounts.py` (root, only creates or disables accounts in group `checker`). Treat everything in that directory as untrusted input in the script. Its tests need Python with PyYAML, which the image lacks, so they run on the host: `node --test test/authelia-accounts.test.mjs`.
+- Since 2026-11-02, login is one shared password with no username (`src/inloggen.mjs`; the user's choice):
+  - The password is `REGIOCHECKER_WACHTWOORD` in `.env`, as a scrypt hash with `:` separators, because compose would interpolate `$`. Make one with `node src/inloggen.mjs hash`.
+  - Everyone becomes the same user, the admin in `data/gebruikers.json`.
+  - Sessions are signed cookies (`data/sessiegeheim`).
+  - In this mode the app never reads `Remote-User`, and Traefik strips the `Remote-*` headers (middleware `regiochecker-anoniem`).
+  - `data/gebruikers.json` is now the list of weekmail and alert recipients.
+- Until then, login went through Authelia (`Remote-User`, `REGIOCHECKER_AUTH_KOP`), and inviting created the Authelia account (`src/accounts.mjs`, `REGIOCHECKER_AUTHELIA_ACCOUNTS=1`, `scripts/authelia-accounts.py` via a systemd path unit). That code is still there but switched off.
+  - The account script must treat everything in `data/authelia/` as untrusted input.
+  - Its tests need Python with PyYAML, which the image lacks, so they run on the host: `node --test test/authelia-accounts.test.mjs`.
 - Secrets never go back to the browser: SMTP, the Claude key, the worker token, Teams webhook URLs and the Telegram token. See `publiekeInstellingen`, `kanaalVoorClient` and `telegramVoorClient`.
 
 **Frontend.** A vanilla ESM single-page app in `public/`:
