@@ -74,6 +74,22 @@ services:
       # van het inlogscherm. De app zelf gebruikt die kop niet.
       - "traefik.http.middlewares.regiochecker-zonder-basic.headers.customrequestheaders.Authorization="
       - "traefik.http.routers.regiochecker.middlewares=regiochecker-zonder-basic,authelia@docker"
+      # De MCP-server voor AI-apps (src/mcpserver.mjs) en het inloggen daarvoor
+      # (src/oauth.mjs) gaan buiten Authelia om: claude.ai kan niet door het
+      # inlogscherm en heeft een eigen token. Alleen deze paden; het
+      # toestemmingsscherm (/oauth/authorize) blijft achter Authelia. De
+      # Remote-*-koppen gaan eruit, zodat niemand zich hier als gebruiker voordoet.
+      - "traefik.http.routers.regiochecker-mcp.rule=Host(`checker.mh-n.nl`) && (Path(`/mcp`) || Path(`/oauth/token`) || Path(`/oauth/register`) || Path(`/oauth/revoke`) || PathPrefix(`/.well-known/oauth-`) || Path(`/.well-known/openid-configuration`))"
+      - "traefik.http.routers.regiochecker-mcp.priority=1000"
+      - "traefik.http.routers.regiochecker-mcp.entrypoints=websecure"
+      - "traefik.http.routers.regiochecker-mcp.tls=true"
+      - "traefik.http.routers.regiochecker-mcp.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.regiochecker-mcp.service=regiochecker"
+      - "traefik.http.routers.regiochecker-mcp.middlewares=regiochecker-anoniem"
+      - "traefik.http.middlewares.regiochecker-anoniem.headers.customrequestheaders.Remote-User="
+      - "traefik.http.middlewares.regiochecker-anoniem.headers.customrequestheaders.Remote-Email="
+      - "traefik.http.middlewares.regiochecker-anoniem.headers.customrequestheaders.Remote-Name="
+      - "traefik.http.middlewares.regiochecker-anoniem.headers.customrequestheaders.Remote-Groups="
     networks:
       - traefik
       - intern

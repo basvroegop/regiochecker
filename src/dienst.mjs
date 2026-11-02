@@ -44,6 +44,8 @@ import { deelLocatieIn } from './audio/namen.mjs';
 import { api } from './api.mjs';
 import { warmOp } from './feed.mjs';
 import { koppelSpel } from './audio/spel.mjs';
+import { OAuth, isOAuthPad, oauthRoute } from './oauth.mjs';
+import { mcpRoute } from './mcpserver.mjs';
 
 const hier = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIEK = path.join(hier, '..', 'public');
@@ -95,6 +97,9 @@ try {
 } catch (fout) {
   console.error('Gelezen/bewaard en audio niet beschikbaar:', fout.message);
 }
+// AI-apps koppelen aan de MCP-server (src/oauth.mjs, src/mcpserver.mjs). Een
+// verwijderde gebruiker verliest meteen zijn koppelingen.
+const oauth = fdb ? new OAuth(fdb.db, { bestaat: (id) => opslag.gebruikers.some((g) => g.id === id) }) : null;
 
 // Na elke ronde: de meldingen per mail, en wat er naar de Teams-kanalen moet.
 async function meldingen() {
@@ -144,7 +149,7 @@ const telegram = new TelegramBot(opslag, {
     telegramWekker = setTimeout(meldingen, 10_000);
   },
 });
-const ctx = { opslag, kdb, fdb, adb, verwerking, telegram, kamerArchief };
+const ctx = { opslag, kdb, fdb, adb, verwerking, telegram, kamerArchief, oauth };
 
 // ---------- planning ----------
 
@@ -340,6 +345,10 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/plain' });
       return res.end('ok');
     }
+    // De MCP-server en OAuth: buiten Authelia om (zie docker-compose.yml), met
+    // een eigen token. Alleen /oauth/authorize kijkt naar wie er is ingelogd.
+    if (url.pathname === '/mcp') return await mcpRoute(req, res, url, ctx);
+    if (isOAuthPad(url.pathname)) return await oauthRoute(req, res, url, { oauth, opslag, wie });
     if (url.pathname.startsWith('/api/')) {
       const gebruiker = wie(req);
       if (gebruiker === undefined) throw new Fout(401, 'Niet ingelogd');
@@ -388,6 +397,8 @@ server.listen(POORT, () => {
     const t = Date.now();
     warmOp(ctx).then((n) => console.log(`Feed opgewarmd: ${n} landelijke stukken in ${Math.round((Date.now() - t) / 1000)} s`)).catch((fout) => console.error('Opwarmen:', fout.message));
   }, 8000);
+  // Verlopen tokens en ongebruikte apps van de MCP-koppeling opruimen.
+  setInterval(() => { try { oauth?.ruimOp(); } catch (fout) { console.error('OAuth opruimen:', fout.message); } }, 3600_000);
   // De locatie-index (11 MB) alvast inlezen, zodat Audio-archief › Namen meteen opent.
   setTimeout(() => deelLocatieIn('Drachten'), 20_000);
 });

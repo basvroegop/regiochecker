@@ -10,6 +10,8 @@
 //   GET  /api/stuk?id=               één stuk voor het leespaneel
 //   PUT  /api/stuk                   { id, gelezen?, bewaard?, notitie? }
 //   …    /api/meldingen[/id]         directe meldingen van deze gebruiker
+//   GET  /api/koppelingen            AI-apps met toegang via MCP (src/oauth.mjs)
+//   DELETE /api/koppelingen/{id}     zo'n koppeling intrekken
 //   …    /api/audio/…                audio en video (src/audio/api.mjs)
 //   GET  /api/ingezonden/{map}/{bestand}   foto of video van een inzending (src/telegram.mjs)
 //   …    /api/beheer/…               src/beheer.mjs
@@ -36,6 +38,7 @@ import { volgendeWeekmail } from './planning.mjs';
 import { documentOpVraag } from './inhoud.mjs';
 import { accountsAan } from './accounts.mjs';
 import { stijl, mailHtml, rij } from './mailstijl.mjs';
+import { basisUrl, mcpAdres } from './oauth.mjs';
 
 const EMAIL = /^[^\s@<>,;]+@[^\s@<>,;]+\.[a-z]{2,}$/i;
 const MEDIATYPE = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm' };
@@ -205,6 +208,15 @@ export async function api(req, res, url, ctx) {
       opslag.bewaar('meldingen');
       return stuur({ ok: true });
     }
+  }
+
+  // ---------- AI-koppelingen (MCP) ----------
+  if (route === 'GET /api/koppelingen') {
+    return stuur({ adres: mcpAdres(basisUrl(req)), beschikbaar: Boolean(ctx.oauth), koppelingen: ctx.oauth ? ctx.oauth.koppelingen(gebruiker.id) : [] });
+  }
+  if (req.method === 'DELETE' && deel[1] === 'koppelingen' && deel[2]) {
+    if (!ctx.oauth?.trekIn(gebruiker.id, deel[2])) throw new Fout(404, 'Koppeling niet gevonden');
+    return stuur({ ok: true });
   }
 
   // ---------- audio en video ----------

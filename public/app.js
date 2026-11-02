@@ -1,5 +1,6 @@
 // De webUI van de Regiochecker: één pagina met een kleine router op de hash.
-//   #/feed, #/bewaard, #/zoeken?q=…, #/meldingen      voor iedereen
+//   #/feed, #/bewaard, #/zoeken?q=…, #/meldingen,
+//   #/koppelingen (AI-assistent via MCP)               voor iedereen
 //   #/beheer/regios[/id], #/beheer/bronnen, #/beheer/gebruikers,
 //   #/beheer/teams, #/beheer/telegram, #/beheer/logboek,
 //   #/beheer/instellingen                                     alleen voor admins
@@ -8,6 +9,7 @@
 import { $, esc, vraag, icoon, toast, koppelVoorbeeld, uurMinuut } from './gedeeld.js';
 import { toonFeed } from './feed.js';
 import { toonMeldingen } from './meldingen.js';
+import { toonKoppelingen } from './koppelingen.js';
 import { toonRegios, toonBronnen, toonAudio, toonGebruikers, toonTeams, toonTelegram, toonLogboek, toonInstellingen } from './beheer.js';
 import { toonArchief } from './archief.js';
 
@@ -80,7 +82,7 @@ function tekenKop(r) {
       </form>
       <button class="zoekknop" id="zoekknop" ${hier === 'zoeken' ? 'hidden' : ''}>${icoon('search')}Zoeken</button>
       ${ik.beheerder ? '<a class="kop-link" href="#/beheer/regios">Beheer</a>' : ''}
-      <span class="gebruikersnaam">${naam}</span>
+      <a class="gebruikersnaam${hier === 'koppelingen' ? ' actief' : ''}" href="#/koppelingen" title="Koppelingen: een AI-assistent laten zoeken in de Regiochecker">${naam}</a>
     </div>`;
   $('#zoekknop').addEventListener('click', () => {
     $('#zoekknop').hidden = true;
@@ -143,6 +145,7 @@ async function toon() {
     else if (eerste === 'archief' && !tweede) await toonFeed(hoofd, { modus: 'archief', params: r.params });
     else if (eerste === 'archief') await toonArchief(hoofd, tweede, r.params);
     else if (eerste === 'meldingen') await toonMeldingen(hoofd);
+    else if (eerste === 'koppelingen') await toonKoppelingen(hoofd);
     else if (eerste === 'beheer' && tweede === 'regios') await toonRegios(hoofd, derde);
     else if (eerste === 'beheer' && tweede === 'bronnen') await toonBronnen(hoofd, r.params);
     else if (eerste === 'beheer' && tweede === 'audio') await toonAudio(hoofd);

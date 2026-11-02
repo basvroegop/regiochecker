@@ -123,6 +123,36 @@ niet: die gaan over wat nieuw binnenkomt.
   wel; zonder zoekterm zou dat hele regio's toevoegen, en welke regio's de feed
   toont, kies je met volgen.
 
+### AI-assistent (MCP)
+
+Een AI-assistent zoals Claude kan zoeken en lezen in de Regiochecker, via de
+MCP-server op `https://checker.mh-n.nl/mcp` (`src/mcpserver.mjs`).
+- **Koppelen**:
+  - **Claude** (web en app): Instellingen › Connectors › Aangepaste connector
+    toevoegen, met dat adres.
+  - **Claude Code**: `claude mcp add --transport http regiochecker
+    https://checker.mh-n.nl/mcp`, daarna `/mcp` om in te loggen.
+  - **Wat er dan gebeurt**: de app vraagt in de browser om in te loggen
+    (Authelia), en de Regiochecker vraagt toestemming.
+- **Koppelingen**: klik rechtsboven op je naam. Daar staan het adres en de apps
+  die namens jou mogen zoeken, en daar trek je een koppeling in.
+- **Tools**, alle alleen lezen:
+  - `zoeken`: door alles, zoals de zoekbalk, met filters op regio, soort en
+    datum, en per resultaat een link en een fragment;
+  - `kamerstukken_zoeken`: alleen Kamerstukken, op relevantie, met
+    FTS5-syntax en het totale aantal;
+  - `nieuwste`: wat er de afgelopen dagen binnenkwam voor regio's, zoals de feed
+    (de selectie van de Teams-kanalen, `kanaalRegels`);
+  - `stuk_lezen`: de hele tekst van een stuk of transcript (met tijden en
+    sprekers), in delen of alleen de passages rond een woord;
+  - `regios_en_soorten`: de regio's, soorten en archieven.
+- **Wat de app niet ziet**:
+  - je bewaarde stukken, notities en meldingen;
+  - **ingezonden tips** (Telegram): daarin staan de gegevens van de inzender,
+    en die horen niet bij een taalmodel.
+- **Wat er met de resultaten gebeurt**: ze gaan naar de app en het taalmodel
+  erachter.
+
 ## Hoe de mails eruitzien
 
 Sinds 30 oktober 2026 hebben de mails de huisstijl van de website (Modernist,
@@ -1187,6 +1217,31 @@ De Tailscale-identiteit van de sidecar staat apart in `./tailscale`.
   niet op het gedeelde `traefik`-netwerk.
 - Schrijfacties accepteren alleen `application/json`, wat formulieren van andere
   sites tegenhoudt.
+- De MCP-server en het inloggen daarvoor (`src/oauth.mjs`) gaan buiten Authelia
+  om, want claude.ai kan niet door een inlogscherm. In `docker-compose.yml` is
+  daarvoor een tweede router (`regiochecker-mcp`).
+  - **Paden**: alleen `/mcp`, `/oauth/token`, `/oauth/register`,
+    `/oauth/revoke` en de metadata onder `/.well-known/`.
+  - **Remote-koppen**: de router haalt de `Remote-*`-koppen weg, en de app kijkt
+    op die paden niet naar wie er is ingelogd.
+  - **Toestemmingsscherm**: `/oauth/authorize` blijft achter Authelia.
+  - **OAuth 2.1**:
+    - PKCE (S256) is verplicht;
+    - een app meldt zich zelf aan (RFC 7591), maar kan niets zonder
+      toestemming van een gebruiker;
+    - terugkeeradressen moeten precies kloppen (https, `http://localhost` of
+      een eigen schema van een desktop-app);
+    - bij een fout adres komt er een foutpagina, geen doorverwijzing.
+  - **Tokens**:
+    - alleen als SHA-256 in `regiochecker.sqlite`;
+    - een toegangstoken geldt een uur;
+    - het vernieuwtoken wordt bij elk gebruik vervangen. Komt een oud token
+      later nog eens, dan vervalt de hele koppeling (gestolen);
+    - een koppeling die 90 dagen niet is gebruikt, verloopt;
+    - een verwijderde gebruiker verliest al zijn koppelingen meteen.
+  - **Toestemming geven** gaat met een formulier zonder scripts. Een andere site
+    kan het niet in een frame tonen of namens je versturen: het formulier heeft
+    een eenmalig verzoek-id van deze gebruiker en controleert `Origin`.
 - Tekst uit de bronnen wordt overal ontsnapt (webUI en mail). Het taalmodel
   krijgt de instructie om opdrachten in de stukken te negeren.
 
