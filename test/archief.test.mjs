@@ -122,3 +122,48 @@ test('archief: het hele iBabs-overzicht, documenten, zoeken en lezen; niet in de
     portaal.server.close();
   }
 });
+
+test('archief: welke bronnen, de B&W-pagina van Groningen, en pagina voor pagina tot het op is', async () => {
+  const { heeftArchief } = await import('../src/archief.mjs');
+  const { leesBwBesluitenAlles } = await import('../src/bronnen/groningen.mjs');
+  const { haalEdataloketAlles } = await import('../src/bronnen/woo.mjs');
+  const { zetOpenbaarDispatcher } = await import('../src/netwerk.mjs');
+  const { MockAgent } = await import('undici');
+  // Ingekomen stukken en Woo, op elk platform met een lijst; nieuws niet (RSS gaat niet terug).
+  assert.equal(heeftArchief({ soort: 'woo', type: 'edataloket' }), true);
+  assert.equal(heeftArchief({ soort: 'ingekomen', type: 'ibabs-agenda' }), true);
+  assert.equal(heeftArchief({ soort: 'woo', type: 'html-lijst' }), true);
+  assert.equal(heeftArchief({ soort: 'nieuws', type: 'html-lijst' }), false);
+  assert.equal(heeftArchief({ soort: 'nieuws', type: 'rss' }), false);
+  assert.equal(heeftArchief({ soort: 'woo', type: 'ontbreekt' }), false);
+
+  // Groningen: ook de eerdere besluitenlijsten; dezelfde lijst onder twee links één keer.
+  const pagina = `<h2>Meest recente besluiten</h2><section>
+    <a href="/file/26-10-27-0-besluitenlijst-27-oktober-2026pdf"><span class="filename">26-10-27 0. Besluitenlijst 27 oktober 2026.pdf</span></a>
+    <a href="/file/26-10-27-2-beantw-vragen-groenpdf"><span class="filename">26-10-27 2. Beantw vragen over groen.pdf</span></a></section>
+    <h2>Eerdere besluitenlijsten</h2>
+    <a href="/file/besluitenlijst-27-oktober-2026pdf"><span class="filename">Besluitenlijst 27 oktober 2026.pdf</span></a>
+    <a href="/file/besluitenlijst-20-oktober-2026pdf"><span class="filename">Besluitenlijst 20 oktober 2026.pdf</span></a>`;
+  assert.deepEqual(leesBwBesluitenAlles(pagina, 'https://gemeente.groningen.nl/bw-besluiten').map((i) => [i.titel, i.datum]), [
+    ['Besluitenlijst 27 oktober 2026', '2026-10-27'],
+    ['Beantwoording vragen over groen', '2026-10-27'],
+    ['Besluitenlijst 20 oktober 2026', '2026-10-20'],
+  ]);
+
+  // eData-loket pagina voor pagina; een platform dat het paginanummer negeert, eindigt na de herhaling.
+  const internet = new MockAgent();
+  internet.disableNetConnect();
+  const hit = (id) => ({ id: `d${id}`, name: `Besluit ${id}`, publicationDate: '2024-05-01' });
+  const pool = internet.get('https://woo.voorbeeld.nl');
+  pool.intercept({ path: /page=1&/, method: 'GET' }).reply(200, { hits: Array.from({ length: 100 }, (_, i) => hit(i)) });
+  pool.intercept({ path: /page=2&/, method: 'GET' }).reply(200, { hits: Array.from({ length: 100 }, (_, i) => hit(100 + i)) });
+  pool.intercept({ path: /page=3&/, method: 'GET' }).reply(200, { hits: Array.from({ length: 100 }, (_, i) => hit(100 + i)) });
+  const vorige = zetOpenbaarDispatcher(internet);
+  try {
+    const alles = await haalEdataloketAlles({ url: 'https://woo.voorbeeld.nl/' }, { pauze: 0 });
+    assert.equal(alles.length, 200);
+    assert.equal(alles.at(-1).titel, 'Besluit 199');
+  } finally {
+    zetOpenbaarDispatcher(vorige);
+  }
+});

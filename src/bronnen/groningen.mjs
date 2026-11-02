@@ -37,6 +37,30 @@ export function leesBwBesluiten(pagina, basis) {
   return items;
 }
 
+// Voor het archief: alle bestanden op de pagina, ook onder "Eerdere
+// besluitenlijsten" (terug tot een paar maanden; ouder staat er niet).
+// Dezelfde lijst kan er twee keer staan, onder een andere link: één keer.
+export function leesBwBesluitenAlles(pagina, basis) {
+  const gezien = new Set();
+  const uit = [];
+  for (const [, href, inhoud] of String(pagina).matchAll(/<a\b[^>]*href="(\/file\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/g)) {
+    const bestand = platteTekst(inhoud.match(/<span class="filename">([\s\S]*?)<\/span>/)?.[1] || inhoud);
+    const m = bestand.match(/^(\d{2})-(\d{2})-(\d{2})\s+(?:\d+[a-z]?\.\s*)?(.*?)(?:\.pdf)?$/i);
+    const titel = (m ? m[4] : bestand.replace(/\.pdf$/i, '')).replace(/^Beantw\b\.?/, 'Beantwoording').trim();
+    if (!titel) continue;
+    const datum = m ? leesDatum(`20${m[1]}-${m[2]}-${m[3]}`) : leesDatum(titel.match(/\d{1,2} [a-z]+ \d{4}/i)?.[0]);
+    const sleutel = `${titel.toLowerCase()}|${datum}`;
+    if (gezien.has(sleutel)) continue;
+    gezien.add(sleutel);
+    uit.push({ sleutel: href, titel, url: absoluut(href, basis), datum, soortStuk: /^Besluitenlijst/i.test(titel) ? 'Besluitenlijst B&W' : 'Bij B&W-besluit' });
+  }
+  return uit;
+}
+
+export async function haalBwBesluitenAlles(bron) {
+  return leesBwBesluitenAlles(await haalTekst(bron.url), bron.url);
+}
+
 export async function haalBwBesluiten(bron) {
   return leesBwBesluiten(await haalTekst(bron.url), bron.url);
 }

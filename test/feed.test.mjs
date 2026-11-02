@@ -288,7 +288,9 @@ test('snelheid: opwarmen in stapjes, en normaliseren blijft teken voor teken gel
   const { normaliseer, vindInSegmenten } = await import('../src/termen.mjs');
   const { ctx } = await opzet();
   // Drie landelijke berichten, twee podcastafleveringen, en de kamerstukken van
-  // Smallingerland (Heerenveen heeft de Kamer uitgezet).
+  // Smallingerland (Heerenveen heeft de Kamer uitgezet). Oudere opnames zijn er
+  // hier niet; de tweede keer (zelfde sleutelwoorden) alleen het gewone werk.
+  assert.equal(await warmOp(ctx, { stapMs: 0 }), 6);
   assert.equal(await warmOp(ctx, { stapMs: 0 }), 6);
   // Zelfde lengte, zodat een plek in de genormaliseerde tekst een plek in het origineel is.
   for (const [tekst, verwacht] of [['Súdwest-Fryslân', 'sudwest-fryslan'], ['ÉÉN Ærø', 'een ærø'], ['İstanbul', 'istanbul'], ['’t Zandt', '’t zandt']]) {

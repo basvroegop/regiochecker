@@ -275,3 +275,117 @@ export async function haalRecentJson(bron, { nu = new Date() } = {}) {
   }
   return uit;
 }
+
+// ---------- alles, voor het archief (src/archief.mjs) ----------
+// Per platform pagina voor pagina tot er niets meer komt, met `pauze` ms
+// ertussen; hooguit MAX_PAGINAS (een vangnet, geen grens die we verwachten).
+
+const MAX_PAGINAS = 500;
+const PER = 100;
+const slaap = (ms) => new Promise((klaar) => setTimeout(klaar, ms));
+
+async function perPagina(haal, { pauze = 1500, wacht = slaap } = {}) {
+  const uit = [];
+  const gezien = new Set();
+  for (let n = 1; n <= MAX_PAGINAS; n++) {
+    await wacht(pauze);
+    const deze = await haal(n);
+    if (!deze.length) break;
+    const nieuw = deze.filter((i) => !gezien.has(i.sleutel));
+    // Dezelfde pagina nog eens (het platform negeert het paginanummer): klaar.
+    if (!nieuw.length) break;
+    for (const i of nieuw) gezien.add(i.sleutel);
+    uit.push(...nieuw);
+    if (deze.length < PER) break;
+  }
+  return uit;
+}
+
+export function haalEdataloketAlles(bron, opties) {
+  const basis = new URL(bron.url).origin;
+  return perPagina(async (n) => leesEdataloket(await haalJson(`${basis}/api/search?sort=publicationDate:desc&page=${n}&size=${PER}`), basis), opties);
+}
+
+export function haalDivaultAlles(bron, opties) {
+  const basis = new URL(bron.url).origin;
+  return perPagina(async (n) => {
+    const q = new URLSearchParams({ ...(bron.categorie ? { category: bron.categorie } : {}), page_size: String(PER), page_nr: String(n), sort: 'publication_date.desc' });
+    return leesDivault(await haalJson(`${basis}/woo/${encodeURIComponent(bron.organisatie)}/diwoo_requests?${q}`));
+  }, opties);
+}
+
+export function haalPublicatiesAlles(bron, opties) {
+  const basis = new URL(bron.url).origin;
+  return perPagina(async (n) => {
+    const q = new URLSearchParams({ SubDomainId: bron.subdomein, PageNumber: String(n), PageSize: String(PER), PropertyName: 'publicationDate', Ascending: 'false' });
+    return leesPublicaties(await haalJson(`${basis}/publicationbackend/Publication/list?${q}`), basis);
+  }, opties);
+}
+
+export async function haalStackAlles(bron, opties) {
+  const u = new URL(bron.url);
+  const code = u.pathname.split('/').filter(Boolean)[1];
+  const api = `${u.origin}/api/v2/share/${encodeURIComponent(code)}`;
+  const sessie = await verzoek(api, { methode: 'POST', koppen: { 'Content-Type': 'application/json', 'x-setcookie': 'true' }, lijf: '{}' });
+  const koppen = { 'x-sharetoken': sessie.kop.get('x-sharetoken') };
+  const map = JSON.parse((await verzoek(api, { koppen })).tekst);
+  return perPagina(async (n) => leesStack(JSON.parse((await verzoek(`${api}/nodes?limit=${PER}&offset=${(n - 1) * PER}&orderBy=mtime&reverse=true&parentID=${map.id}`, { koppen })).tekst).nodes, bron.url), opties);
+}
+
+// Djuma zoekt per jaar: alle jaren vanaf 2010, per zoekwoord, pagina voor pagina.
+export async function haalDjumaAlles(bron, { nu = new Date(), pauze = 1500, wacht = slaap } = {}) {
+  const basis = new URL(bron.url).origin;
+  const jaren = Array.from({ length: nu.getFullYear() - 2009 }, (_, i) => String(2010 + i));
+  const hits = [];
+  for (const zoek of ZOEK) {
+    for (let n = 1; n <= MAX_PAGINAS; n++) {
+      await wacht(pauze);
+      const r = await verzoek(`${basis}/api/openInfo/search`, {
+        methode: 'POST',
+        koppen: { 'Content-Type': 'application/json', 'djuma-app': 'eloket', Origin: basis },
+        // Hooguit 50 per pagina (100 geeft HTTP 400).
+        lijf: JSON.stringify({ searchQuery: zoek, pageSize: AANTAL, pageNumber: n, dossierNumber: null, yearsFilter: jaren, categoriesFilter: [], themesFilter: [] }),
+      });
+      const deze = JSON.parse(r.tekst)?.data?.documentSearchHits || [];
+      hits.push(...deze);
+      if (deze.length < AANTAL) break;
+    }
+  }
+  return leesDjuma(hits, basis);
+}
+
+export async function haalMozardAlles(bron, { pauze = 1500, wacht = slaap } = {}) {
+  const koekjes = new Map();
+  const start = await verzoek(bron.url, { koekjes, koppen: { Accept: 'text/html' } });
+  const basis = start.adres.slice(0, start.adres.indexOf('/mozard/') + 8);
+  const selectie = /[?&]mSelod=(\d+)/.exec(start.adres)?.[1];
+  if (!selectie) return leesMozardRegels(start.tekst, basis);
+  const ids = JSON.parse((await verzoek(`${basis}!suite16.getObjectbakResultaat?mSelod=${selectie}&mMaxid=0&mNch=${Date.now()}`, { koekjes })).tekst)?.r || [];
+  const uit = [];
+  for (let i = 0; i < ids.length; i += AANTAL) {
+    await wacht(pauze);
+    const regels = JSON.parse((await verzoek(`${basis}!suite16.getObjectRegels?mObjecten=,${ids.slice(i, i + AANTAL).map((r) => r.obj).join(',')}&mNch=${Date.now()}&mSelod=${selectie}`, { koekjes })).tekst);
+    uit.push(...leesMozardRegels((regels?.objn || []).flatMap((o) => (o.htmlcd || []).map((x) => x.h)).join(' '), basis));
+  }
+  return uit.length ? uit : leesMozardRegels(start.tekst, basis);
+}
+
+// Een recent.json per jaar: terug tot er drie jaar achter elkaar niets is.
+export async function haalRecentJsonAlles(bron, { nu = new Date(), pauze = 1500, wacht = slaap } = {}) {
+  const basis = new URL(bron.url).origin;
+  const uit = [];
+  let leeg = 0;
+  for (let jaar = nu.getFullYear(); jaar >= 2010 && leeg < 3; jaar--) {
+    await wacht(pauze);
+    try {
+      const deze = leesRecentJson(await haalJson(`${basis}/woo-publicaties/${jaar}/recent.json`), basis);
+      leeg = deze.length ? 0 : leeg + 1;
+      uit.push(...deze);
+    } catch (fout) {
+      // Een jaar zonder bestand: 404, of 403 bij een statische opslag (S3).
+      if (!/HTTP 40[34]/.test(fout.message)) throw fout;
+      leeg++;
+    }
+  }
+  return uit;
+}

@@ -128,3 +128,15 @@ export async function haalIngekomen(bron) {
   }
   return metSleutels(items, (i) => [i.datum, i.afzender, i.titel]);
 }
+
+// Alle weeklijsten die op de pagina staan (vanaf september 2025; de
+// mediabibliotheek van de site heeft niets ouders), voor het archief.
+export async function haalIngekomenAlles(bron, { pauze = 2000, wacht = (ms) => new Promise((klaar) => setTimeout(klaar, ms)) } = {}) {
+  const links = leesLijstLinks(await haalTekst(bron.url), bron.url);
+  const items = [];
+  for (const link of links) {
+    await wacht(pauze);
+    items.push(...leesLijstTekst(await pdfNaarTekst(await haalBuffer(link), { layout: true }), link));
+  }
+  return metSleutels(items, (i) => [i.datum, i.afzender, i.titel]);
+}

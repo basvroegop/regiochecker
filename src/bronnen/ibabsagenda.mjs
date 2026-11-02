@@ -139,3 +139,25 @@ export async function haalIbabsAgenda(bron, { nu = new Date() } = {}) {
   }
   return uit;
 }
+
+// Alle vergaderingen van dit soort die iBabs nog heeft, voor het archief
+// (src/archief.mjs): de kalender jaar voor jaar terug, tot er drie jaar
+// achter elkaar niets meer is (of 2005). Per agenda `pauze` ms ertussen.
+export async function haalIbabsAgendaAlles(bron, { nu = new Date(), pauze: rust = pauze(), wacht: slaap = wacht } = {}) {
+  const basis = bron.basis.replace(/\/$/, '');
+  const agendas = [];
+  let leeg = 0;
+  for (let jaar = nu.getFullYear(); jaar >= 2005 && leeg < 3; jaar--) {
+    await slaap(rust);
+    const kalender = await haalJson(`${basis}/Calendar/GetAgendasForCalendar?start=${jaar}-01-01T00:00:00&end=${jaar + 1}-01-01T00:00:00`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    const deze = leesKalender(kalender, bron.agendatype);
+    leeg = deze.length ? 0 : leeg + 1;
+    agendas.push(...deze);
+  }
+  const uit = [];
+  for (const a of agendas.reverse()) {
+    await slaap(rust);
+    uit.push(...leesIbabsAgenda(await haalTekst(`${basis}/Agenda/Index/${a.id}`), basis, bron));
+  }
+  return uit;
+}

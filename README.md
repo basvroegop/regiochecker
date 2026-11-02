@@ -487,7 +487,11 @@ lezen gaan ook door de archieven.
   getoonde regels: voor alle treffers (tienduizenden bij "Groningen") zou dat
   seconden duren.
 
-**Ingekomen stukken** (`src/archief.mjs`, `data/archief.sqlite`)
+Stand op 2 november 2026: het Kamerarchief was na een dag compleet (610.064
+stukken met tekst, 16,3 GB); de ingekomen stukken hadden toen 27.278 stukken
+uit 50 bronnen, terug tot 2012.
+
+**Ingekomen stukken en Woo** (`src/archief.mjs`, `data/archief.sqlite`)
 - **Bronnen**: alle bronnen met ingekomen stukken op iBabs (42) en Notubiz (8).
   - Een iBabs-overzicht bevat de hele geschiedenis van het portaal: Assen
     3.239 stukken, Emmen 1.729 plus 949 brieven van het college.
@@ -499,9 +503,26 @@ lezen gaan ook door de archieven.
   archief wacht daarom na elk stuk vijf seconden per opgehaald bestand, met
   vier portalen tegelijk.
 - **Bijwerken**: de lijsten eens per week opnieuw.
-- **Nog niet**: de bronnen op andere platforms (de iBabs-agenda's van
-  Borger-Odoorn en Schiermonnikoog, de weeklijsten van Súdwest-Fryslân, de
-  B&W-besluiten van Groningen).
+- **Overige ingekomen stukken** (sinds 2 november 2026):
+  - de iBabs-agenda's van Borger-Odoorn en Schiermonnikoog, jaar voor jaar
+    terug via de kalender (tot ongeveer 2015-2019);
+  - de 58 weeklijsten van Súdwest-Fryslân (terug tot september 2025;
+    ouder staat ook niet in de mediabibliotheek van de site);
+  - alles op de B&W-pagina van Groningen (terug tot januari 2026).
+- **Woo-publicaties**: alle 31 bronnen waar het platform een lijst heeft,
+  `heeftArchief` in `src/archief.mjs`.
+  - Per platform pagina voor pagina: eData-loket, Divault,
+    publicatieplatform, STACK, Mozard, GPP-Woo.
+  - Djuma: alle jaren, hooguit 50 per pagina.
+  - `recent.json`: per jaar; een ontbrekend jaar geeft daar 403.
+  - De eigen Woo-pagina's (html-lijst, Smallingerland, Súdwest-Fryslân)
+    tonen hun hele lijst al.
+  - Een platform dat het paginanummer negeert, stopt na de eerste herhaling.
+- **Nieuws niet.** RSS-feeds gaan niet terug: paginaparameters negeren ze,
+  en `/feed/rss/nieuws` geeft hooguit een paar maanden. Een nieuwsarchief kan
+  alleen via de nieuwsoverzichten op de sites zelf. De meeste gemeenten
+  gebruiken een van een paar systemen: `/rss/content-list` (11),
+  `/feed/rss/nieuws` (11), `rss.xml` (5), `rss.jsp` (3) en WordPress.
 
 **Schijfbewaking.** Beide archieven stoppen vanzelf als er minder dan 40 GB
 vrij is op de schijf, of als het archief te groot wordt: 40 GB voor de Kamer, 20

@@ -33,3 +33,16 @@ export async function haalGppWoo(bron) {
   }
   return items;
 }
+
+// Alle publicaties, voor het archief (src/archief.mjs).
+export async function haalGppWooAlles(bron, { pauze = 1000, wacht = (ms) => new Promise((klaar) => setTimeout(klaar, ms)) } = {}) {
+  const basis = bron.basis.replace(/\/$/, '');
+  const items = [];
+  for (let pagina = 1; pagina <= 2000; pagina++) {
+    await wacht(pauze);
+    const json = await postJson(`${basis}/api/zoeken`, { sort: 'chronological', page: pagina, resultTypes: ['publication'] });
+    items.push(...leesGppWoo(json, basis));
+    if (!json?.next) break;
+  }
+  return items;
+}

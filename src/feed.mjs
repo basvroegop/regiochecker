@@ -330,14 +330,30 @@ export async function warmOp(ctx, { dagen = FEED_DAGEN, stapMs = 25 } = {}) {
     werk.push(() => kamerTreffers(k, actieveTermen(regio), { sinds: grens, tot: null, minDatum: grens.slice(0, 10), hoofdletters: true }));
   }
   let begin = performance.now();
-  for (const stap of werk) {
-    stap();
+  const adem = async () => {
     if (performance.now() - begin > stapMs) {
       await new Promise((klaar) => setImmediate(klaar));
       begin = performance.now();
     }
+  };
+  for (const stap of werk) {
+    stap();
+    await adem();
   }
-  return werk.length;
+  // Zoeken vindt ook oudere opnames (Kamerdebatten, het archief van de
+  // raadsvergaderingen); hun regio's eens per stel sleutelwoorden vooruit
+  // uitrekenen, anders kost de eerste zoekvraag seconden.
+  let ouder = 0;
+  if (k.adb && warmOp.termVersie !== k.termVersie) {
+    for (const a of k.adb.alleMetTranscript()) {
+      if (a.eersteGezien > grens || k.bronnen.get(a.bron)?.bereik !== 'landelijk') continue;
+      routeerAflevering(k, a);
+      ouder++;
+      await adem();
+    }
+    warmOp.termVersie = k.termVersie;
+  }
+  return werk.length + ouder;
 }
 
 // ---------- de feed ----------

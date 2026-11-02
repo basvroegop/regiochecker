@@ -1,12 +1,14 @@
-// Het archief van de gemeenten: alle ingekomen stukken die de platforms nog
+// Het archief van de gemeenten: alle ingekomen stukken en Woo-publicaties die de platforms nog
 // aanbieden, ook van vóór de eerste ronde van een bron (de feed kent alleen
 // wat sindsdien binnenkwam). In een eigen database (data/archief.sqlite), met
 // de tekst van elk stuk, doorzoekbaar via Zoeken en te lezen in het
 // leespaneel. Niet in de feed, de meldingen of de weekmail: dat blijft over
 // wat nieuw binnenkomt.
 //
-// Welke bronnen: ingekomen stukken op iBabs (het hele overzicht, pagina voor
-// pagina) en Notubiz (de hele module via de API). Per bron eerst de lijst,
+// Welke bronnen: ingekomen stukken en Woo-publicaties, op elk platform zo ver
+// terug als het gaat (zie LIJSTEN): iBabs het hele overzicht, Notubiz de hele
+// module, iBabs-agenda's jaar voor jaar, de Woo-platforms pagina voor pagina.
+// Nieuws niet: RSS gaat niet terug. Per bron eerst de lijst,
 // daarna per stuk het document, nieuwste eerst, zoals Inhoud achter de links
 // (documentVoor in src/inhoud.mjs). iBabs vraagt vijf seconden tussen
 // verzoeken (robots.txt): per portaal wachten we na elk stuk vijf seconden per
@@ -23,6 +25,13 @@ import { documentVoor } from './inhoud.mjs';
 import { platVan } from './document.mjs';
 import { haalIbabsAlles } from './bronnen/ibabs.mjs';
 import { haalNotubizAlles } from './bronnen/notubiz.mjs';
+import { haalIbabsAgendaAlles } from './bronnen/ibabsagenda.mjs';
+import { haalIngekomenAlles } from './bronnen/sudwestfryslan.mjs';
+import { haalBwBesluitenAlles } from './bronnen/groningen.mjs';
+import { haalGppWooAlles } from './bronnen/gppwoo.mjs';
+import { haalHtmlLijst } from './bronnen/htmllijst.mjs';
+import * as woo from './bronnen/woo.mjs';
+import { TYPES } from './bronnen/index.mjs';
 import { schijfVrij } from './kamer/archief.mjs';
 
 const GB = 1024 ** 3;
@@ -37,12 +46,29 @@ const PER_PORTAAL = 10;
 const POGINGEN = 3;
 const MAX_INHOUD = 200_000;
 
-// Welke bronnen een archief hebben, en hoe hun hele lijst op te halen.
+// Welke bronnen een archief hebben, en hoe hun hele lijst op te halen. Een
+// lezer die zijn hele lijst al op één pagina toont (de eigen Woo-pagina's),
+// gebruikt gewoon de gewone lezer.
+const rustig = () => Math.min(beleefd(), 1500);
 const LIJSTEN = {
   ibabs: (bron, wacht) => haalIbabsAlles(bron, { pauze: beleefd(), wacht }),
   'notubiz-ingekomen': (bron, wacht) => haalNotubizAlles(bron, { pauze: Math.min(beleefd(), 1000), wacht }),
+  'ibabs-agenda': (bron, wacht) => haalIbabsAgendaAlles(bron, { pauze: beleefd(), wacht }),
+  'swf-ingekomen': (bron, wacht) => haalIngekomenAlles(bron, { pauze: rustig(), wacht }),
+  'groningen-bw-besluiten': (bron) => haalBwBesluitenAlles(bron),
+  'gpp-woo': (bron, wacht) => haalGppWooAlles(bron, { pauze: rustig(), wacht }),
+  edataloket: (bron, wacht) => woo.haalEdataloketAlles(bron, { pauze: rustig(), wacht }),
+  divault: (bron, wacht) => woo.haalDivaultAlles(bron, { pauze: rustig(), wacht }),
+  publicaties: (bron, wacht) => woo.haalPublicatiesAlles(bron, { pauze: rustig(), wacht }),
+  stack: (bron, wacht) => woo.haalStackAlles(bron, { pauze: rustig(), wacht }),
+  djuma: (bron, wacht) => woo.haalDjumaAlles(bron, { pauze: rustig(), wacht }),
+  mozard: (bron, wacht) => woo.haalMozardAlles(bron, { pauze: rustig(), wacht }),
+  recentjson: (bron, wacht) => woo.haalRecentJsonAlles(bron, { pauze: rustig(), wacht }),
+  'html-lijst': (bron) => haalHtmlLijst({ ...bron, viaAantal: 1000 }),
+  'smallingerland-woo': (bron) => TYPES['smallingerland-woo'](bron),
+  'swf-woo': (bron) => TYPES['swf-woo'](bron),
 };
-export const heeftArchief = (bron) => bron.soort === 'ingekomen' && Boolean(LIJSTEN[bron.type]);
+export const heeftArchief = (bron) => ['ingekomen', 'woo'].includes(bron.soort) && Boolean(LIJSTEN[bron.type]);
 
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS stukken (
